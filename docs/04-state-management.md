@@ -2,9 +2,6 @@
 
 This is where the "per-tenant, not global" rule becomes concrete code. Read [doc 01](01-architecture.md) first.
 
-> **Status:** Redux Toolkit + RTK Query are **not yet installed**. Add them with
-> `npx expo install @reduxjs/toolkit react-redux` before implementing this doc.
-
 ## Store shape
 
 ```
@@ -26,7 +23,7 @@ The spec is explicit: memberships are normalized by `tenantId`. Use `createEntit
 // src/features/memberships/membershipsSlice.ts
 import { createEntityAdapter, createSlice } from '@reduxjs/toolkit';
 
-export type Role = 'owner' | 'assistant' | 'client';
+export type Role = 'owner' | 'client';   // coach (owner) or trainee (client) — no assistant role
 export type MembershipStatus = 'invited' | 'active' | 'paused' | 'removed';
 
 export interface Membership {
@@ -61,7 +58,7 @@ Now "what role am I in tenant X?" is a direct lookup, and a user with multiple c
 ## Active tenant
 
 ```ts
-// src/store/activeTenantSlice.ts
+// src/features/../activeTenantSlice.ts
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
 interface ActiveTenantState { tenantId: string | null; }
@@ -71,7 +68,7 @@ const slice = createSlice({
   name: 'activeTenant',
   initialState,
   reducers: {
-    setActiveTenant: (s, a: PayloadAction<string>) => { s.tenantId = a.payload; },
+    setActiveTenant: (s, a: PayloadAction<string>) => { s.tenantId = a.value ?? a.payload; },
     clearActiveTenant: (s) => { s.tenantId = null; },
   },
 });

@@ -1,10 +1,21 @@
-import { Text, View } from "react-native";
-import "../global.css";
+import { Redirect } from "expo-router";
 
-export default function HomeScreen() {
+import { useRole } from "@/shared/hooks/useRole";
+
+export default function Index() {
+  const role = useRole();
+
+  if (!role) {
+    return <Redirect href="/(auth)/login" />;
+  }
+
   return (
-    <View className="flex-1 items-center justify-center bg-white">
-      <Text className="text-red-500 text-3xl">Hello UPLY</Text>
-    </View>
+    <Redirect
+      href={
+        role === "owner"
+          ? "/(coach)/(tabs)/home"
+          : "/(client)/(tabs)/today"
+      }
+    />
   );
 }

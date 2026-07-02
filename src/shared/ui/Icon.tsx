@@ -19,7 +19,8 @@ export type IconName =
   | "sun"
   | "moon"
   | "bell"
-  | "person";
+  | "person" 
+  | "wave"
 
 interface IconProps {
   name: IconName;
@@ -41,6 +42,7 @@ const SYMBOLS: Record<IconName, { ios: string; android: string }> = {
   "moon": { ios: "moon.fill", android: "dark_mode" },
   "bell": { ios: "bell.fill", android: "notifications" },
   "person": { ios: "person.crop.circle.fill", android: "account_circle" },
+  "wave": { ios: "hand.wave.fill", android: "waves" },
 };
 
 export function Icon({ name, size = 20, color = "#000000", className }: IconProps) {

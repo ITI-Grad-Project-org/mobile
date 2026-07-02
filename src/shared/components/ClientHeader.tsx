@@ -1,6 +1,6 @@
 import { useRole } from "@/lib/role";
 import { Icon } from "@/shared/ui/Icon";
-import { Pressable, Text, View } from "@/tw";
+import { Pressable, View } from "@/tw";
 import { Image } from "@/tw/image";
 import { useRouter } from "expo-router";
 import { useColorScheme } from "nativewind";
@@ -36,12 +36,20 @@ export function ClientHeader() {
       <View className="h-14 px-4 flex-row items-center justify-between">
         {/* Logo and Brand */}
         <View className="flex-row items-center gap-2">
-          <View className="h-8 w-8 rounded-lg bg-primary items-center justify-center">
-            <Icon name="dumbbell" size={16} color="#ffffff" />
+          {/* <View className="h-8 w-8 rounded-lg bg-primary items-center justify-center">
+            {isDark ? <Image source={"@/assets/images/icon.png"} /> : <Image />}
           </View>
           <Text className="font-display text-lg font-black tracking-tight text-foreground">
             <Text className="text-primary">UPLY</Text>
-          </Text>
+          </Text> */}
+          <Image
+            source={
+              !isDark
+                ? require("@/assets/images/Uply-dark-logo.png")
+                : require("@/assets/images/Uply-light-logo.png")
+            }
+            className="h-12 w-40 object-cover"
+          />
         </View>
 
         {/* Action Controls */}
@@ -77,10 +85,7 @@ export function ClientHeader() {
             accessibilityLabel="View profile"
           >
             {clientProfile?.avatar ? (
-              <Image
-                source={clientProfile.avatar}
-                className="h-full w-full"
-              />
+              <Image source={clientProfile.avatar} className="h-full w-full" />
             ) : (
               <View className="h-full w-full bg-muted items-center justify-center">
                 <Icon name="person" size={20} color="--muted-foreground" />

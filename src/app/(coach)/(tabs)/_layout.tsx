@@ -1,8 +1,37 @@
 import { NativeTabs } from "expo-router/unstable-native-tabs";
+import { useColorScheme } from "react-native";
 
+const palette = {
+  light: {
+    active: "#e5673a", // --primary
+    inactive: "#7c7c85", // --muted-foreground
+    background: "#f4f2ee", // --muted
+    blur: "systemChromeMaterialLight",
+  },
+  dark: {
+    active: "#f2764a", // --primary (dark)
+    inactive: "#a8a8b0", // --muted-foreground (dark)
+    background: "#33333b", // --muted (dark)
+    blur: "systemChromeMaterialDark",
+  },
+} as const;
 export default function CoachTabsLayout() {
+  const colorScheme = useColorScheme();
+  const c = palette[colorScheme === "dark" ? "dark" : "light"];
   return (
-    <NativeTabs>
+    <NativeTabs
+      tintColor={c.active}
+      iconColor={{ default: c.inactive, selected: c.active }}
+      labelStyle={{
+        default: { color: c.inactive, fontSize: 11 },
+        selected: { color: c.active, fontWeight: "600" },
+      }}
+      backgroundColor={c.background}
+      blurEffect={c.blur} // iOS only
+      indicatorColor={c.active + "22"} // ~13% alpha
+      rippleColor={c.active + "22"}
+      minimizeBehavior="never"
+    >
       <NativeTabs.Trigger name="home">
         <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={"house"} md={"home"} />

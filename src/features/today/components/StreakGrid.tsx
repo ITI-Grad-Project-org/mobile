@@ -35,10 +35,19 @@ const seedGrid = (): number[] => {
 };
 const fullGrid = seedGrid();
 
-export function StreakHero({ todayCompleted, todayTotal }: { todayCompleted: number; todayTotal: number }) {
+export function StreakHero({
+  todayCompleted,
+  todayTotal,
+}: {
+  todayCompleted: number;
+  todayTotal: number;
+}) {
   const { accent } = useRole();
   const colors = palettes[accent];
-  const todayIntensity = Math.max(0, Math.min(4, Math.round((todayCompleted / Math.max(todayTotal, 1)) * 4)));
+  const todayIntensity = Math.max(
+    0,
+    Math.min(4, Math.round((todayCompleted / Math.max(todayTotal, 1)) * 4))
+  );
   const cells = [...fullGrid.slice(0, -1), todayIntensity];
   const weeks = Math.ceil(cells.length / 7);
   const accentDot = accent === "green" ? "bg-[#30a14e]" : "bg-[#f0883e]";
@@ -55,7 +64,7 @@ export function StreakHero({ todayCompleted, todayTotal }: { todayCompleted: num
   }
 
   return (
-    <Tone name="ink" className="rounded-[28px] p-5 shadow-ink">
+    <Tone name="ink" className="rounded-2xl p-5 shadow-ink">
       <View className="flex-row items-start justify-between">
         <View className="flex-1 pr-4">
           <Text className="text-[11px] font-medium uppercase tracking-[0.16em] text-ink-foreground/60">
@@ -63,21 +72,28 @@ export function StreakHero({ todayCompleted, todayTotal }: { todayCompleted: num
           </Text>
           <View className="mt-1 flex-row items-baseline gap-2">
             <Text className="text-5xl font-black text-ink-foreground">12</Text>
-            <Text className="text-base font-medium text-ink-foreground/70">day streak</Text>
+            <Text className="text-base font-medium text-ink-foreground/70">
+              day streak
+            </Text>
           </View>
           <Text className="mt-1 text-[12.5px] text-ink-foreground/70">
             Darker squares = more sessions that day
           </Text>
         </View>
-        <View className={cn("h-12 w-12 items-center justify-center rounded-2xl shadow-primary", accentDot)}>
+        <View
+          className={cn(
+            "h-12 w-12 items-center justify-center rounded-2xl shadow-primary",
+            accentDot
+          )}
+        >
           <Icon name="flame" size={24} color="#ffffff" />
         </View>
       </View>
 
       {/* Full-width responsive grid: columns representing weeks, rows representing days */}
-      <View className="mt-4 flex-row gap-[3px] justify-between">
+      <View className="mt-4 flex-row gap-0.75 justify-between">
         {weeksArray.map((week, wIdx) => (
-          <View key={wIdx} className="flex-1 flex-col gap-[3px]">
+          <View key={wIdx} className="flex-1 flex-col gap-0.75">
             {week.map((v, dIdx) => (
               <View
                 key={dIdx}
@@ -93,7 +109,7 @@ export function StreakHero({ todayCompleted, todayTotal }: { todayCompleted: num
         <View className="flex-row items-center gap-1.5">
           <Text className="text-[10.5px] text-ink-foreground/60">Less</Text>
           {colors.map((c, i) => (
-            <View key={i} className={cn("h-[10px] w-[10px] rounded-[3px]", c)} />
+            <View key={i} className={cn("h-2.5 w-2.5 rounded-[3px]", c)} />
           ))}
           <Text className="text-[10.5px] text-ink-foreground/60">More</Text>
         </View>

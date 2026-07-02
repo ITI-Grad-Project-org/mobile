@@ -2,7 +2,7 @@ import { NativeTabs } from "expo-router/unstable-native-tabs";
 
 export default function ClientTabsLayout() {
   return (
-    <NativeTabs>
+    <NativeTabs >
       <NativeTabs.Trigger name="today">
         <NativeTabs.Trigger.Label>Today</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={"house"} md={"home"} />

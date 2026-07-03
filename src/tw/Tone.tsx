@@ -84,10 +84,14 @@ function mix(a: RGBA, b: RGBA, t: number): RGBA {
 }
 
 const WHITE: RGBA = { r: 255, g: 255, b: 255, a: 1 };
+const BLACK: RGBA = { r: 0, g: 0, b: 0, a: 1 };
 
-export type ToneProps = ViewProps & { name: ToneName };
+export type ToneProps = ViewProps & {
+  name: ToneName;
+  raised?: boolean;
+};
 
-export function Tone({ name, children, style, ...rest }: ToneProps) {
+export function Tone({ name, raised, children, style, ...rest }: ToneProps) {
   const spec = TONES[name];
   const fromVar = useCSSVariable(spec.from) as string | undefined;
   const toVar = useCSSVariable(spec.to) as string | undefined;
@@ -95,15 +99,19 @@ export function Tone({ name, children, style, ...rest }: ToneProps) {
   const from = parseColor(fromVar);
   const to = parseColor(toVar);
 
-  // Subtle 3-stop ramp mirroring the web tone-* gradients (lightened start,
-  // base middle, slightly ink-blended end). Falls back to the flat base color.
   let colors: [string, string, ...string[]];
   if (from && to) {
-    colors = [
-      toRgba(mix(from, WHITE, 0.06)),
-      toRgba(from),
-      toRgba(mix(from, to, spec.mix)),
-    ];
+    colors = raised
+      ? [
+          toRgba(mix(from, WHITE, 0.22)),
+          toRgba(from),
+          toRgba(mix(from, BLACK, 0.2)),
+        ]
+      : [
+          toRgba(mix(from, WHITE, 0.06)),
+          toRgba(from),
+          toRgba(mix(from, to, spec.mix)),
+        ];
   } else {
     const flat = fromVar ?? "transparent";
     colors = [flat, flat];
@@ -113,9 +121,9 @@ export function Tone({ name, children, style, ...rest }: ToneProps) {
     <View style={style} {...rest} className={`overflow-hidden ${rest.className ?? ""}`}>
       <LinearGradient
         colors={colors}
-        // 135deg ≈ top-left -> bottom-right
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+        // raised: straight top -> bottom; default: 135deg top-left -> bottom-right
+        start={raised ? { x: 0.5, y: 0 } : { x: 0, y: 0 }}
+        end={raised ? { x: 0.5, y: 1 } : { x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
       />

@@ -36,12 +36,6 @@ export function ClientHeader() {
       <View className="h-14 px-4 flex-row items-center justify-between">
         {/* Logo and Brand */}
         <View className="flex-row items-center gap-2">
-          {/* <View className="h-8 w-8 rounded-lg bg-primary items-center justify-center">
-            {isDark ? <Image source={"@/assets/images/icon.png"} /> : <Image />}
-          </View>
-          <Text className="font-display text-lg font-black tracking-tight text-foreground">
-            <Text className="text-primary">UPLY</Text>
-          </Text> */}
           <Image
             source={
               !isDark

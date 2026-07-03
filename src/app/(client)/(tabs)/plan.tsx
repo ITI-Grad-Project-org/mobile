@@ -1,10 +1,10 @@
-import "@/global.css";
-import { Text, View } from "react-native";
+import { ClientPlanScreen } from "@/features/client-plan";
+import { View } from "@/tw";
 
-export default function ClientPlanScreen() {
+export default function ClientPlanRoute() {
   return (
-    <View className="flex-1 items-center justify-center bg-background">
-      <Text className="text-foreground text-3xl font-bold">Plan Screen</Text>
+    <View className="flex-1 bg-background px-4">
+      <ClientPlanScreen />
     </View>
   );
 }

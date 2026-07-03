@@ -46,6 +46,11 @@ export default function ClientTabsLayout() {
         <NativeTabs.Trigger.Icon sf="calendar" md="calendar_month" />
       </NativeTabs.Trigger>
 
+      <NativeTabs.Trigger name="chat">
+        <NativeTabs.Trigger.Label>Chat</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="message" md="chat" />
+        <NativeTabs.Trigger.Badge>3</NativeTabs.Trigger.Badge>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="progress">
         <NativeTabs.Trigger.Label>Progress</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
@@ -54,11 +59,6 @@ export default function ClientTabsLayout() {
         />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="chat">
-        <NativeTabs.Trigger.Label>Chat</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="message" md="chat" />
-        <NativeTabs.Trigger.Badge>3</NativeTabs.Trigger.Badge>
-      </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="profile">
         <NativeTabs.Trigger.Label>Profile</NativeTabs.Trigger.Label>

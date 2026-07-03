@@ -1,10 +1,10 @@
+import { ClientAIScreen } from "@/features/assistant";
 import "@/global.css";
-import { Text, View } from "react-native";
+import { View } from "@/tw";
 
 export default function ClientChatScreen() {
-  return (
-    <View className="flex-1 items-center justify-center bg-background">
-      <Text className="text-foreground text-3xl font-bold">Chat Screen</Text>
-    </View>
-  );
+  return <View className="flex-1 bg-background px-4">
+    <ClientAIScreen />
+  </View>
 }
+

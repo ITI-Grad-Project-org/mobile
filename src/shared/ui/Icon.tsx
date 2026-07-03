@@ -1,7 +1,7 @@
-import React from "react";
-import { SymbolView } from "expo-symbols";
-import { useCssElement } from "react-native-css";
 import { useCSSVariable } from "@/tw";
+import { SymbolView } from "expo-symbols";
+import React from "react";
+import { useCssElement } from "react-native-css";
 
 const CSSSymbolView = (props: React.ComponentProps<typeof SymbolView> & { className?: string }) => {
   return useCssElement(SymbolView as React.ComponentType<any>, props, { className: "style" });

@@ -4,18 +4,18 @@ import {
 } from "react-native-css";
 
 import { Link as RouterLink } from "expo-router";
-import Animated from "react-native-reanimated";
-import { SafeAreaView as RNSafeAreaView } from "react-native-safe-area-context";
 import React from "react";
 import {
-  View as RNView,
-  Text as RNText,
   Pressable as RNPressable,
   ScrollView as RNScrollView,
-  TouchableHighlight as RNTouchableHighlight,
+  Text as RNText,
   TextInput as RNTextInput,
+  TouchableHighlight as RNTouchableHighlight,
+  View as RNView,
   StyleSheet,
 } from "react-native";
+import Animated from "react-native-reanimated";
+import { SafeAreaView as RNSafeAreaView } from "react-native-safe-area-context";
 
 // CSS-enabled Link
 export const Link = (

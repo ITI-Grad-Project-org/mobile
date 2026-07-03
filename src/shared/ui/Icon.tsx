@@ -9,6 +9,7 @@ const CSSSymbolView = (props: React.ComponentProps<typeof SymbolView> & { classN
 
 export type IconName =
   | "chevron-right"
+  | "chevron-left"
   | "check"
   | "apple"
   | "droplets"
@@ -19,8 +20,15 @@ export type IconName =
   | "sun"
   | "moon"
   | "bell"
-  | "person" 
+  | "person"
   | "wave"
+  | "clock"
+  | "layers"
+  | "heart"
+  | "waves"
+  | "wind"
+  | "sparkles"
+  | "activity"
 
 interface IconProps {
   name: IconName;
@@ -31,6 +39,7 @@ interface IconProps {
 
 const SYMBOLS: Record<IconName, { ios: string; android: string }> = {
   "chevron-right": { ios: "chevron.right", android: "chevron_right" },
+  "chevron-left": { ios: "chevron.left", android: "chevron_left" },
   "check": { ios: "checkmark", android: "check" },
   "apple": { ios: "applelogo", android: "restaurant" },
   "droplets": { ios: "drop.fill", android: "water_drop" },
@@ -43,6 +52,13 @@ const SYMBOLS: Record<IconName, { ios: string; android: string }> = {
   "bell": { ios: "bell.fill", android: "notifications" },
   "person": { ios: "person.crop.circle.fill", android: "account_circle" },
   "wave": { ios: "hand.wave.fill", android: "waves" },
+  "clock": { ios: "clock", android: "schedule" },
+  "layers": { ios: "square.stack.3d.up", android: "layers" },
+  "heart": { ios: "heart.fill", android: "favorite" },
+  "waves": { ios: "water.waves", android: "waves" },
+  "wind": { ios: "wind", android: "air" },
+  "sparkles": { ios: "sparkles", android: "auto_awesome" },
+  "activity": { ios: "waveform.path.ecg", android: "monitor_heart" },
 };
 
 export function Icon({ name, size = 20, color = "#000000", className }: IconProps) {

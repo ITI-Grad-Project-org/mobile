@@ -1,24 +1,39 @@
 import { cn } from "@/lib/utils";
 import { Pressable, Text, View, type ViewProps } from "@/tw";
 import { Tone, type ToneName } from "@/tw/Tone";
+import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
+import { StyleSheet } from "react-native";
 
 export interface CardProps extends ViewProps {
   tone?: ToneName;
   interactive?: boolean;
+  raised?: boolean;
   onPress?: () => void;
 }
+
+const RaisedOverlay = () => (
+  <LinearGradient
+    colors={["rgba(255,255,255,0.08)", "rgba(0,0,0,0.16)"]}
+    start={{ x: 0.5, y: 0 }}
+    end={{ x: 0.5, y: 1 }}
+    style={StyleSheet.absoluteFill}
+    pointerEvents="none"
+  />
+);
 
 export const Card = ({
   className,
   tone,
   interactive,
+  raised,
   onPress,
   children,
   ...props
 }: CardProps) => {
-  const baseCard = "rounded-[28px] p-5 overflow-hidden shadow-soft";
-  const surface = tone ? "" : "border border-border/60 bg-card";
+  const showRaised = raised && !tone;
+  const baseCard = "rounded-xl p-5 overflow-hidden shadow-soft";
+  const surface = tone ? "" : "border border-border bg-card text-card-foreground";
   const cardClass = cn(baseCard, surface, className);
 
   if (interactive) {
@@ -32,7 +47,7 @@ export const Card = ({
           )}
           {...props}
         >
-          <Tone name={tone} className={cn(baseCard, "flex-1")}>
+          <Tone name={tone} raised={raised} className={cn(baseCard, "flex-1")}>
             {children}
           </Tone>
         </Pressable>
@@ -47,6 +62,7 @@ export const Card = ({
         )}
         {...props}
       >
+        {showRaised && <RaisedOverlay />}
         {children}
       </Pressable>
     );
@@ -54,7 +70,7 @@ export const Card = ({
 
   if (tone) {
     return (
-      <Tone name={tone} className={cardClass} {...props}>
+      <Tone name={tone} raised={raised} className={cardClass} {...props}>
         {children}
       </Tone>
     );
@@ -62,6 +78,7 @@ export const Card = ({
 
   return (
     <View className={cardClass} {...props}>
+      {showRaised && <RaisedOverlay />}
       {children}
     </View>
   );

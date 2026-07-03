@@ -85,7 +85,8 @@ export function ClientTodayScreen() {
             Friday, June 26 · with {coach.name.split(" ")[0]}
           </Text>
           <Text className="text-[26px] font-bold tracking-tight text-foreground mt-0.5">
-            Hey, {clientProfile.fname} <Icon name="wave" size={26} color="--primary" />
+            Hey, {clientProfile.fname}{" "}
+            <Icon name="wave" size={26} color="--primary" />
           </Text>
         </View>
       </View>
@@ -113,7 +114,7 @@ export function ClientTodayScreen() {
           }
         />
         <View className="flex-row gap-3">
-          <Card tone="peach" interactive className="flex-1">
+          <Card tone="peach" interactive raised className="flex-1">
             <View className="flex-row items-center justify-between">
               <Icon name="apple" size={20} color="--peach-ink" />
               <Text className="text-[11px] font-semibold uppercase tracking-wider text-peach-ink opacity-70">
@@ -131,7 +132,7 @@ export function ClientTodayScreen() {
             </View>
           </Card>
 
-          <Card tone="sky" interactive className="flex-1">
+          <Card tone="sky" interactive raised className="flex-1">
             <View className="flex-row items-center justify-between">
               <Icon name="droplets" size={20} color="--sky-ink" />
               <Text className="text-[11px] font-semibold uppercase tracking-wider text-sky-ink opacity-70">
@@ -158,7 +159,7 @@ export function ClientTodayScreen() {
       </View>
 
       {/* Next Check-in Banner */}
-      <Card tone="lilac" interactive>
+      <Card tone="lilac" interactive raised>
         <View className="flex-row items-center justify-between">
           <View className="flex-1 pr-4">
             <Text className="text-[11px] font-semibold uppercase tracking-[0.14em] text-lilac-ink opacity-70">
@@ -172,7 +173,7 @@ export function ClientTodayScreen() {
             </Text>
           </View>
           <Pressable className="rounded-full bg-lilac-ink px-4 py-2 active:opacity-90">
-            <Text className="text-[12px] font-semibold text-white">
+            <Text className="text-[12px] font-semibold text-background">
               Prepare
             </Text>
           </Pressable>

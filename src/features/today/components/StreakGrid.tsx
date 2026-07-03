@@ -64,7 +64,7 @@ export function StreakHero({
   }
 
   return (
-    <Tone name="ink" className="rounded-2xl p-5 shadow-ink">
+    <Tone name="ink" className="rounded-2xl p-5 shadow-ink" raised>
       <View className="flex-row items-start justify-between">
         <View className="flex-1 pr-4">
           <Text className="text-[11px] font-medium uppercase tracking-[0.16em] text-ink-foreground/60">

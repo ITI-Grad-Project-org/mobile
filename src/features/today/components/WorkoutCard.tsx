@@ -47,7 +47,7 @@ export function WorkoutCard({
       />
       <Card className="p-0 overflow-hidden">
         {/* Card Top Tone Gradient Banner */}
-        <Tone name={meta.tone} className="flex-row items-center justify-between gap-3 p-5">
+        <Tone name={meta.tone} className="flex-row items-center justify-between gap-3 p-5" raised>
           <View className="flex-1">
             <Text className="text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground/70">
               {meta.subtitle}

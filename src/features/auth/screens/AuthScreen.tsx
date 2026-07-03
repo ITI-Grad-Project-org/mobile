@@ -1,11 +1,17 @@
-import { useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Platform } from "react-native";
 import { useRouter } from "expo-router";
+import { useState } from "react";
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  useColorScheme,
+} from "react-native";
 
 import { Pressable, SafeAreaView, ScrollView, Text, View } from "@/tw";
+import { Image } from "@/tw/image";
 import { AuthField } from "../components/AuthField";
-import { PasswordField } from "../components/PasswordField";
 import { GoogleButton } from "../components/GoogleButton";
+import { PasswordField } from "../components/PasswordField";
 import { RoleToggle, type AuthRole } from "../components/RoleToggle";
 
 export type AuthMode = "signup" | "login";
@@ -16,7 +22,8 @@ export function AuthScreen({
   initialMode?: AuthMode;
 }) {
   const router = useRouter();
-
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [role, setRole] = useState<AuthRole>("client");
   const [fname, setFname] = useState("");
@@ -37,7 +44,7 @@ export function AuthScreen({
     setTimeout(() => {
       setBusy(false);
       router.replace(
-        role === "coach" ? "/(coach)/(tabs)/home" : "/(client)/(tabs)/today",
+        role === "coach" ? "/(coach)/(tabs)/home" : "/(client)/(tabs)/today"
       );
     }, 600);
   };
@@ -63,14 +70,26 @@ export function AuthScreen({
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Text className="text-[30px] font-bold leading-tight text-foreground">
-            {isSignup ? "Create your account" : "Welcome back"}
-          </Text>
-          <Text className="mt-1.5 text-[14px] text-muted-foreground">
-            {isSignup
-              ? "Just the essentials — we'll set up the rest in a few quick steps."
-              : "Sign in to keep your streak alive."}
-          </Text>
+          <View className="flex-row items-center gap-2">
+            <Image
+              source={
+                !isDark
+                  ? require("@/assets/images/Uply-dark-logo.png")
+                  : require("@/assets/images/Uply-light-logo.png")
+              }
+              className="h-12 w-40 object-object"
+            />
+            <View className="flex-1">
+              <Text className="text-[30px] font-bold leading-tight text-foreground">
+                {isSignup ? "Create your account" : "Welcome back"}
+              </Text>
+              <Text className="mt-1.5 text-[14px] text-muted-foreground">
+                {isSignup
+                  ? "Just the essentials — we'll set up the rest in a few quick steps."
+                  : "Sign in to keep your streak alive."}
+              </Text>
+            </View>
+          </View>
 
           <View className="mt-6">
             <RoleToggle role={role} onChange={setRole} />

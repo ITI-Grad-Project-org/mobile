@@ -21,10 +21,7 @@ export function ExerciseSheet({
 }: ExerciseSheetProps) {
   if (!exercise) return null;
 
-  /* Shared sheet content — identical on both platforms, only the chrome differs. */
   const content = (
-    // `@/tw` View (css-interop) — gives the sheet a real, dark-aware `bg-card`
-    // background and re-establishes the theme variable scope inside the Modal.
     <View className="flex-1 bg-card overflow-hidden">
       <KeyboardAvoidingView
         behavior={isIOS ? "padding" : undefined}

@@ -108,7 +108,7 @@ export function DaySheet({
       </ScrollView>
 
       {/* Sticky footer */}
-      <View className="border-t border-border/60 bg-card/95 px-5 pt-3 pb-8">
+      <View className="border-t border-border/60 bg-card/95 px-5 pt-3 pb-8 mb-8">
         <Pressable
           onPress={onClose}
           className="flex-row items-center justify-center gap-2 rounded-2xl bg-primary py-4 shadow-soft active:opacity-90"
@@ -146,7 +146,7 @@ export function DaySheet({
     >
       <View className="flex-1 justify-end">
         <Pressable className="absolute inset-0 bg-black/40" onPress={onClose} />
-        <View className="max-h-[92%] overflow-hidden rounded-t-3xl shadow-pop">
+        <View className="min-h-[90%] overflow-hidden shadow-pop">
           {content}
         </View>
       </View>

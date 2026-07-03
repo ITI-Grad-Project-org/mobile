@@ -51,7 +51,7 @@ const SYMBOLS: Record<IconName, { ios: string; android: string }> = {
   "moon": { ios: "moon.fill", android: "dark_mode" },
   "bell": { ios: "bell.fill", android: "notifications" },
   "person": { ios: "person.crop.circle.fill", android: "account_circle" },
-  "wave": { ios: "hand.wave.fill", android: "waves" },
+  "wave": { ios: "hand.wave.fill", android: "waving_hand" },
   "clock": { ios: "clock", android: "schedule" },
   "layers": { ios: "square.stack.3d.up", android: "layers" },
   "heart": { ios: "heart.fill", android: "favorite" },

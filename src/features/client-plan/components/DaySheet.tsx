@@ -23,7 +23,7 @@ export function DaySheet({
   const content = (
     <View className="flex-1 bg-card overflow-hidden">
       {/* Tone header */}
-      <Tone name={day.tone} className={cn("px-5 pb-5", isIOS ? "pt-5" : "pt-12")}>
+      <Tone name={day.tone} className={cn("px-5 pb-5", isIOS ? "pt-5" : "pt-12")} glass>
         <Pressable
           onPress={onClose}
           className={cn(
@@ -67,7 +67,7 @@ export function DaySheet({
         showsVerticalScrollIndicator={false}
       >
         {day.notes ? (
-          <Tone name="sky" className="mb-4 rounded-2xl p-3">
+          <Tone name="sky" className="mb-4 rounded-2xl p-3" glass>
             <Text className="text-[12.5px] leading-relaxed text-sky-ink">
               <Text className="font-semibold">Coach note: </Text>
               {day.notes}

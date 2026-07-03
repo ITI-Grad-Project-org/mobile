@@ -58,8 +58,6 @@ export default function ClientTabsLayout() {
           md="show_chart"
         />
       </NativeTabs.Trigger>
-
-
       <NativeTabs.Trigger name="profile">
         <NativeTabs.Trigger.Label>Profile</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="person" md="person" />

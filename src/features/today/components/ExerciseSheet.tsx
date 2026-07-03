@@ -4,7 +4,12 @@ import { Pressable, ScrollView, Text, TextInput, View } from "@/tw";
 import { Tone } from "@/tw/Tone";
 import { Image } from "@/tw/image";
 import { LinearGradient } from "expo-linear-gradient";
-import { KeyboardAvoidingView, Modal, Platform, StyleSheet } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  StyleSheet,
+} from "react-native";
 
 interface ExerciseSheetProps {
   exercise: Exercise | null;
@@ -38,7 +43,11 @@ export function ExerciseSheet({
 
             {/* Fade gradient overlay from bottom to top */}
             <LinearGradient
-              colors={["rgba(0,0,0,0.85)", "rgba(0,0,0,0.25)", "rgba(0,0,0,0.4)"]}
+              colors={[
+                "rgba(0,0,0,0.85)",
+                "rgba(0,0,0,0.25)",
+                "rgba(0,0,0,0.4)",
+              ]}
               locations={[0, 0.5, 1]}
               style={StyleSheet.absoluteFill}
             />
@@ -140,7 +149,7 @@ export function ExerciseSheet({
 
             {/* Coach note card — Tone gradient (dark-aware: its `useCSSVariable`
               falls through to the global, color-scheme-aware root variables). */}
-            <Tone name="sky" className="rounded-2xl p-3.5">
+            <Tone name="sky" className="rounded-2xl p-3.5" glass>
               <Text className="text-[12.5px] text-sky-ink leading-relaxed">
                 <Text className="font-semibold">Coach note: </Text>
                 Keep your chest tall through the descent — film set 3 for me.

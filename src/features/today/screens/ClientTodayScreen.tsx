@@ -114,7 +114,7 @@ export function ClientTodayScreen() {
           }
         />
         <View className="flex-row gap-3">
-          <Card tone="peach" interactive raised className="flex-1">
+          <Card tone="peach" interactive glass className="flex-1">
             <View className="flex-row items-center justify-between">
               <Icon name="apple" size={20} color="--peach-ink" />
               <Text className="text-[11px] font-semibold uppercase tracking-wider text-peach-ink opacity-70">
@@ -132,7 +132,7 @@ export function ClientTodayScreen() {
             </View>
           </Card>
 
-          <Card tone="sky" interactive raised className="flex-1">
+          <Card tone="sky" interactive glass className="flex-1">
             <View className="flex-row items-center justify-between">
               <Icon name="droplets" size={20} color="--sky-ink" />
               <Text className="text-[11px] font-semibold uppercase tracking-wider text-sky-ink opacity-70">
@@ -159,7 +159,7 @@ export function ClientTodayScreen() {
       </View>
 
       {/* Next Check-in Banner */}
-      <Card tone="lilac" interactive raised>
+      <Card tone="lilac" interactive glass>
         <View className="flex-row items-center justify-between">
           <View className="flex-1 pr-4">
             <Text className="text-[11px] font-semibold uppercase tracking-[0.14em] text-lilac-ink opacity-70">

@@ -40,7 +40,7 @@ export function ClientPlanScreen() {
       <PlanSegmented value={sub} onChange={setSub} />
 
       {/* Week pager */}
-      <Card className="flex-row items-center justify-between" raised>
+      <Card className="flex-row items-center justify-between" glass>
         <Pressable
           onPress={() => setWeekNum((w) => Math.max(1, w - 1))}
           className="h-9 w-9 items-center justify-center rounded-full bg-secondary active:opacity-80"

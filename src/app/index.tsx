@@ -5,7 +5,7 @@ import { useRole } from "@/shared/hooks/useRole";
 export default function Index() {
   const role = useRole();
 
-  if (!role) {
+  if (role) {
     return <Redirect href="/(auth)/login" />;
   }
 

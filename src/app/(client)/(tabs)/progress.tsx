@@ -1,10 +1,11 @@
-import "@/global.css";
-import { Text, View } from "react-native";
+import { ClientProgressScreen } from "@/features/progress";
+import { View } from "@/tw";
 
-export default function ClientProgressScreen() {
+export default function ClientProgressRoute() {
   return (
-    <View className="flex-1 items-center justify-center bg-background">
-      <Text className="text-foreground text-3xl font-bold">Progress Screen</Text>
+    <View className="flex-1 bg-background px-4">
+      <ClientProgressScreen />
     </View>
   );
 }
+

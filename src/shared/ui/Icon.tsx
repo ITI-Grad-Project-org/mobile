@@ -32,6 +32,10 @@ export type IconName =
   | "help-circle"
   | "send"
   | "trending-up"
+  | "trending-down"
+  | "trophy"
+  | "camera"
+  | "ruler"
 
 interface IconProps {
   name: IconName;
@@ -65,6 +69,10 @@ const SYMBOLS: Record<IconName, { ios: string; android: string }> = {
   "help-circle": { ios: "questionmark.circle", android: "help" },
   "send": { ios: "paperplane.fill", android: "send" },
   "trending-up": { ios: "chart.line.uptrend.xyaxis", android: "trending_up" },
+  "trending-down": { ios: "chart.line.downtrend.xyaxis", android: "trending_down" },
+  "trophy": { ios: "trophy.fill", android: "trophy" },
+  "camera": { ios: "camera.fill", android: "photo_camera" },
+  "ruler": { ios: "ruler.fill", android: "straighten" },
 };
 
 export function Icon({ name, size = 20, color = "#000000", className }: IconProps) {

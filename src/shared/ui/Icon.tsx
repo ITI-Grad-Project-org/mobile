@@ -36,6 +36,10 @@ export type IconName =
   | "trophy"
   | "camera"
   | "ruler"
+  | "phone"
+  | "video"
+  | "paperclip"
+  | "smile"
 
 interface IconProps {
   name: IconName;
@@ -73,6 +77,10 @@ const SYMBOLS: Record<IconName, { ios: string; android: string }> = {
   "trophy": { ios: "trophy.fill", android: "trophy" },
   "camera": { ios: "camera.fill", android: "photo_camera" },
   "ruler": { ios: "ruler.fill", android: "straighten" },
+  "phone": { ios: "phone.fill", android: "phone" },
+  "video": { ios: "video.fill", android: "videocam" },
+  "paperclip": { ios: "paperclip", android: "attach_file" },
+  "smile": { ios: "face.smiling.fill", android: "mood" },
 };
 
 export function Icon({ name, size = 20, color = "#000000", className }: IconProps) {

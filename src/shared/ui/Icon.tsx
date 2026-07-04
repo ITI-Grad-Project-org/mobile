@@ -31,6 +31,7 @@ export type IconName =
   | "activity"
   | "help-circle"
   | "send"
+  | "trending-up"
 
 interface IconProps {
   name: IconName;
@@ -63,6 +64,7 @@ const SYMBOLS: Record<IconName, { ios: string; android: string }> = {
   "activity": { ios: "waveform.path.ecg", android: "monitor_heart" },
   "help-circle": { ios: "questionmark.circle", android: "help" },
   "send": { ios: "paperplane.fill", android: "send" },
+  "trending-up": { ios: "chart.line.uptrend.xyaxis", android: "trending_up" },
 };
 
 export function Icon({ name, size = 20, color = "#000000", className }: IconProps) {

@@ -7,6 +7,7 @@ import {
   useColorScheme,
 } from "react-native";
 
+import { hasOnboarded } from "@/shared/hooks/useOnboarding";
 import { Pressable, SafeAreaView, ScrollView, Text, View } from "@/tw";
 import { Image } from "@/tw/image";
 import { AuthField } from "../components/AuthField";
@@ -41,10 +42,16 @@ export function AuthScreen({
 
   const enterApp = () => {
     setBusy(true);
-    setTimeout(() => {
+    setTimeout(async () => {
       setBusy(false);
+      if (role === "coach") {
+        router.replace("/(coach)/(tabs)/home");
+        return;
+      }
       router.replace(
-        role === "coach" ? "/(coach)/(tabs)/home" : "/(client)/(tabs)/today"
+        (await hasOnboarded())
+          ? "/(client)/(tabs)/today"
+          : "/(onboarding)/onboarding"
       );
     }, 600);
   };

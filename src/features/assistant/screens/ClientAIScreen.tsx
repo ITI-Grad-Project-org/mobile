@@ -6,10 +6,6 @@ import { Pressable, ScrollView, Text, TextInput, View, useCSSVariable } from "@/
 import { useCallback, useState } from "react";
 import { Keyboard, Platform } from "react-native";
 
-/* ------------------------------------------------------------------ */
-/*  Suggestion data                                                    */
-/* ------------------------------------------------------------------ */
-
 interface Suggestion {
   icon: IconName;
   text: string;
@@ -21,10 +17,6 @@ const suggestions: Suggestion[] = [
   { icon: "flame", text: "I'm sore from yesterday — should I train today?" },
   { icon: "help-circle", text: "How do I read my streak grid?" },
 ];
-
-/* ------------------------------------------------------------------ */
-/*  Screen                                                             */
-/* ------------------------------------------------------------------ */
 
 export function ClientAIScreen() {
   const [input, setInput] = useState("");
@@ -46,7 +38,7 @@ export function ClientAIScreen() {
   return (
     <ScrollView
       className="flex-1 bg-background"
-      contentContainerClassName="gap-y-5 pt-5 pb-30"
+      contentContainerClassName="gap-y-10 p-2 pt-5"
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
     >
@@ -66,7 +58,7 @@ export function ClientAIScreen() {
       </View>
 
       {/* ── Coach heads-up card ────────────────────────────────── */}
-      <Card tone="ink">
+      <Card tone="ink" glass>
         <Text className="text-[11px] font-semibold uppercase tracking-[4px] text-ink-foreground/60">
           Coach{"'"}s heads-up
         </Text>

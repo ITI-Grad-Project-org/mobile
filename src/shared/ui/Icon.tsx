@@ -29,6 +29,8 @@ export type IconName =
   | "wind"
   | "sparkles"
   | "activity"
+  | "help-circle"
+  | "send"
 
 interface IconProps {
   name: IconName;
@@ -59,6 +61,8 @@ const SYMBOLS: Record<IconName, { ios: string; android: string }> = {
   "wind": { ios: "wind", android: "air" },
   "sparkles": { ios: "sparkles", android: "auto_awesome" },
   "activity": { ios: "waveform.path.ecg", android: "monitor_heart" },
+  "help-circle": { ios: "questionmark.circle", android: "help" },
+  "send": { ios: "paperplane.fill", android: "send" },
 };
 
 export function Icon({ name, size = 20, color = "#000000", className }: IconProps) {

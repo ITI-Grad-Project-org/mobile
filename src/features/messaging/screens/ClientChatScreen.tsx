@@ -135,7 +135,7 @@ export function ClientChatScreen() {
         >
           <Pressable
             className="h-12 w-9 justify-center items-center rounded-full bg-secondary active:opacity-85"
-            aria-label="Attach"
+            accessibilityLabel="Attach"
           >
             <Icon name="paperclip" size={16} color="--muted-foreground" />
           </Pressable>

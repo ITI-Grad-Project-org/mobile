@@ -47,9 +47,8 @@ export function ClientProfileScreen() {
   const [activeCoachId, setActiveCoachId] = useState(coaches[0].id);
 
   // Sub-modals (EditProfile / MatchCoach) are deferred — inert placeholders for now.
-  const openEdit = () => console.log("Edit profile pressed");
-  const openAddCoach = () => console.log("Add coach pressed");
-
+  const openEdit = () => {};
+  const openAddCoach = () => {};
   const signOut = () => router.replace("/(auth)/login");
 
   return (

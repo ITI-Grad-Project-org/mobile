@@ -6,7 +6,6 @@ import { Pressable, ScrollView, Text, View } from "@/tw";
 import { Image } from "@/tw/image";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type StreakAccent = "green" | "orange";
 
@@ -41,7 +40,6 @@ const rows: { icon: IconName; label: string; hint?: string }[] = [
 
 export function ClientProfileScreen() {
   const router = useRouter();
-  const { top } = useSafeAreaInsets();
   const { accent, clientProfile } = useRole();
   const active = useActiveCoach();
 
@@ -58,8 +56,7 @@ export function ClientProfileScreen() {
     <View className="flex-1 bg-background">
       {/* Modal header with close control */}
       <View
-        style={{ paddingTop: Math.max(top, 12) }}
-        className="px-4 pb-3 flex-row items-center justify-between border-b border-border"
+        className="px-4 pt-3 pb-3 flex-row items-center justify-between border-b border-border"
       >
         <Text className="text-foreground text-xl font-bold">Profile</Text>
         <Pressable

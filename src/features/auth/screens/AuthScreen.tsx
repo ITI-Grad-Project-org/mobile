@@ -84,8 +84,7 @@ export function AuthScreen({
                   ? require("@/assets/images/Uply-dark-logo.png")
                   : require("@/assets/images/Uply-light-logo.png")
               }
-              className="h-12 w-40 object-object"
-            />
+              className="h-12 w-40 object-contain"
             <View className="flex-1">
               <Text className="text-[30px] font-bold leading-tight text-foreground">
                 {isSignup ? "Create your account" : "Welcome back"}

@@ -149,7 +149,7 @@ export function ClientChatScreen() {
           />
           <Pressable
             className="h-9 w-9 justify-center items-center rounded-full bg-secondary active:opacity-85"
-            aria-label="Emoji"
+            accessibilityLabel="Emoji"
           >
             <Icon name="smile" size={16} color="--muted-foreground" />
           </Pressable>

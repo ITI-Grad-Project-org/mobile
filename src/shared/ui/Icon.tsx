@@ -40,6 +40,12 @@ export type IconName =
   | "video"
   | "paperclip"
   | "smile"
+  | "credit-card"
+  | "shield"
+  | "log-out"
+  | "palette"
+  | "user-plus"
+  | "pencil"
 
 interface IconProps {
   name: IconName;
@@ -81,6 +87,12 @@ const SYMBOLS: Record<IconName, { ios: string; android: string }> = {
   "video": { ios: "video.fill", android: "videocam" },
   "paperclip": { ios: "paperclip", android: "attach_file" },
   "smile": { ios: "face.smiling.fill", android: "mood" },
+  "credit-card": { ios: "creditcard.fill", android: "credit_card" },
+  "shield": { ios: "lock.shield.fill", android: "shield" },
+  "log-out": { ios: "rectangle.portrait.and.arrow.right", android: "logout" },
+  "palette": { ios: "paintpalette.fill", android: "palette" },
+  "user-plus": { ios: "person.badge.plus", android: "person_add" },
+  "pencil": { ios: "pencil", android: "edit" },
 };
 
 export function Icon({ name, size = 20, color = "#000000", className }: IconProps) {

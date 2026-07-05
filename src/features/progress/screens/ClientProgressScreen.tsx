@@ -26,7 +26,7 @@ export function ClientProgressScreen() {
       </View>
 
       {/* Weight chart */}
-      <Card>
+      <Card glass>
         <View className="flex-row items-start justify-between">
           <View>
             <Text className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
@@ -62,7 +62,7 @@ export function ClientProgressScreen() {
       {/* metric grid */}
       <View className="gap-3">
         <View className="flex-row gap-3">
-          <Card tone="ink" className="flex-1">
+          <Card tone="ink" className="flex-1" glass>
             <Icon name="ruler" size={20} color="--ink-foreground" className="opacity-80" />
             <Text className="mt-3 text-[11px] font-semibold uppercase tracking-wider text-ink-foreground/60">
               Waist
@@ -71,7 +71,7 @@ export function ClientProgressScreen() {
             <Text className="text-[11px] text-mint mt-1">−4 cm this block</Text>
           </Card>
           
-          <Card tone="sun" className="flex-1">
+          <Card tone="sun" className="flex-1" glass>
             <Icon name="trophy" size={20} color="--sun-ink" className="opacity-80" />
             <Text className="mt-3 text-[11px] font-semibold uppercase tracking-wider text-sun-ink opacity-70">
               Squat PR
@@ -82,7 +82,7 @@ export function ClientProgressScreen() {
         </View>
 
         <View className="flex-row gap-3">
-          <Card tone="lilac" className="flex-1">
+          <Card tone="lilac" className="flex-1" glass>
             <Text className="text-[11px] font-semibold uppercase tracking-wider text-lilac-ink opacity-70">
               Body fat
             </Text>
@@ -92,7 +92,7 @@ export function ClientProgressScreen() {
             </View>
           </Card>
 
-          <Card tone="peach" className="flex-1">
+          <Card tone="peach" className="flex-1" glass>
             <Text className="text-[11px] font-semibold uppercase tracking-wider text-peach-ink opacity-70">
               Workouts
             </Text>
@@ -112,7 +112,7 @@ export function ClientProgressScreen() {
           {["Apr 1", "May 1", "Jun 1"].map((d) => (
             <View
               key={d}
-              className="flex-1 aspect-[3/4] overflow-hidden rounded-2xl bg-secondary justify-center items-center shadow-soft"
+              className="flex-1 aspect-3/4 overflow-hidden rounded-2xl bg-secondary justify-center items-center shadow-soft"
             >
               <Text className="text-3xl opacity-40">📸</Text>
               <View className="absolute bottom-2 left-2 rounded-full bg-black/60 px-2 py-0.5">
@@ -126,7 +126,7 @@ export function ClientProgressScreen() {
       {/* Check-in history */}
       <View>
         <SectionTitle title="Check-in history" />
-        <Card className="p-2">
+        <Card className="p-2" glass>
           {[
             { d: "Jun 20", w: "79.9", note: "Sleep improved, energy 8/10" },
             { d: "Jun 13", w: "80.2", note: "Tough week, missed 1 session" },
@@ -136,7 +136,6 @@ export function ClientProgressScreen() {
               key={c.d}
               className={cn(
                 "flex-row items-center gap-3 rounded-2xl p-3",
-                i < arr.length - 1 && "border-b border-border/50"
               )}
             >
               <View className="h-10 w-10 justify-center items-center rounded-xl bg-mint">

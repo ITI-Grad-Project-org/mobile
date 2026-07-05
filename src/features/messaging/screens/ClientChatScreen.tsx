@@ -6,6 +6,7 @@ import { Pressable, Text, TextInput, View } from "@/tw";
 import { Image } from "@/tw/image";
 import { useEffect, useRef, useState } from "react";
 import { KeyboardAvoidingView, ScrollView as RNScrollView } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type Msg = { id: string; from: "me" | "coach"; t: string; time: string };
 
@@ -19,6 +20,7 @@ const seed: Msg[] = [
 
 export function ClientChatScreen() {
   const coach = useActiveCoach();
+  const insets = useSafeAreaInsets();
   const [msgs, setMsgs] = useState<Msg[]>(seed);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
@@ -127,7 +129,10 @@ export function ClientChatScreen() {
         </RNScrollView>
 
         {/* Composer */}
-        <View className="flex-row items-center gap-2 rounded-full border border-border/60 bg-card p-1.5 shadow-soft mb-2">
+        <View
+          className="flex-row items-center gap-2 rounded-full border border-border/60 bg-card p-1.5 shadow-soft"
+          style={{ marginBottom: insets.bottom + 8 }}
+        >
           <Pressable
             className="h-12 w-9 justify-center items-center rounded-full bg-secondary active:opacity-85"
             aria-label="Attach"

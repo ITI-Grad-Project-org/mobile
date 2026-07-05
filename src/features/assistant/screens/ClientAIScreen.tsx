@@ -5,6 +5,7 @@ import { SectionTitle } from "@/shared/ui/SectionTitle";
 import { Pressable, ScrollView, Text, TextInput, View, useCSSVariable } from "@/tw";
 import { useCallback, useState } from "react";
 import { Keyboard, KeyboardAvoidingView, Platform } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface Suggestion {
   icon: IconName;
@@ -21,6 +22,7 @@ const suggestions: Suggestion[] = [
 export function ClientAIScreen() {
   const [input, setInput] = useState("");
   const coach = useActiveCoach();
+  const insets = useSafeAreaInsets();
 
   const handleSuggestion = useCallback((text: string) => {
     setInput(text);
@@ -98,7 +100,7 @@ export function ClientAIScreen() {
         </ScrollView>
 
         {/* ── Input bar ─────────────────────────────────────────── */}
-        <Card className="p-3 mb-2 mx-2">
+        <Card className="p-3 mx-2" style={{ marginBottom: insets.bottom + 8 }}>
           <View className="flex-row items-end gap-2">
             <TextInput
               value={input}

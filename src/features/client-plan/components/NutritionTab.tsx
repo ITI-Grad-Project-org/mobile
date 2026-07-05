@@ -14,7 +14,7 @@ export function NutritionTab() {
   return (
     <View className="gap-y-4">
       {/* Daily target */}
-      <Card tone="mint" raised>
+      <Card tone="mint" glass>
         <Text className="text-[11px] font-semibold uppercase tracking-wider text-mint-ink opacity-70">
           Daily target
         </Text>
@@ -35,7 +35,7 @@ export function NutritionTab() {
 
       <SectionTitle title="Today's meals" />
       {meals.map((m) => (
-        <Card key={m.id} interactive className="flex-row items-center gap-3 px-3 py-4" raised>
+        <Card key={m.id} interactive className="flex-row items-center gap-3 px-3 py-4" glass>
           <Image source={m.image} className="h-14 w-14 shrink-0 rounded-2xl" />
           <View className="min-w-0 flex-1">
             <Text className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">

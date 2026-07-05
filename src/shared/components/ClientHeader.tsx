@@ -20,7 +20,7 @@ export function ClientHeader() {
 
   const handleProfilePress = () => {
     // Navigate to the client profile tab
-    router.navigate("/(client)/(tabs)/profile");
+    router.navigate("/(client)/profile");
   };
 
   const handleNotificationPress = () => {

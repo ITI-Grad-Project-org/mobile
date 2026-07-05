@@ -1,9 +1,8 @@
-import React from "react";
-import { View, Text } from "@/tw";
-import { Tone } from "@/tw/Tone";
 import { useRole } from "@/lib/role";
-import { Icon } from "@/shared/ui/Icon";
 import { cn } from "@/lib/utils";
+import { Icon } from "@/shared/ui/Icon";
+import { Text, View } from "@/tw";
+import { Tone } from "@/tw/Tone";
 
 // GitHub-style intensity scale (light → dark) for green & orange
 const palettes = {
@@ -64,7 +63,7 @@ export function StreakHero({
   }
 
   return (
-    <Tone name="ink" className="rounded-2xl p-5 shadow-ink" raised>
+    <Tone name="ink" className="rounded-2xl p-5 shadow-ink" glass>
       <View className="flex-row items-start justify-between">
         <View className="flex-1 pr-4">
           <Text className="text-[11px] font-medium uppercase tracking-[0.16em] text-ink-foreground/60">

@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { Pressable, Text, View, type ViewProps } from "@/tw";
-import { Tone, type ToneName } from "@/tw/Tone";
+import { GlassSheen, Tone, type ToneName } from "@/tw/Tone";
 import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
 import { StyleSheet } from "react-native";
@@ -9,6 +9,7 @@ export interface CardProps extends ViewProps {
   tone?: ToneName;
   interactive?: boolean;
   raised?: boolean;
+  glass?: boolean;
   onPress?: () => void;
 }
 
@@ -22,19 +23,86 @@ const RaisedOverlay = () => (
   />
 );
 
+const GlassSurface = ({
+  className,
+  tone,
+  children,
+  ...props
+}: ViewProps & { tone?: ToneName }) => {
+  if (tone) {
+    return (
+      <Tone name={tone} glass className={cn("rounded-xl p-5", className)} {...props}>
+        {children}
+      </Tone>
+    );
+  }
+  return (
+    <View
+      className={cn(
+        "rounded-xl overflow-hidden border border-white/30 bg-card/60 shadow-pop p-5",
+        className
+      )}
+      {...props}
+    >
+      <GlassSheen />
+      {children}
+    </View>
+  );
+};
+
 export const Card = ({
   className,
   tone,
   interactive,
   raised,
+  glass,
   onPress,
   children,
   ...props
 }: CardProps) => {
-  const showRaised = raised && !tone;
+  const showRaised = raised && !tone && !glass;
   const baseCard = "rounded-xl p-5 overflow-hidden shadow-soft";
-  const surface = tone ? "" : "border border-border bg-card text-card-foreground";
+  const surface = tone
+    ? ""
+    : "border border-border bg-card text-card-foreground";
   const cardClass = cn(baseCard, surface, className);
+
+  if (glass) {
+    if (interactive) {
+      // Render children DIRECTLY in the Pressable so the caller's className
+      // (layout like flex-row / padding) lands on the element that holds them.
+      // The glass fills sit behind as absolute-fill siblings — same approach as
+      // RaisedOverlay on the plain card.
+      return (
+        <Pressable
+          onPress={onPress}
+          className={cn(
+            "overflow-hidden rounded-xl border border-white/30 shadow-pop p-5",
+            !tone && "bg-card/60",
+            "active:opacity-90 active:scale-[0.99] transition-all duration-100",
+            className
+          )}
+          {...props}
+        >
+          {tone ? (
+            <Tone
+              name={tone}
+              className="opacity-80"
+              style={StyleSheet.absoluteFill}
+              pointerEvents="none"
+            />
+          ) : null}
+          <GlassSheen />
+          {children}
+        </Pressable>
+      );
+    }
+    return (
+      <GlassSurface tone={tone} className={className} {...props}>
+        {children}
+      </GlassSurface>
+    );
+  }
 
   if (interactive) {
     if (tone) {

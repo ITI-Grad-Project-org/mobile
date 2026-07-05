@@ -1,7 +1,7 @@
-import React from "react";
-import { SymbolView } from "expo-symbols";
-import { useCssElement } from "react-native-css";
 import { useCSSVariable } from "@/tw";
+import { SymbolView } from "expo-symbols";
+import React from "react";
+import { useCssElement } from "react-native-css";
 
 const CSSSymbolView = (props: React.ComponentProps<typeof SymbolView> & { className?: string }) => {
   return useCssElement(SymbolView as React.ComponentType<any>, props, { className: "style" });
@@ -29,6 +29,23 @@ export type IconName =
   | "wind"
   | "sparkles"
   | "activity"
+  | "help-circle"
+  | "send"
+  | "trending-up"
+  | "trending-down"
+  | "trophy"
+  | "camera"
+  | "ruler"
+  | "phone"
+  | "video"
+  | "paperclip"
+  | "smile"
+  | "credit-card"
+  | "shield"
+  | "log-out"
+  | "palette"
+  | "user-plus"
+  | "pencil"
 
 interface IconProps {
   name: IconName;
@@ -51,7 +68,7 @@ const SYMBOLS: Record<IconName, { ios: string; android: string }> = {
   "moon": { ios: "moon.fill", android: "dark_mode" },
   "bell": { ios: "bell.fill", android: "notifications" },
   "person": { ios: "person.crop.circle.fill", android: "account_circle" },
-  "wave": { ios: "hand.wave.fill", android: "waves" },
+  "wave": { ios: "hand.wave.fill", android: "waving_hand" },
   "clock": { ios: "clock", android: "schedule" },
   "layers": { ios: "square.stack.3d.up", android: "layers" },
   "heart": { ios: "heart.fill", android: "favorite" },
@@ -59,6 +76,23 @@ const SYMBOLS: Record<IconName, { ios: string; android: string }> = {
   "wind": { ios: "wind", android: "air" },
   "sparkles": { ios: "sparkles", android: "auto_awesome" },
   "activity": { ios: "waveform.path.ecg", android: "monitor_heart" },
+  "help-circle": { ios: "questionmark.circle", android: "help" },
+  "send": { ios: "paperplane.fill", android: "send" },
+  "trending-up": { ios: "chart.line.uptrend.xyaxis", android: "trending_up" },
+  "trending-down": { ios: "chart.line.downtrend.xyaxis", android: "trending_down" },
+  "trophy": { ios: "trophy.fill", android: "trophy" },
+  "camera": { ios: "camera.fill", android: "photo_camera" },
+  "ruler": { ios: "ruler.fill", android: "straighten" },
+  "phone": { ios: "phone.fill", android: "phone" },
+  "video": { ios: "video.fill", android: "videocam" },
+  "paperclip": { ios: "paperclip", android: "attach_file" },
+  "smile": { ios: "face.smiling.fill", android: "mood" },
+  "credit-card": { ios: "creditcard.fill", android: "credit_card" },
+  "shield": { ios: "lock.shield.fill", android: "shield" },
+  "log-out": { ios: "rectangle.portrait.and.arrow.right", android: "logout" },
+  "palette": { ios: "paintpalette.fill", android: "palette" },
+  "user-plus": { ios: "person.badge.plus", android: "person_add" },
+  "pencil": { ios: "pencil", android: "edit" },
 };
 
 export function Icon({ name, size = 20, color = "#000000", className }: IconProps) {

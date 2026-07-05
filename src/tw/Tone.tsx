@@ -1,6 +1,7 @@
 import React from "react";
 import { StyleSheet } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { cn } from "@/lib/utils";
 import { View, useCSSVariable, type ViewProps } from "./index";
 
 /**
@@ -89,9 +90,50 @@ const BLACK: RGBA = { r: 0, g: 0, b: 0, a: 1 };
 export type ToneProps = ViewProps & {
   name: ToneName;
   raised?: boolean;
+  /** Overlay a frosted liquid-glass finish (translucent tint + glossy sheen). */
+  glass?: boolean;
 };
 
-export function Tone({ name, raised, children, style, ...rest }: ToneProps) {
+/**
+ * The glossy passes that make a filled surface read as "liquid glass": a bright
+ * diagonal sheen plus a faint bottom shade. Drop these over any fill (a Tone
+ * gradient, or a neutral frosted View) beneath the content.
+ */
+export function GlassSheen() {
+  return (
+    <>
+      <LinearGradient
+        colors={[
+          "rgba(255,255,255,0.55)",
+          "rgba(255,255,255,0.14)",
+          "rgba(255,255,255,0)",
+        ]}
+        locations={[0, 0.45, 1]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0.65, y: 1 }}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+      <LinearGradient
+        colors={["rgba(0,0,0,0)", "rgba(15,23,42,0.08)"]}
+        start={{ x: 0.5, y: 0.55 }}
+        end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+    </>
+  );
+}
+GlassSheen.displayName = "GlassSheen";
+
+export function Tone({
+  name,
+  raised,
+  glass,
+  children,
+  style,
+  ...rest
+}: ToneProps) {
   const spec = TONES[name];
   const fromVar = useCSSVariable(spec.from) as string | undefined;
   const toVar = useCSSVariable(spec.to) as string | undefined;
@@ -118,15 +160,26 @@ export function Tone({ name, raised, children, style, ...rest }: ToneProps) {
   }
 
   return (
-    <View style={style} {...rest} className={`overflow-hidden ${rest.className ?? ""}`}>
+    <View
+      style={style}
+      {...rest}
+      className={cn(
+        "overflow-hidden",
+        // glass: hairline highlight rim + lift so the sheen reads as a lens.
+        glass && "border border-white/30 shadow-pop",
+        rest.className
+      )}
+    >
       <LinearGradient
         colors={colors}
         // raised: straight top -> bottom; default: 135deg top-left -> bottom-right
         start={raised ? { x: 0.5, y: 0 } : { x: 0, y: 0 }}
         end={raised ? { x: 0.5, y: 1 } : { x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
+        // glass keeps the fill translucent so the background bleeds through.
+        style={[StyleSheet.absoluteFill, glass ? { opacity: 0.8 } : null]}
         pointerEvents="none"
       />
+      {glass ? <GlassSheen /> : null}
       {children}
     </View>
   );

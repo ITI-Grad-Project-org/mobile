@@ -7,6 +7,8 @@ export function useRole() {
     accent: "green" as "green" | "orange",
     clientProfile: {
       fname: "Alex",
+      lname: "Rivera",
+      email: "alex.rivera@example.com",
       avatar: "https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&w=200&q=80",
     },
   };
@@ -16,5 +18,7 @@ export function useActiveCoach() {
   return {
     name: "Coach Mike",
     planType: "strength" as "strength" | "yoga" | "endurance" | "weightloss",
+    specialty: "Strength & conditioning",
+    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80",
   };
 }

@@ -160,7 +160,7 @@ export function ClientChatScreen() {
               "h-9 w-9 justify-center items-center rounded-full bg-primary active:opacity-85",
               !input.trim() && "opacity-40"
             )}
-            aria-label="Send"
+            accessibilityLabel="Send"
           >
             <Icon name="send" size={16} color="#ffffff" />
           </Pressable>

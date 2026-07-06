@@ -1,10 +1,10 @@
-import { Text, View } from "react-native";
-import "@/global.css"
+import { CoachHomeScreen } from "@/features/analytics";
+import { View } from "@/tw";
 
-export default function CoachHomeScreen() {
+export default function CoachHomeRoute() {
   return (
-    <View className="flex-1 items-center justify-center bg-white">
-      <Text className="text-red-500 text-3xl">Hello Coach</Text>
+    <View className="flex-1 bg-background px-4">
+      <CoachHomeScreen />
     </View>
   );
 }

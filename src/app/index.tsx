@@ -1,11 +1,11 @@
 import { Redirect } from "expo-router";
 
-import { useRole } from "@/shared/hooks/useRole";
 
 export default function Index() {
-  const role = useRole();
+  // const role = useRole();
+  const role = "owner";
 
-  if (role) {
+  if (!role) {
     return <Redirect href="/(auth)/login" />;
   }
 

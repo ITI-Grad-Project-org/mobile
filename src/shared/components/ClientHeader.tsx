@@ -10,7 +10,7 @@ export function ClientHeader() {
   const { top } = useSafeAreaInsets();
   const router = useRouter();
   const { colorScheme, setColorScheme } = useColorScheme();
-  const { clientProfile } = useRole();
+  const { role, clientProfile } = useRole();
 
   const isDark = colorScheme === "dark";
 
@@ -19,8 +19,11 @@ export function ClientHeader() {
   };
 
   const handleProfilePress = () => {
-    // Navigate to the client profile tab
-    router.navigate("/(client)/profile");
+    if (role === "owner") {
+      router.navigate("/(coach)/(tabs)/profile");
+    } else {
+      router.navigate("/(client)/profile");
+    }
   };
 
   const handleNotificationPress = () => {

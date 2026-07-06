@@ -46,6 +46,11 @@ export type IconName =
   | "palette"
   | "user-plus"
   | "pencil"
+  | "alert-triangle"
+  | "message-square"
+  | "search"
+  | "filter"
+  | "clipboard-list"
 
 interface IconProps {
   name: IconName;
@@ -93,6 +98,11 @@ const SYMBOLS: Record<IconName, { ios: string; android: string }> = {
   "palette": { ios: "paintpalette.fill", android: "palette" },
   "user-plus": { ios: "person.badge.plus", android: "person_add" },
   "pencil": { ios: "pencil", android: "edit" },
+  "alert-triangle": { ios: "exclamationmark.triangle.fill", android: "warning" },
+  "message-square": { ios: "bubble.left.fill", android: "chat_bubble" },
+  "search": { ios: "magnifyingglass", android: "search" },
+  "filter": { ios: "line.3.horizontal.decrease.circle", android: "filter_list" },
+  "clipboard-list": { ios: "clipboard.fill", android: "assignment" },
 };
 
 export function Icon({ name, size = 20, color = "#000000", className }: IconProps) {

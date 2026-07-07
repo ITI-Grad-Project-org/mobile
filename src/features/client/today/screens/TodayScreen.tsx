@@ -50,7 +50,7 @@ const PLAN_META: Record<
   },
 };
 
-export function ClientTodayScreen() {
+export function TodayScreen() {
   const coach = useActiveCoach();
   const { clientProfile } = useRole();
 

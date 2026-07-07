@@ -19,7 +19,7 @@ const suggestions: Suggestion[] = [
   { icon: "help-circle", text: "How do I read my streak grid?" },
 ];
 
-export function ClientAIScreen() {
+export function AssistantScreen() {
   const [input, setInput] = useState("");
   const coach = useActiveCoach();
   const insets = useSafeAreaInsets();

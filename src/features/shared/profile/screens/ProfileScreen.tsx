@@ -38,7 +38,7 @@ const rows: { icon: IconName; label: string; hint?: string }[] = [
   { icon: "help-circle", label: "Help & support" },
 ];
 
-export function ClientProfileScreen() {
+export function ProfileScreen() {
   const router = useRouter();
   const { accent, clientProfile } = useRole();
   const active = useActiveCoach();

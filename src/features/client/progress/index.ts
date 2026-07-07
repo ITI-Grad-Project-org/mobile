@@ -1,1 +1,1 @@
-export { ClientProgressScreen } from "./screens/ClientProgressScreen";
+export { ProgressScreen } from "./screens/ProgressScreen";

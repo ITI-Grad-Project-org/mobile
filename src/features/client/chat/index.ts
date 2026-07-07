@@ -1,1 +1,1 @@
-export { ClientChatScreen } from "./screens/ClientChatScreen";
+export { ChatScreen } from "./screens/ChatScreen";

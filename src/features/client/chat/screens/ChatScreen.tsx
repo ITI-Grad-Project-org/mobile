@@ -18,7 +18,7 @@ const seed: Msg[] = [
   { id: "5", from: "coach", t: "Yes please. Set 3 will do.", time: "9:21" },
 ];
 
-export function ClientChatScreen() {
+export function ChatScreen() {
   const coach = useActiveCoach();
   const insets = useSafeAreaInsets();
   const [msgs, setMsgs] = useState<Msg[]>(seed);

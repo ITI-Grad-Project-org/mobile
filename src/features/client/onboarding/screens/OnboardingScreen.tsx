@@ -61,7 +61,7 @@ const SLIDES: Slide[] = [
   },
 ];
 
-export function ClientOnboardingScreen({
+export function OnboardingScreen({
   onFinish,
   onSkip,
 }: {

@@ -11,7 +11,7 @@ import { Modal, Platform } from "react-native";
 type Status = "All" | "Active" | "Paused" | "New";
 type Client = (typeof clientsList)[number];
 
-export function CoachClientsScreen() {
+export function ClientsScreen() {
   const [filter, setFilter] = useState<Status>("All");
   const [search, setSearch] = useState("");
   const [active, setActive] = useState<Client | null>(null);
@@ -320,7 +320,7 @@ function ClientDetail({ client, onClose }: { client: Client | null; onClose: () 
     >
       <View className="flex-1 justify-end">
         <Pressable className="absolute inset-0 bg-black/40" onPress={handleClose} />
-        <View className="min-h-[85%] w-full overflow-hidden shadow-pop bg-card rounded-t-[32px]">
+        <View className="min-h-[85%] w-full overflow-hidden shadow-pop bg-card rounded-t-3xl">
           {content}
         </View>
       </View>

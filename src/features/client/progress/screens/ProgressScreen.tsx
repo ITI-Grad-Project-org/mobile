@@ -8,7 +8,7 @@ import WeightChart from "../components/WeightChart";
 
 const weightData = [82.4, 82.1, 81.8, 81.5, 81.7, 81.2, 80.8, 80.5, 80.6, 80.2, 79.9, 79.5];
 
-export function ClientProgressScreen() {
+export function ProgressScreen() {
   const max = Math.max(...weightData);
   const min = Math.min(...weightData);
   const range = max - min || 1;

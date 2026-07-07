@@ -1,1 +1,1 @@
-export { ClientPlanScreen } from "./screens/ClientPlanScreen";
+export { PlanScreen } from "./screens/PlanScreen";

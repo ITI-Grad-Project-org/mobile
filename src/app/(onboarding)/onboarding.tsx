@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 
-import { ClientOnboardingScreen } from "@/features/client-onboarding";
+import { OnboardingScreen } from "@/features/client/onboarding";
 import { markOnboarded } from "@/shared/hooks/useOnboarding";
 import { View } from "@/tw";
 
@@ -14,7 +14,7 @@ export default function OnboardingRoute() {
 
   return (
     <View className="flex-1 bg-background">
-      <ClientOnboardingScreen onFinish={finish} onSkip={finish} />
+      <OnboardingScreen onFinish={finish} onSkip={finish} />
     </View>
   );
 }

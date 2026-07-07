@@ -1,2 +1,1 @@
-export { CoachHomeScreen } from "./screens/CoachHomeScreen";
-
+export { HomeScreen } from "./screens/HomeScreen";

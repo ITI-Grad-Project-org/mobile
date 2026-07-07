@@ -44,7 +44,7 @@ const colorMap: Record<string, { bg: string; text: string }> = {
   sun: { bg: "bg-sun", text: "text-sun-ink" },
 };
 
-export function CoachHomeScreen() {
+export function HomeScreen() {
   const primaryColor = (useCSSVariable("--primary") as string) || "#e5673a";
   const peachColor = (useCSSVariable("--peach") as string) || "#f7a083";
 
@@ -92,7 +92,7 @@ export function CoachHomeScreen() {
               <Card
                 key={t.title}
                 tone={t.tone}
-                interactive
+                glass
                 className="flex-row items-center gap-x-4 p-4"
               >
                 <View
@@ -147,7 +147,7 @@ export function CoachHomeScreen() {
       </View>
 
       {/* AI suggestion */}
-      <Card tone="lilac" interactive className="p-4">
+      <Card tone="lilac" glass className="p-4">
         <View className="flex-row items-start gap-x-3">
           <View className="h-10 w-10 shrink-0 bg-lilac-ink rounded-2xl justify-center items-center">
             <Icon name="sparkles" size={20} color="--lilac" />
@@ -209,7 +209,7 @@ export function CoachHomeScreen() {
       </View>
 
       {/* Weekly perf */}
-      <Card tone="ink" className="p-5">
+      <Card tone="ink" className="p-5" glass>
         <View className="flex-row items-center justify-between">
           <View>
             <Text className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-foreground/60">

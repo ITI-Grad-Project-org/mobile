@@ -11,7 +11,7 @@ import { PLAN_HEADER, buildWeek, type DayPlan } from "../data";
 
 const TOTAL_WEEKS = 6;
 
-export function ClientPlanScreen() {
+export function PlanScreen() {
   const coach = useActiveCoach();
   const week = useMemo(() => buildWeek(coach.planType), [coach.planType]);
   const header = PLAN_HEADER[coach.planType] ?? PLAN_HEADER.strength;

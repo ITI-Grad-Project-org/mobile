@@ -48,9 +48,9 @@ export default function CoachTabsLayout() {
         <NativeTabs.Trigger.Label>Clients</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={"person.3"} md={"group"} />
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="profile">
-        <NativeTabs.Trigger.Label>Profile</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf={"person"} md={"person"} />
+      <NativeTabs.Trigger name="ai">
+        <NativeTabs.Trigger.Label>AI</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf={"brain"} md={"auto_awesome"} />
       </NativeTabs.Trigger>
     </NativeTabs>
   );

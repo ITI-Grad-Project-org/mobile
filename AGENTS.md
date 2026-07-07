@@ -37,8 +37,13 @@ Stack: Expo SDK 56 (dev build, NOT Expo Go) · RN 0.85 · React 19.2 ·
 ## Project map
 - Routes (thin): app/  — file-based Expo Router. Import nav from `expo-router`, NOT @react-navigation/*.
   Groups: (auth), (onboarding), (coach), (client). Route files just import a screen from src/features.
-- Features: src/features/<name>/ = screens + components + hooks + api.ts (injectEndpoints).
-  Organized by FEATURE, not by UI — shared features (programs, messaging, assistant) serve both UIs.
+- Features: src/features/{coach,client,shared}/<name>/ = screens + components + hooks + api.ts (injectEndpoints).
+  Organized BY UI. `shared/` means shared CODE, not shared concept — three placement rules:
+  1. Single-UI screen -> under coach/ or client/, UNPREFIXED name (e.g. coach/home -> HomeScreen).
+  2. Same domain but a DIFFERENT screen per UI (assistant, messaging) -> screens split per UI
+     (coach/assistant + client/assistant; coach/inbox + client/chat); only their shared data layer
+     (api.ts/types.ts, NO screens) lives in shared/<domain>/.
+  3. Genuinely unifiable surface (profile) -> ONE screen in shared/, role-agnostic name, both routes render it.
 - Store: src/store/ (api.ts, activeTenantSlice, authSlice). Shared: src/shared/ (ui wrappers, hooks).
 - Deep docs live in docs/01..09. Open the relevant one before working in that area.
 

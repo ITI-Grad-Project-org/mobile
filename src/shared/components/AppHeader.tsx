@@ -6,7 +6,7 @@ import { useRouter } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-export function ClientHeader() {
+export function AppHeader() {
   const { top } = useSafeAreaInsets();
   const router = useRouter();
   const { colorScheme, setColorScheme } = useColorScheme();
@@ -20,7 +20,7 @@ export function ClientHeader() {
 
   const handleProfilePress = () => {
     if (role === "owner") {
-      router.navigate("/(coach)/(tabs)/profile");
+      router.navigate("/(coach)/profile");
     } else {
       router.navigate("/(client)/profile");
     }

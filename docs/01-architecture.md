@@ -246,29 +246,43 @@ import { DashboardScreen } from '@/features/analytics/screens/DashboardScreen';
 export default DashboardScreen;
 ```
 
-The real code lives in feature folders, organized by feature (not by which UI uses it):
+The real code lives in feature folders, organized **by UI** (`coach/`, `client/`, `shared/`):
 
 ```
 src/
 ├── features/
-│   ├── clients/        # CRM        → used by Coach UI
-│   ├── programs/       # training   → Coach builds, Client views
-│   ├── checkins/       # logging    → mostly Client UI
-│   ├── messaging/      # chat       → both UIs
-│   ├── assistant/      # AI         → both UIs (different modes)
-│   ├── analytics/      # dashboards → both (coach dashboard / client progress)
-│   ├── memberships/    # tenants, switcher, the role logic
-│   └── tenant-admin/   # settings, branding, billing → Coach UI
+│   ├── coach/          # screens the Coach UI owns
+│   │   ├── home/       #   HomeScreen (dashboard)
+│   │   ├── clients/    #   ClientsScreen (CRM)
+│   │   ├── plans/      #   PlansScreen
+│   │   ├── inbox/      #   InboxScreen (messaging: all clients)
+│   │   └── assistant/  #   AssistantScreen (coach AI)
+│   ├── client/         # screens the Client UI owns
+│   │   ├── today/  plan/  progress/  onboarding/
+│   │   ├── chat/       #   ChatScreen (messaging: the one coach)
+│   │   └── assistant/  #   AssistantScreen (client AI)
+│   └── shared/         # shared CODE, not shared concept
+│       ├── profile/    #   ONE ProfileScreen rendered by both UIs
+│       ├── auth/       #   AuthScreen (role-agnostic)
+│       ├── messaging/  #   data layer only: api.ts + types.ts (no screens)
+│       └── assistant/  #   data layer only: api.ts + types.ts (no screens)
 │
-├── shared/
+├── shared/             # cross-cutting, non-feature code
 │   ├── ui/             # @expo/ui wrappers + NativeWind primitives
 │   ├── hooks/          # useActiveTenant, useRole
-│   └── components/     # Avatar, EmptyState, LoadingState, ...
+│   └── components/     # AppHeader, Avatar, EmptyState, LoadingState, ...
 │
 └── store/              # Redux store + RTK Query (see doc 04)
 ```
 
-Why organize by feature instead of by UI? Because some features (programs, messaging, AI) are **shared by both UIs** in different ways. The Coach *builds* a program; the Client *views* it — same `programs` feature, two entry points. Splitting by UI would duplicate that. (More in [doc 05](05-feature-modules.md).)
+Why by UI? Because most screens belong to exactly one UI, and even where a domain
+appears in both (messaging, AI) the two screens are genuinely different — the Coach
+inbox is a list of every client; the Client chat is a single thread with their coach.
+Forcing those into one folder would pretend they're one screen. So screens split by UI.
+`shared/` is reserved for code that is *literally reused*: a data layer both sides call
+(`shared/messaging`, `shared/assistant` — `api.ts`/`types.ts`, no screens), a screen that
+is genuinely identical for both roles (`shared/profile`), or role-agnostic flows (`auth`).
+(More in [doc 05](05-feature-modules.md).)
 
 ---
 

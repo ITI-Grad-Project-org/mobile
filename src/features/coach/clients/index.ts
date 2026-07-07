@@ -1,1 +1,1 @@
-export { CoachClientsScreen } from "./screens/CoachClientsScreen";
+export { ClientsScreen } from "./screens/ClientsScreen";

@@ -11,6 +11,19 @@ export function useRole() {
       email: "alex.rivera@example.com",
       avatar: "https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&w=200&q=80",
     },
+    coachProfile: {
+      fname: "Marco",
+      lname: "Rossi",
+      email: "marco@uply.app",
+      avatar: "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=200&q=80",
+      certificates: [] as {
+        id: string;
+        name: string;
+        image: string;
+        issued?: string;
+        expires?: string;
+      }[],
+    },
   };
 }
 

@@ -2,7 +2,7 @@ import { useRole } from "@/lib/role";
 import { Icon } from "@/shared/ui/Icon";
 import { Pressable, View } from "@/tw";
 import { Image } from "@/tw/image";
-import { useRouter } from "expo-router";
+import { useRouter, useSegments } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -10,7 +10,11 @@ export function AppHeader() {
   const { top } = useSafeAreaInsets();
   const router = useRouter();
   const { colorScheme, setColorScheme } = useColorScheme();
-  const { role, clientProfile } = useRole();
+  const { clientProfile, coachProfile } = useRole();
+  // Role state isn't wired yet (useRole is a stub), so key off the active route
+  // group to decide which profile to open and which avatar to show.
+  const segments = useSegments() as string[];
+  const isCoach = segments.includes("(coach)");
 
   const isDark = colorScheme === "dark";
 
@@ -19,12 +23,10 @@ export function AppHeader() {
   };
 
   const handleProfilePress = () => {
-    if (role === "owner") {
-      router.navigate("/(coach)/profile");
-    } else {
-      router.navigate("/(client)/profile");
-    }
+    router.navigate(isCoach ? "/(coach)/profile" : "/(client)/profile");
   };
+
+  const avatar = isCoach ? coachProfile.avatar : clientProfile.avatar;
 
   const handleNotificationPress = () => {
     // Notification action placeholder
@@ -81,8 +83,8 @@ export function AppHeader() {
             className="h-9 w-9 rounded-full overflow-hidden border border-border active:opacity-70"
             accessibilityLabel="View profile"
           >
-            {clientProfile?.avatar ? (
-              <Image source={clientProfile.avatar} className="h-full w-full" />
+            {avatar ? (
+              <Image source={avatar} className="h-full w-full" />
             ) : (
               <View className="h-full w-full bg-muted items-center justify-center">
                 <Icon name="person" size={20} color="--muted-foreground" />

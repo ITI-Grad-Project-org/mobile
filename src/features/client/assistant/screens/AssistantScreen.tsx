@@ -6,6 +6,10 @@ import { Pressable, ScrollView, Text, TextInput, View, useCSSVariable } from "@/
 import { useCallback, useState } from "react";
 import { Keyboard, KeyboardAvoidingView, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
+
+// Apple Liquid Glass is iOS 26+ only — fall back to a Card elsewhere.
+const LIQUID_GLASS = isLiquidGlassAvailable();
 
 interface Suggestion {
   icon: IconName;
@@ -100,27 +104,48 @@ export function AssistantScreen() {
         </ScrollView>
 
         {/* ── Input bar ─────────────────────────────────────────── */}
-        <Card className="p-3 mx-2" style={{ marginBottom: insets.bottom + 8 }}>
-          <View className="flex-row items-end gap-2">
-            <TextInput
-              value={input}
-              onChangeText={setInput}
-              placeholder="Ask anything about your training, nutrition, or recovery…"
-              placeholderTextColor={placeholderColor}
-              multiline
-              numberOfLines={3}
-              textAlignVertical="top"
-              className="flex-1 rounded-2xl bg-secondary/60 p-3 text-[13.5px] text-foreground"
-              style={Platform.OS === "ios" ? { minHeight: 72 } : { minHeight: 72 }}
-            />
-            <Pressable
-              onPress={handleSend}
-              className="h-11 w-11 items-center justify-center rounded-2xl bg-primary active:opacity-80"
+        {(() => {
+          const inputRow = (
+            <View className="flex-row items-end gap-2">
+              <TextInput
+                value={input}
+                onChangeText={setInput}
+                placeholder="Ask anything about your training, nutrition, or recovery…"
+                placeholderTextColor={placeholderColor}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+                className="flex-1 rounded-2xl bg-foreground/5 p-3 text-[13.5px] text-foreground"
+                style={Platform.OS === "ios" ? { minHeight: 72 } : { minHeight: 72 }}
+              />
+              <Pressable
+                onPress={handleSend}
+                className="h-11 w-11 items-center justify-center rounded-2xl bg-primary active:opacity-80"
+              >
+                <Icon name="send" size={16} color="--primary-foreground" />
+              </Pressable>
+            </View>
+          );
+
+          return LIQUID_GLASS ? (
+            <GlassView
+              glassEffectStyle="regular"
+              isInteractive
+              style={{
+                padding: 12,
+                marginHorizontal: 8,
+                marginBottom: insets.bottom + 8,
+                borderRadius: 24,
+              }}
             >
-              <Icon name="send" size={16} color="--primary-foreground" />
-            </Pressable>
-          </View>
-        </Card>
+              {inputRow}
+            </GlassView>
+          ) : (
+            <Card className="p-3 mx-2" style={{ marginBottom: insets.bottom + 8 }}>
+              {inputRow}
+            </Card>
+          );
+        })()}
       </View>
     </KeyboardAvoidingView>
   );

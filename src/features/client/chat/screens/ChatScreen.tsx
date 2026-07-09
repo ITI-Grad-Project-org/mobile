@@ -7,6 +7,9 @@ import { Image } from "@/tw/image";
 import { useEffect, useRef, useState } from "react";
 import { KeyboardAvoidingView, ScrollView as RNScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
+
+const LIQUID_GLASS = isLiquidGlassAvailable();
 
 type Msg = { id: string; from: "me" | "coach"; t: string; time: string };
 
@@ -129,42 +132,67 @@ export function ChatScreen() {
         </RNScrollView>
 
         {/* Composer */}
-        <View
-          className="flex-row items-center gap-2 rounded-full border border-border/60 bg-card p-1.5 shadow-soft"
-          style={{ marginBottom: insets.bottom + 8 }}
-        >
-          <Pressable
-            className="h-12 w-9 justify-center items-center rounded-full bg-secondary active:opacity-85"
-            accessibilityLabel="Attach"
-          >
-            <Icon name="paperclip" size={16} color="--muted-foreground" />
-          </Pressable>
-          <TextInput
-            value={input}
-            onChangeText={setInput}
-            onSubmitEditing={send}
-            placeholder={`Message ${coach.name.split(" ")[0]}…`}
-            placeholderTextColor="#7c7c85"
-            className="min-w-0 flex-1 bg-transparent px-1 text-[14px] text-foreground h-12"
-          />
-          <Pressable
-            className="h-9 w-9 justify-center items-center rounded-full bg-secondary active:opacity-85"
-            accessibilityLabel="Emoji"
-          >
-            <Icon name="smile" size={16} color="--muted-foreground" />
-          </Pressable>
-          <Pressable
-            onPress={send}
-            disabled={!input.trim()}
-            className={cn(
-              "h-9 w-9 justify-center items-center rounded-full bg-primary active:opacity-85",
-              !input.trim() && "opacity-40"
-            )}
-            accessibilityLabel="Send"
-          >
-            <Icon name="send" size={16} color="#ffffff" />
-          </Pressable>
-        </View>
+        {(() => {
+          const composerControls = (
+            <>
+              <Pressable
+                className="h-12 w-9 justify-center items-center rounded-full bg-foreground/5 active:opacity-70"
+                accessibilityLabel="Attach"
+              >
+                <Icon name="paperclip" size={16} color="--muted-foreground" />
+              </Pressable>
+              <TextInput
+                value={input}
+                onChangeText={setInput}
+                onSubmitEditing={send}
+                placeholder={`Message ${coach.name.split(" ")[0]}…`}
+                placeholderTextColor="#7c7c85"
+                className="min-w-0 flex-1 bg-transparent px-1 text-[14px] text-foreground h-12"
+              />
+              <Pressable
+                className="h-9 w-9 justify-center items-center rounded-full bg-foreground/5 active:opacity-70"
+                accessibilityLabel="Emoji"
+              >
+                <Icon name="smile" size={16} color="--muted-foreground" />
+              </Pressable>
+              <Pressable
+                onPress={send}
+                disabled={!input.trim()}
+                className={cn(
+                  "h-9 w-9 justify-center items-center rounded-full bg-primary active:opacity-85",
+                  !input.trim() && "opacity-40"
+                )}
+                accessibilityLabel="Send"
+              >
+                <Icon name="send" size={16} color="#ffffff" />
+              </Pressable>
+            </>
+          );
+
+          return LIQUID_GLASS ? (
+            <GlassView
+              glassEffectStyle="regular"
+              isInteractive
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+                padding: 6,
+                borderRadius: 9999,
+                marginBottom: insets.bottom + 8,
+              }}
+            >
+              {composerControls}
+            </GlassView>
+          ) : (
+            <View
+              className="flex-row items-center gap-2 rounded-full border border-border/60 bg-card/80 p-1.5 shadow-soft"
+              style={{ marginBottom: insets.bottom + 8 }}
+            >
+              {composerControls}
+            </View>
+          );
+        })()}
       </View>
     </KeyboardAvoidingView>
   );

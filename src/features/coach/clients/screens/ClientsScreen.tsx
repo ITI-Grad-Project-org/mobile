@@ -7,6 +7,10 @@ import { Pressable, ScrollView, Text, TextInput, View } from "@/tw";
 import { Image } from "@/tw/image";
 import { useState } from "react";
 import { Modal, Platform } from "react-native";
+import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
+
+// Apple Liquid Glass is iOS 26+ only — fall back to a frosted card elsewhere.
+const LIQUID_GLASS = isLiquidGlassAvailable();
 
 type Status = "All" | "Active" | "Paused" | "New";
 type Client = (typeof clientsList)[number];
@@ -44,24 +48,49 @@ export function ClientsScreen() {
         </View>
 
         {/* Search & Filter bar */}
-        <View className="flex-row items-center gap-x-2 rounded-full border border-border bg-card px-3 py-2 shadow-soft">
-          <Icon name="search" size={16} color="--muted-foreground" />
-          <TextInput
-            placeholder="Search clients…"
-            placeholderTextColor="#7c7c85"
-            value={search}
-            onChangeText={setSearch}
-            className="flex-1 bg-transparent text-[14px] text-foreground p-0"
-            autoCapitalize="none"
-          />
-          {search.length > 0 ? (
-            <Pressable onPress={() => setSearch("")} className="p-1 active:opacity-70">
-              <Icon name="x" size={14} color="--muted-foreground" />
-            </Pressable>
+        {(() => {
+          const searchControls = (
+            <>
+              <Icon name="search" size={16} color="--muted-foreground" />
+              <TextInput
+                placeholder="Search clients…"
+                placeholderTextColor="#7c7c85"
+                value={search}
+                onChangeText={setSearch}
+                className="flex-1 bg-transparent text-[14px] text-foreground p-0"
+                autoCapitalize="none"
+              />
+              {search.length > 0 ? (
+                <Pressable onPress={() => setSearch("")} className="p-1 active:opacity-70">
+                  <Icon name="x" size={14} color="--muted-foreground" />
+                </Pressable>
+              ) : (
+                <Icon name="filter" size={16} color="--muted-foreground" />
+              )}
+            </>
+          );
+
+          return LIQUID_GLASS ? (
+            <GlassView
+              glassEffectStyle="regular"
+              isInteractive
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                columnGap: 8,
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+                borderRadius: 9999,
+              }}
+            >
+              {searchControls}
+            </GlassView>
           ) : (
-            <Icon name="filter" size={16} color="--muted-foreground" />
-          )}
-        </View>
+            <View className="flex-row items-center gap-x-2 rounded-full border border-border bg-card px-3 py-2 shadow-soft">
+              {searchControls}
+            </View>
+          );
+        })()}
 
         {/* Category Pills */}
         <ScrollView

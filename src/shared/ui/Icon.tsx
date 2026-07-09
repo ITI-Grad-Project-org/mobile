@@ -51,6 +51,10 @@ export type IconName =
   | "search"
   | "filter"
   | "clipboard-list"
+  | "plus"
+  | "mic"
+  | "arrow-up"
+  | "lightbulb"
 
 interface IconProps {
   name: IconName;
@@ -103,6 +107,10 @@ const SYMBOLS: Record<IconName, { ios: string; android: string }> = {
   "search": { ios: "magnifyingglass", android: "search" },
   "filter": { ios: "line.3.horizontal.decrease.circle", android: "filter_list" },
   "clipboard-list": { ios: "clipboard.fill", android: "assignment" },
+  "plus": { ios: "plus", android: "add" },
+  "mic": { ios: "mic.fill", android: "mic" },
+  "arrow-up": { ios: "arrow.up", android: "arrow_upward" },
+  "lightbulb": { ios: "lightbulb.fill", android: "lightbulb" },
 };
 
 export function Icon({ name, size = 20, color = "#000000", className }: IconProps) {

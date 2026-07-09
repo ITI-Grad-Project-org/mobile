@@ -165,17 +165,15 @@ export function AssistantScreen() {
 
         {/* ── Suggestion chips (empty state only) ───────────────── */}
         {!hasChat && (
-          <View className="mb-3 gap-y-2 px-1">
+          <View className="mb-3 flex-row flex-wrap gap-2 px-1">
             {suggestions.map((s) => (
               <Pressable
                 key={s.text}
                 onPress={() => send(s.text)}
-                className="flex-row items-center gap-2 rounded-full border border-border/60 bg-card/70 px-3 py-2.5 active:opacity-80"
+                className="flex-row items-center gap-2 self-start rounded-full border border-border/60 bg-card/70 px-3 py-3 active:opacity-80"
               >
                 <Icon name={s.icon} size={15} color="--primary" />
-                <Text className="flex-1 text-[13px] font-medium text-foreground" numberOfLines={1}>
-                  {s.text}
-                </Text>
+                <Text className="text-[13px] font-medium text-foreground">{s.text}</Text>
               </Pressable>
             ))}
           </View>

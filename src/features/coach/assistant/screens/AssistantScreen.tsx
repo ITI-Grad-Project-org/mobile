@@ -15,6 +15,10 @@ import {
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
+
+// Apple Liquid Glass is iOS 26+ only — fall back to a frosted card elsewhere.
+const LIQUID_GLASS = isLiquidGlassAvailable();
 
 type Msg = { id: string; from: "me" | "ai"; text: string; typing?: boolean };
 
@@ -188,39 +192,63 @@ export function AssistantScreen() {
             <Tone name={glowTone} className="h-full w-full rounded-full opacity-60" />
           </Animated.View>
 
-          <View className="flex-row items-center gap-2 rounded-full border border-border/60 bg-card p-1.5 shadow-soft">
-            <Pressable
-              className="h-9 w-9 items-center justify-center rounded-full bg-secondary active:opacity-85"
-              accessibilityLabel="Add"
-            >
-              <Icon name="plus" size={16} color="--muted-foreground" />
-            </Pressable>
-            <TextInput
-              value={input}
-              onChangeText={setInput}
-              onSubmitEditing={() => send(input)}
-              placeholder="Ask Coach AI"
-              placeholderTextColor={placeholderColor}
-              className="min-w-0 flex-1 self-center bg-transparent px-1 py-2 text-[14.5px] leading-tight text-foreground"
-            />
-            <Pressable
-              className="h-9 w-9 items-center justify-center rounded-full bg-secondary active:opacity-85"
-              accessibilityLabel="Voice"
-            >
-              <Icon name="mic" size={16} color="--muted-foreground" />
-            </Pressable>
-            <Pressable
-              onPress={() => send(input)}
-              disabled={!input.trim()}
-              className={cn(
-                "h-10 w-10 items-center justify-center rounded-full bg-foreground active:opacity-85",
-                !input.trim() && "opacity-40"
-              )}
-              accessibilityLabel="Send"
-            >
-              <Icon name="arrow-up" size={18} color="--background" />
-            </Pressable>
-          </View>
+          {(() => {
+            const pillControls = (
+              <>
+                <Pressable
+                  className="h-9 w-9 items-center justify-center rounded-full bg-foreground/5 active:opacity-70"
+                  accessibilityLabel="Add"
+                >
+                  <Icon name="plus" size={16} color="--muted-foreground" />
+                </Pressable>
+                <TextInput
+                  value={input}
+                  onChangeText={setInput}
+                  onSubmitEditing={() => send(input)}
+                  placeholder="Ask Coach AI"
+                  placeholderTextColor={placeholderColor}
+                  className="min-w-0 flex-1 self-center bg-transparent px-1 py-2 text-[14.5px] leading-tight text-foreground"
+                />
+                <Pressable
+                  className="h-9 w-9 items-center justify-center rounded-full bg-foreground/5 active:opacity-70"
+                  accessibilityLabel="Voice"
+                >
+                  <Icon name="mic" size={16} color="--muted-foreground" />
+                </Pressable>
+                <Pressable
+                  onPress={() => send(input)}
+                  disabled={!input.trim()}
+                  className={cn(
+                    "h-10 w-10 items-center justify-center rounded-full bg-foreground active:opacity-85",
+                    !input.trim() && "opacity-40"
+                  )}
+                  accessibilityLabel="Send"
+                >
+                  <Icon name="arrow-up" size={18} color="--background" />
+                </Pressable>
+              </>
+            );
+
+            return LIQUID_GLASS ? (
+              <GlassView
+                glassEffectStyle="regular"
+                isInteractive
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: 6,
+                  borderRadius: 9999,
+                }}
+              >
+                {pillControls}
+              </GlassView>
+            ) : (
+              <View className="flex-row items-center gap-2 rounded-full border border-border/60 bg-card/80 p-1.5 shadow-soft">
+                {pillControls}
+              </View>
+            );
+          })()}
         </View>
       </View>
     </KeyboardAvoidingView>

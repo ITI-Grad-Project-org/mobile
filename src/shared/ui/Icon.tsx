@@ -55,6 +55,7 @@ export type IconName =
   | "mic"
   | "arrow-up"
   | "lightbulb"
+  | "megaphone"
 
 interface IconProps {
   name: IconName;
@@ -111,6 +112,7 @@ const SYMBOLS: Record<IconName, { ios: string; android: string }> = {
   "mic": { ios: "mic.fill", android: "mic" },
   "arrow-up": { ios: "arrow.up", android: "arrow_upward" },
   "lightbulb": { ios: "lightbulb.fill", android: "lightbulb" },
+  "megaphone": { ios: "megaphone.fill", android: "campaign" },
 };
 
 export function Icon({ name, size = 20, color = "#000000", className }: IconProps) {

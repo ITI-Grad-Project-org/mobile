@@ -432,3 +432,25 @@ export const nutritionPlans = [
     cover: U("photo-1512621776951-a57141f2eefd"),
   },
 ];
+
+export type Brand = "mint" | "lilac" | "sky" | "peach" | "sun";
+
+export type InboxThread = {
+  id: string;
+  name: string;
+  emoji: string;
+  color: Brand;
+  last: string;
+  time: string;
+  unread: number;
+  /** true when the last message in the thread was sent by the coach. */
+  mine?: boolean;
+};
+
+export const inboxThreads: InboxThread[] = [
+  { id: "c1", name: "Alex Rivera", emoji: "🏃", color: "mint", last: "Yes please. Set 3 will do.", time: "9:21", unread: 0, mine: true },
+  { id: "c2", name: "Mia Chen", emoji: "🧘", color: "lilac", last: "Felt tough today, knee a bit sore", time: "8:40", unread: 2 },
+  { id: "c3", name: "Daniel Park", emoji: "🚴", color: "sky", last: "Just finished the 5k 🔥", time: "7:55", unread: 1 },
+  { id: "c4", name: "Sofia Reyes", emoji: "🏋️", color: "peach", last: "PR locked in 💪", time: "Yest", unread: 0, mine: true },
+  { id: "c5", name: "Sarah Holt", emoji: "🤸", color: "sun", last: "Sorry, busy week. Catching up tomorrow.", time: "2d", unread: 0 },
+];

@@ -8,6 +8,7 @@ export default function CoachLayout() {
       <AppHeader />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="chat/[id]" />
         <Stack.Screen name="profile" options={{ presentation: "modal" }} />
       </Stack>
     </View>

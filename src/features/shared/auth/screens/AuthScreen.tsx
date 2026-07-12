@@ -1,15 +1,9 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  useColorScheme,
-} from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Platform } from "react-native";
 
 import { hasOnboarded } from "@/shared/hooks/useOnboarding";
 import { Pressable, SafeAreaView, ScrollView, Text, View } from "@/tw";
-import { Image } from "@/tw/image";
 import { AuthField } from "../components/AuthField";
 import { GoogleButton } from "../components/GoogleButton";
 import { PasswordField } from "../components/PasswordField";
@@ -23,8 +17,6 @@ export function AuthScreen({
   initialMode?: AuthMode;
 }) {
   const router = useRouter();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [role, setRole] = useState<AuthRole>("client");
   const [fname, setFname] = useState("");
@@ -78,14 +70,6 @@ export function AuthScreen({
           showsVerticalScrollIndicator={false}
         >
           <View className="flex-row items-center gap-2">
-            <Image
-              source={
-                !isDark
-                  ? require("@/assets/images/Uply-dark-logo.png")
-                  : require("@/assets/images/Uply-light-logo.png")
-              }
-              className="h-12 w-40 object-contain"
-            />
             <View className="flex-1">
               <Text className="text-[30px] font-bold leading-tight text-foreground">
                 {isSignup ? "Create your account" : "Welcome back"}
@@ -117,24 +101,28 @@ export function AuthScreen({
           <View className="gap-3">
             {isSignup ? (
               <View className="flex-row gap-3">
-                <AuthField
-                  icon="user"
-                  value={fname}
-                  onChangeText={setFname}
-                  placeholder="First name"
-                  autoCapitalize="words"
-                  autoComplete="name"
-                  textContentType="givenName"
-                />
-                <AuthField
-                  icon="user"
-                  value={lname}
-                  onChangeText={setLname}
-                  placeholder="Last name"
-                  autoCapitalize="words"
-                  autoComplete="name"
-                  textContentType="familyName"
-                />
+                <View className="flex-1">
+                  <AuthField
+                    icon="user"
+                    value={fname}
+                    onChangeText={setFname}
+                    placeholder="First name"
+                    autoCapitalize="words"
+                    autoComplete="name"
+                    textContentType="givenName"
+                  />
+                </View>
+                <View className="flex-1">
+                  <AuthField
+                    icon="user"
+                    value={lname}
+                    onChangeText={setLname}
+                    placeholder="Last name"
+                    autoCapitalize="words"
+                    autoComplete="name"
+                    textContentType="familyName"
+                  />
+                </View>
               </View>
             ) : null}
 
@@ -149,6 +137,17 @@ export function AuthScreen({
             />
 
             <PasswordField value={pw} onChangeText={setPw} />
+
+            {!isSignup ? (
+              <Pressable
+                onPress={() => router.push("/(auth)/forgot-password")}
+                className="-mt-1 self-end active:opacity-70"
+              >
+                <Text className="text-[13px] font-semibold text-foreground underline">
+                  Forgot password?
+                </Text>
+              </Pressable>
+            ) : null}
 
             {err ? (
               <Text className="text-[12px] font-medium text-destructive">

@@ -29,10 +29,10 @@ export function AuthField({
   const iconColor = useCSSVariable("--muted-foreground");
 
   return (
-    <View className="relative flex-1">
+    <View className="relative">
       {icon ? (
-        <View className="absolute left-3.5 top-0 bottom-0 z-10 justify-center">
-          <Feather name={icon} size={18} color={iconColor} />
+        <View className="absolute left-4 top-0 bottom-0 z-10 justify-center">
+          <Feather name={icon} size={20} color={iconColor} />
         </View>
       ) : null}
       <TextInput
@@ -44,8 +44,8 @@ export function AuthField({
         autoCapitalize={autoCapitalize}
         autoComplete={autoComplete}
         textContentType={textContentType}
-        className={`rounded-2xl bg-secondary py-3.5 pr-3 text-[14px] text-foreground ${
-          icon ? "pl-10" : "pl-3.5"
+        className={`h-14 rounded-2xl bg-secondary py-0 pr-3 text-[15px] text-foreground ${
+          icon ? "pl-11" : "pl-4"
         }`}
       />
     </View>

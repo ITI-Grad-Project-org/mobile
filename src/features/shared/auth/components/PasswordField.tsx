@@ -19,8 +19,8 @@ export function PasswordField({
 
   return (
     <View className="relative">
-      <View className="absolute left-3.5 top-0 bottom-0 z-10 justify-center">
-        <Feather name="lock" size={18} color={iconColor} />
+      <View className="absolute left-4 top-0 bottom-0 z-10 justify-center">
+        <Feather name="lock" size={20} color={iconColor} />
       </View>
       <TextInput
         value={value}
@@ -31,7 +31,7 @@ export function PasswordField({
         autoCapitalize="none"
         autoComplete="password"
         textContentType="password"
-        className="rounded-2xl bg-secondary py-3.5 pl-10 pr-12 text-[14px] text-foreground"
+        className="h-14 rounded-2xl bg-secondary py-0 pl-11 pr-12 text-[15px] text-foreground"
       />
       <Pressable
         onPress={() => setShow((v) => !v)}

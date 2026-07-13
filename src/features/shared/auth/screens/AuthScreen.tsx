@@ -54,6 +54,14 @@ export function AuthScreen({
       return;
     }
     setErr(null);
+    // New accounts verify a 4-digit code first; returning users sign straight in.
+    if (isSignup) {
+      router.push({
+        pathname: "/(auth)/verify",
+        params: { email: email.trim(), role },
+      });
+      return;
+    }
     enterApp();
   };
 

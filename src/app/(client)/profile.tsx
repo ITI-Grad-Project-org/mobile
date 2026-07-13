@@ -1,5 +1,5 @@
-import { ClientProfileScreen } from "@/features/profile";
+import { ProfileScreen } from "@/features/shared/profile";
 
-export default function ProfileScreen() {
-  return <ClientProfileScreen />;
+export default function ClientProfileRoute() {
+  return <ProfileScreen />;
 }

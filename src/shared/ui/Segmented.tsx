@@ -5,10 +5,16 @@ import Reanimated, {
   withTiming,
 } from "react-native-reanimated";
 
+import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
+
 import { cn } from "@/lib/utils";
 import { Pressable, Text, View } from "@/tw";
 
 const AnimatedView = Reanimated.createAnimatedComponent(View);
+const AnimatedGlass = Reanimated.createAnimatedComponent(GlassView);
+
+// Apple Liquid Glass is iOS 26+ only — fall back to a solid card thumb elsewhere.
+const LIQUID_GLASS = isLiquidGlassAvailable();
 
 // Total horizontal padding of the track (p-1 => 4px each side).
 const TRACK_PADDING = 8;
@@ -52,10 +58,28 @@ export function Segmented<T extends string>({
       className="relative flex-row rounded-full bg-secondary p-1"
     >
       {segmentWidth > 0 ? (
-        <AnimatedView
-          style={[{ width: segmentWidth }, indicatorStyle]}
-          className="absolute bottom-1 left-1 top-1 rounded-full bg-card shadow-soft"
-        />
+        LIQUID_GLASS ? (
+          <AnimatedGlass
+            glassEffectStyle="regular"
+            isInteractive
+            style={[
+              {
+                position: "absolute",
+                top: 4,
+                bottom: 4,
+                left: 4,
+                width: segmentWidth,
+                borderRadius: 9999,
+              },
+              indicatorStyle,
+            ]}
+          />
+        ) : (
+          <AnimatedView
+            style={[{ width: segmentWidth }, indicatorStyle]}
+            className="absolute bottom-1 left-1 top-1 rounded-full bg-card shadow-soft"
+          />
+        )
       ) : null}
       {options.map((option) => (
         <Pressable

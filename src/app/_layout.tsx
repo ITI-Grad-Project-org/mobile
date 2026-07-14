@@ -28,6 +28,7 @@ export default function RootLayout() {
             <Stack.Screen name="index" />
             <Stack.Screen name="(auth)" />
             <Stack.Screen name="(onboarding)" />
+            <Stack.Screen name="(setup)" />
             <Stack.Screen name="(coach)" />
             <Stack.Screen name="(client)" />
           </Stack>

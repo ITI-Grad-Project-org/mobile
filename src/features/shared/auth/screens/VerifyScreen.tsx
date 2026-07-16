@@ -22,7 +22,12 @@ type Role = "client" | "coach";
 export function VerifyScreen() {
   const router = useRouter();
   const iconColor = useCSSVariable("--foreground");
-  const params = useLocalSearchParams<{ email?: string; role?: string }>();
+  const params = useLocalSearchParams<{
+    email?: string;
+    role?: string;
+    fname?: string;
+    lname?: string;
+  }>();
   const email = params.email ?? "your email";
   const role: Role = params.role === "coach" ? "coach" : "client";
 
@@ -49,7 +54,14 @@ export function VerifyScreen() {
     setTimeout(async () => {
       setBusy(false);
       if (role === "coach") {
-        router.replace("/(coach)/(tabs)/home");
+        router.replace({
+          pathname: "/(setup)/coach-profile",
+          params: {
+            email: params.email ?? "",
+            fname: params.fname ?? "",
+            lname: params.lname ?? "",
+          },
+        });
         return;
       }
       router.replace(

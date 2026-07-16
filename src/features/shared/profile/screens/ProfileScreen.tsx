@@ -1,6 +1,7 @@
 import { useActiveCoach, useRole } from "@/lib/role";
 import { cn } from "@/lib/utils";
 import { Card } from "@/shared/ui/Card";
+import { GlassButton } from "@/shared/ui/GlassButton";
 import { Icon, type IconName } from "@/shared/ui/Icon";
 import { Pressable, ScrollView, Text, View } from "@/tw";
 import { Image } from "@/tw/image";
@@ -9,7 +10,12 @@ import { useState } from "react";
 
 type StreakAccent = "green" | "orange";
 
-const coaches: { id: string; name: string; specialty: string; avatar: string }[] = [
+const coaches: {
+  id: string;
+  name: string;
+  specialty: string;
+  avatar: string;
+}[] = [
   {
     id: "mike",
     name: "Coach Mike",
@@ -47,15 +53,11 @@ const coachRows: { icon: IconName; label: string; hint?: string }[] = [
 ];
 
 export function ProfileScreen() {
-  // Branch on the active route group rather than useRole() — role state is not
-  // wired yet (the hook is a stub), but each UI mounts its own route group.
   const segments = useSegments() as string[];
   const isCoach = segments.includes("(coach)");
   return isCoach ? <CoachProfile /> : <ClientProfile />;
 }
 
-/** Coach profile. Font / card-style / AI-accent pickers and the EditProfile
- *  modal from the web reference are intentionally not ported yet. */
 function CoachProfile() {
   const router = useRouter();
   const { coachProfile } = useRole();
@@ -70,13 +72,13 @@ function CoachProfile() {
       {/* Modal header with close control */}
       <View className="px-4 pt-3 pb-3 flex-row items-center justify-between border-b border-border">
         <Text className="text-foreground text-xl font-bold">Profile</Text>
-        <Pressable
+        <GlassButton
           onPress={() => router.back()}
           className="h-9 w-9 rounded-full bg-secondary items-center justify-center active:opacity-70"
           accessibilityLabel="Close profile"
         >
           <Icon name="x" size={18} color="--muted-foreground" />
-        </Pressable>
+        </GlassButton>
       </View>
 
       <ScrollView
@@ -93,13 +95,19 @@ function CoachProfile() {
             <Text className="text-ink-foreground text-lg font-bold">
               Coach {coachProfile.fname}
             </Text>
-            <Text className="text-ink-foreground/70 text-sm">{coachProfile.email}</Text>
+            <Text className="text-ink-foreground/70 text-sm">
+              {coachProfile.email}
+            </Text>
             <View className="mt-2 flex-row flex-wrap gap-1.5">
               <View className="rounded-full bg-primary/20 px-2.5 py-1">
-                <Text className="text-primary text-xs font-semibold">$8.4k MRR</Text>
+                <Text className="text-primary text-xs font-semibold">
+                  $8.4k MRR
+                </Text>
               </View>
               <View className="rounded-full bg-white/10 px-2.5 py-1">
-                <Text className="text-ink-foreground text-xs font-semibold">4.9 ★</Text>
+                <Text className="text-ink-foreground text-xs font-semibold">
+                  4.9 ★
+                </Text>
               </View>
             </View>
           </View>
@@ -134,8 +142,12 @@ function CoachProfile() {
         <Card glass>
           <View className="flex-row items-center justify-between">
             <View>
-              <Text className="text-foreground text-[15px] font-bold">Certifications</Text>
-              <Text className="text-muted-foreground text-xs">{certs.length} on file</Text>
+              <Text className="text-foreground text-[15px] font-bold">
+                Certifications
+              </Text>
+              <Text className="text-muted-foreground text-xs">
+                {certs.length} on file
+              </Text>
             </View>
             <Pressable onPress={openEdit} className="active:opacity-70">
               <Text className="text-primary text-xs font-semibold">Manage</Text>
@@ -202,9 +214,13 @@ function CoachProfile() {
                 <Icon name={r.icon} size={16} color="--muted-foreground" />
               </View>
               <View className="flex-1 min-w-0">
-                <Text className="text-foreground text-base font-semibold">{r.label}</Text>
+                <Text className="text-foreground text-base font-semibold">
+                  {r.label}
+                </Text>
                 {r.hint ? (
-                  <Text className="text-muted-foreground text-[13px]">{r.hint}</Text>
+                  <Text className="text-muted-foreground text-[13px]">
+                    {r.hint}
+                  </Text>
                 ) : null}
               </View>
               <Icon name="chevron-right" size={16} color="--muted-foreground" />
@@ -218,7 +234,9 @@ function CoachProfile() {
           className="flex-row items-center justify-center gap-2 rounded-2xl bg-secondary py-3.5 active:opacity-70"
         >
           <Icon name="log-out" size={16} color="--destructive" />
-          <Text className="text-destructive text-base font-semibold">Sign out</Text>
+          <Text className="text-destructive text-base font-semibold">
+            Sign out
+          </Text>
         </Pressable>
       </ScrollView>
     </View>
@@ -233,25 +251,26 @@ function ClientProfile() {
   const [selectedAccent, setSelectedAccent] = useState<StreakAccent>(accent);
   const [activeCoachId, setActiveCoachId] = useState(coaches[0].id);
 
-  // Sub-modals (EditProfile / MatchCoach) are deferred — inert placeholders for now.
+  // EditProfile is still deferred; "Add coach" opens the match-coach flow.
   const openEdit = () => {};
-  const openAddCoach = () => {};
+  const openAddCoach = () => {
+    if (router.canDismiss()) router.dismiss();
+    router.push("/(setup)/match-coach");
+  };
   const signOut = () => router.replace("/(auth)/login");
 
   return (
     <View className="flex-1 bg-background">
       {/* Modal header with close control */}
-      <View
-        className="px-4 pt-3 pb-3 flex-row items-center justify-between border-b border-border"
-      >
+      <View className="px-4 pt-3 pb-3 flex-row items-center justify-between border-b border-border">
         <Text className="text-foreground text-xl font-bold">Profile</Text>
-        <Pressable
+        <GlassButton
           onPress={() => router.back()}
           className="h-9 w-9 rounded-full bg-secondary items-center justify-center active:opacity-70"
           accessibilityLabel="Close profile"
         >
           <Icon name="x" size={18} color="--muted-foreground" />
-        </Pressable>
+        </GlassButton>
       </View>
 
       <ScrollView
@@ -274,10 +293,14 @@ function ClientProfile() {
             <Text className="text-ink-foreground text-xl font-bold">
               {clientProfile.fname} {clientProfile.lname}
             </Text>
-            <Text className="text-ink-foreground/70 text-sm">{clientProfile.email}</Text>
+            <Text className="text-ink-foreground/70 text-sm">
+              {clientProfile.email}
+            </Text>
             <View className="mt-2 flex-row flex-wrap gap-1.5">
               <View className="rounded-full bg-primary/20 px-2.5 py-1">
-                <Text className="text-primary text-xs font-semibold">12-day streak</Text>
+                <Text className="text-primary text-xs font-semibold">
+                  12-day streak
+                </Text>
               </View>
               <View className="rounded-full bg-white/10 px-2.5 py-1">
                 <Text className="text-ink-foreground text-xs font-semibold">
@@ -298,7 +321,9 @@ function ClientProfile() {
         {/* Switch coach */}
         <Card glass>
           <View className="mb-3">
-            <Text className="text-foreground text-lg font-bold">Switch coach</Text>
+            <Text className="text-foreground text-lg font-bold">
+              Switch coach
+            </Text>
             <Text className="text-muted-foreground text-[13px]">
               Tap to switch — your plan updates instantly.
             </Text>
@@ -312,22 +337,35 @@ function ClientProfile() {
                   onPress={() => setActiveCoachId(c.id)}
                   className={cn(
                     "flex-row items-center gap-3 rounded-2xl border-2 p-3 active:opacity-80",
-                    on ? "border-primary bg-primary/5" : "border-transparent bg-secondary/50",
+                    on
+                      ? "border-primary bg-primary/5"
+                      : "border-transparent bg-secondary/50"
                   )}
                 >
                   <Image source={c.avatar} className="h-12 w-12 rounded-2xl" />
                   <View className="flex-1 min-w-0">
-                    <Text className="text-foreground text-base font-bold" numberOfLines={1}>
+                    <Text
+                      className="text-foreground text-base font-bold"
+                      numberOfLines={1}
+                    >
                       {c.name}
                     </Text>
-                    <Text className="text-muted-foreground text-[13px]">{c.specialty}</Text>
+                    <Text className="text-muted-foreground text-[13px]">
+                      {c.specialty}
+                    </Text>
                   </View>
                   {on ? (
                     <View className="h-7 w-7 rounded-full bg-primary items-center justify-center">
-                      <Icon name="check" size={16} color="--primary-foreground" />
+                      <Icon
+                        name="check"
+                        size={16}
+                        color="--primary-foreground"
+                      />
                     </View>
                   ) : (
-                    <Text className="text-primary text-sm font-semibold">Switch</Text>
+                    <Text className="text-primary text-sm font-semibold">
+                      Switch
+                    </Text>
                   )}
                 </Pressable>
               );
@@ -337,7 +375,9 @@ function ClientProfile() {
               className="flex-row items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border bg-secondary/30 py-3 active:opacity-70"
             >
               <Icon name="user-plus" size={16} color="--muted-foreground" />
-              <Text className="text-muted-foreground text-[13px] font-semibold">Add coach</Text>
+              <Text className="text-muted-foreground text-[13px] font-semibold">
+                Add coach
+              </Text>
             </Pressable>
           </View>
         </Card>
@@ -349,7 +389,9 @@ function ClientProfile() {
               <Icon name="palette" size={16} color="--muted-foreground" />
             </View>
             <View className="flex-1 min-w-0">
-              <Text className="text-foreground text-base font-semibold">Streak color</Text>
+              <Text className="text-foreground text-base font-semibold">
+                Streak color
+              </Text>
               <Text className="text-muted-foreground text-[13px]">
                 Choose your activity-grid palette
               </Text>
@@ -360,11 +402,18 @@ function ClientProfile() {
                     onPress={() => setSelectedAccent(s.key)}
                     className={cn(
                       "flex-row items-center gap-2 rounded-full border-2 bg-secondary/60 px-3 py-1.5 active:opacity-70",
-                      selectedAccent === s.key ? "border-foreground" : "border-transparent",
+                      selectedAccent === s.key
+                        ? "border-foreground"
+                        : "border-transparent"
                     )}
                   >
-                    <View className="h-4 w-4 rounded-sm" style={{ backgroundColor: s.color }} />
-                    <Text className="text-foreground text-sm font-semibold">{s.label}</Text>
+                    <View
+                      className="h-4 w-4 rounded-sm"
+                      style={{ backgroundColor: s.color }}
+                    />
+                    <Text className="text-foreground text-sm font-semibold">
+                      {s.label}
+                    </Text>
                   </Pressable>
                 ))}
               </View>
@@ -394,16 +443,20 @@ function ClientProfile() {
             <Pressable
               key={r.label}
               className={cn(
-                "flex-row items-center gap-3 rounded-2xl p-3 active:opacity-70",
+                "flex-row items-center gap-3 rounded-2xl p-3 active:opacity-70"
               )}
             >
               <View className="h-9 w-9 rounded-xl bg-secondary items-center justify-center">
                 <Icon name={r.icon} size={16} color="--muted-foreground" />
               </View>
               <View className="flex-1 min-w-0">
-                <Text className="text-foreground text-base font-semibold">{r.label}</Text>
+                <Text className="text-foreground text-base font-semibold">
+                  {r.label}
+                </Text>
                 {r.hint ? (
-                  <Text className="text-muted-foreground text-[13px]">{r.hint}</Text>
+                  <Text className="text-muted-foreground text-[13px]">
+                    {r.hint}
+                  </Text>
                 ) : null}
               </View>
               <Icon name="chevron-right" size={16} color="--muted-foreground" />
@@ -417,7 +470,9 @@ function ClientProfile() {
           className="flex-row items-center justify-center gap-2 rounded-2xl bg-secondary py-3.5 active:opacity-70"
         >
           <Icon name="log-out" size={16} color="--destructive" />
-          <Text className="text-destructive text-base font-semibold">Sign out</Text>
+          <Text className="text-destructive text-base font-semibold">
+            Sign out
+          </Text>
         </Pressable>
       </ScrollView>
     </View>

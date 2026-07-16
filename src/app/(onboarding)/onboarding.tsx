@@ -9,7 +9,7 @@ export default function OnboardingRoute() {
 
   const finish = async () => {
     await markOnboarded();
-    router.replace("/(client)/(tabs)/today");
+    router.replace("/(setup)/client-profile");
   };
 
   return (

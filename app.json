@@ -38,7 +38,13 @@
           }
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "UPLY needs access to your photos so you can add a profile picture, progress photos, and certificates."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

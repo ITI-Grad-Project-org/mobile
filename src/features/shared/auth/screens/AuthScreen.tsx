@@ -3,6 +3,7 @@ import { useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform } from "react-native";
 
 import { hasOnboarded } from "@/shared/hooks/useOnboarding";
+import { hasCompletedProfile } from "@/shared/hooks/useProfileSetup";
 import { Pressable, SafeAreaView, ScrollView, Text, View } from "@/tw";
 import { AuthField } from "../components/AuthField";
 import { GoogleButton } from "../components/GoogleButton";
@@ -36,14 +37,31 @@ export function AuthScreen({
     setBusy(true);
     setTimeout(async () => {
       setBusy(false);
+      const profileDone = await hasCompletedProfile();
+
       if (role === "coach") {
-        router.replace("/(coach)/(tabs)/home");
+        if (profileDone) {
+          router.replace("/(coach)/(tabs)/home");
+        } else {
+          router.replace({
+            pathname: "/(setup)/coach-profile",
+            params: {
+              email: email.trim(),
+              fname: fname.trim(),
+              lname: lname.trim(),
+            },
+          });
+        }
+        return;
+      }
+
+      // Client: run onboarding first, then profile setup, before the app.
+      if (!(await hasOnboarded())) {
+        router.replace("/(onboarding)/onboarding");
         return;
       }
       router.replace(
-        (await hasOnboarded())
-          ? "/(client)/(tabs)/today"
-          : "/(onboarding)/onboarding"
+        profileDone ? "/(client)/(tabs)/today" : "/(setup)/client-profile"
       );
     }, 600);
   };
@@ -58,7 +76,12 @@ export function AuthScreen({
     if (isSignup) {
       router.push({
         pathname: "/(auth)/verify",
-        params: { email: email.trim(), role },
+        params: {
+          email: email.trim(),
+          role,
+          fname: fname.trim(),
+          lname: lname.trim(),
+        },
       });
       return;
     }

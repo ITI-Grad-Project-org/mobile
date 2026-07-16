@@ -93,6 +93,18 @@ export const authEndpoints = baseApi.injectEndpoints({
         body,
       }),
     }),
+    logoutCoach: builder.mutation<void, void>({
+      query: () => ({
+        url: '/auth/logout',
+        method: 'POST',
+      }),
+    }),
+    logoutCustomer: builder.mutation<void, void>({
+      query: () => ({
+        url: '/auth/customer/logout',
+        method: 'POST',
+      }),
+    }),
   }),
 });
 
@@ -113,4 +125,6 @@ export const {
   useResetPasswordCoachMutation,
   useForgotPasswordCustomerMutation,
   useResetPasswordCustomerMutation,
+  useLogoutCoachMutation,
+  useLogoutCustomerMutation,
 } = authEndpoints;

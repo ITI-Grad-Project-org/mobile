@@ -130,9 +130,10 @@ export function AuthScreen({
       if (accessToken && refreshToken) {
         const persona = role === "coach" ? "coach" : "customer";
         await saveTokens(accessToken, refreshToken, persona);
-        dispatch(setAuth({ userId: user?.id || "user-id", persona }));
 
         const profileDone = await hasCompletedProfile();
+        dispatch(setAuth({ userId: user?.id || "user-id", persona, profileCompleted: profileDone }));
+
         if (role === "coach") {
           if (profileDone) {
             router.replace("/(coach)/(tabs)/home");

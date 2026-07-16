@@ -1,12 +1,26 @@
-import { useActiveCoach, useRole } from "@/lib/role";
+import { baseApi } from "@/api/baseApi";
+import {
+  useGetClientProfileQuery,
+  useGetCoachProfileQuery,
+} from "@/api/endpoints/profile.endpoints";
+import {
+  useLogoutCoachMutation,
+  useLogoutCustomerMutation,
+} from "@/api/endpoints/auth.endpoints";
+import { useActiveCoach } from "@/lib/role";
 import { cn } from "@/lib/utils";
 import { Card } from "@/shared/ui/Card";
 import { GlassButton } from "@/shared/ui/GlassButton";
 import { Icon, type IconName } from "@/shared/ui/Icon";
+import { useAppDispatch } from "@/store";
+import { clearActiveTenant } from "@/store/activeTenantSlice";
+import { clearAuth, clearTokens } from "@/store/authSlice";
+import { clearMemberships } from "@/store/membershipsSlice";
 import { Pressable, ScrollView, Text, View } from "@/tw";
 import { Image } from "@/tw/image";
 import { useRouter, useSegments } from "expo-router";
 import { useState } from "react";
+import { ActivityIndicator } from "react-native";
 
 type StreakAccent = "green" | "orange";
 
@@ -16,21 +30,21 @@ const coaches: {
   specialty: string;
   avatar: string;
 }[] = [
-  {
-    id: "mike",
-    name: "Coach Mike",
-    specialty: "Strength & conditioning",
-    avatar:
-      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80",
-  },
-  {
-    id: "sara",
-    name: "Coach Sara",
-    specialty: "Mobility & yoga",
-    avatar:
-      "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80",
-  },
-];
+    {
+      id: "mike",
+      name: "Coach Mike",
+      specialty: "Strength & conditioning",
+      avatar:
+        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80",
+    },
+    {
+      id: "sara",
+      name: "Coach Sara",
+      specialty: "Mobility & yoga",
+      avatar:
+        "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80",
+    },
+  ];
 
 const swatches: { key: StreakAccent; label: string; color: string }[] = [
   { key: "green", label: "Forest", color: "#30a14e" },
@@ -60,12 +74,38 @@ export function ProfileScreen() {
 
 function CoachProfile() {
   const router = useRouter();
-  const { coachProfile } = useRole();
-  const certs = coachProfile.certificates ?? [];
+  const dispatch = useAppDispatch();
+  const { data: profile, isLoading } = useGetCoachProfileQuery();
+  const [logoutCoach] = useLogoutCoachMutation();
 
-  // EditProfile modal is deferred — edit affordances are inert for now.
-  const openEdit = () => {};
-  const signOut = () => router.replace("/(auth)/login");
+  const openEdit = () => { };
+
+  const signOut = async () => {
+    try {
+      await logoutCoach().unwrap();
+    } catch (e) {
+      console.warn("Coach logout failed:", e);
+    }
+    await clearTokens();
+    dispatch(clearAuth());
+    dispatch(clearActiveTenant());
+    dispatch(clearMemberships());
+    dispatch(baseApi.util.resetApiState());
+    router.replace("/(auth)/login");
+  };
+
+  if (isLoading) {
+    return (
+      <View className="flex-1 items-center justify-center bg-background">
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
+  const coachName = profile ? `${profile.firstName} ${profile.lastName}` : "Coach";
+  const coachEmail = profile?.email || "";
+  const coachAvatar = profile?.avatar || "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=200&q=80";
+  const certs = profile?.certifications || [];
 
   return (
     <View className="flex-1 bg-background">
@@ -89,14 +129,14 @@ function CoachProfile() {
         {/* Identity */}
         <Card tone="ink" className="flex-row items-center gap-4" glass>
           <View className="h-16 w-16 rounded-full overflow-hidden border border-white/20">
-            <Image source={coachProfile.avatar} className="h-full w-full" />
+            <Image source={coachAvatar} className="h-full w-full" />
           </View>
           <View className="flex-1 min-w-0">
             <Text className="text-ink-foreground text-lg font-bold">
-              Coach {coachProfile.fname}
+              Coach {coachName}
             </Text>
             <Text className="text-ink-foreground/70 text-sm">
-              {coachProfile.email}
+              {coachEmail}
             </Text>
             <View className="mt-2 flex-row flex-wrap gap-1.5">
               <View className="rounded-full bg-primary/20 px-2.5 py-1">
@@ -161,24 +201,25 @@ function CoachProfile() {
             </View>
           ) : (
             <View className="mt-3 gap-y-2">
-              {certs.slice(0, 3).map((c) => (
+              {certs.slice(0, 3).map((c: any, i: number) => (
                 <View
-                  key={c.id}
+                  key={i}
                   className="flex-row items-center gap-3 rounded-2xl bg-secondary/50 p-2.5"
                 >
-                  <Image source={c.image} className="h-12 w-12 rounded-xl" />
+                  <View className="h-12 w-12 rounded-xl bg-primary/10 items-center justify-center">
+                    <Icon name="trophy" size={24} color="--primary" />
+                  </View>
                   <View className="flex-1 min-w-0">
                     <View className="flex-row items-center gap-1.5">
-                      <Icon name="trophy" size={14} color="--primary" />
                       <Text
                         className="text-foreground text-[13.5px] font-semibold"
                         numberOfLines={1}
                       >
-                        {c.name || "Unnamed"}
+                        {c.name || "Certification"}
                       </Text>
                     </View>
                     <Text className="text-muted-foreground text-[11.5px]">
-                      {c.issued || "—"} → {c.expires || "—"}
+                      {c.issuer ? `${c.issuer}` : "Verified Issuer"} {c.year ? `· ${c.year}` : ""}
                     </Text>
                   </View>
                 </View>
@@ -235,7 +276,7 @@ function CoachProfile() {
         >
           <Icon name="log-out" size={16} color="--destructive" />
           <Text className="text-destructive text-base font-semibold">
-            Sign out
+            Log out
           </Text>
         </Pressable>
       </ScrollView>
@@ -245,19 +286,46 @@ function CoachProfile() {
 
 function ClientProfile() {
   const router = useRouter();
-  const { accent, clientProfile } = useRole();
+  const dispatch = useAppDispatch();
   const active = useActiveCoach();
 
-  const [selectedAccent, setSelectedAccent] = useState<StreakAccent>(accent);
+  const { data: profile, isLoading } = useGetClientProfileQuery();
+  const [logoutCustomer] = useLogoutCustomerMutation();
+
+  const [selectedAccent, setSelectedAccent] = useState<StreakAccent>("green");
   const [activeCoachId, setActiveCoachId] = useState(coaches[0].id);
 
-  // EditProfile is still deferred; "Add coach" opens the match-coach flow.
-  const openEdit = () => {};
+  const openEdit = () => { };
   const openAddCoach = () => {
     if (router.canDismiss()) router.dismiss();
     router.push("/(setup)/match-coach");
   };
-  const signOut = () => router.replace("/(auth)/login");
+
+  const signOut = async () => {
+    try {
+      await logoutCustomer().unwrap();
+    } catch (e) {
+      console.warn("Client logout failed:", e);
+    }
+    await clearTokens();
+    dispatch(clearAuth());
+    dispatch(clearActiveTenant());
+    dispatch(clearMemberships());
+    dispatch(baseApi.util.resetApiState());
+    router.replace("/(auth)/login");
+  };
+
+  if (isLoading) {
+    return (
+      <View className="flex-1 items-center justify-center bg-background">
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
+  const clientName = profile ? `${profile.firstName} ${profile.lastName}` : "Client";
+  const clientEmail = profile?.email || "";
+  const clientAvatar = profile?.avatar || null;
 
   return (
     <View className="flex-1 bg-background">
@@ -281,8 +349,8 @@ function ClientProfile() {
         {/* Identity */}
         <Card tone="ink" className="flex-row items-center gap-4" glass>
           <View className="h-16 w-16 rounded-full overflow-hidden border border-white/20">
-            {clientProfile.avatar ? (
-              <Image source={clientProfile.avatar} className="h-full w-full" />
+            {clientAvatar ? (
+              <Image source={clientAvatar} className="h-full w-full" />
             ) : (
               <View className="h-full w-full bg-white/10 items-center justify-center">
                 <Icon name="person" size={28} color="--ink-foreground" />
@@ -291,10 +359,10 @@ function ClientProfile() {
           </View>
           <View className="flex-1 min-w-0">
             <Text className="text-ink-foreground text-xl font-bold">
-              {clientProfile.fname} {clientProfile.lname}
+              {clientName}
             </Text>
             <Text className="text-ink-foreground/70 text-sm">
-              {clientProfile.email}
+              {clientEmail}
             </Text>
             <View className="mt-2 flex-row flex-wrap gap-1.5">
               <View className="rounded-full bg-primary/20 px-2.5 py-1">
@@ -439,7 +507,7 @@ function ClientProfile() {
 
         {/* Settings rows */}
         <Card className="p-2" glass>
-          {rows.map((r, i) => (
+          {rows.map((r) => (
             <Pressable
               key={r.label}
               className={cn(
@@ -471,10 +539,11 @@ function ClientProfile() {
         >
           <Icon name="log-out" size={16} color="--destructive" />
           <Text className="text-destructive text-base font-semibold">
-            Sign out
+            Log out
           </Text>
         </Pressable>
       </ScrollView>
     </View>
   );
 }
+

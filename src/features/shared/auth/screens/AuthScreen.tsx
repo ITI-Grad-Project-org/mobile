@@ -10,6 +10,15 @@ import { GoogleButton } from "../components/GoogleButton";
 import { PasswordField } from "../components/PasswordField";
 import { RoleToggle, type AuthRole } from "../components/RoleToggle";
 
+import {
+  useRegisterCoachMutation,
+  useRegisterCustomerMutation,
+  useLoginCoachMutation,
+  useLoginCustomerMutation,
+} from "@/api/endpoints/auth.endpoints";
+import { saveTokens, setAuth } from "@/store/authSlice";
+import { useAppDispatch } from "@/store";
+
 export type AuthMode = "signup" | "login";
 
 export function AuthScreen({
@@ -18,6 +27,13 @@ export function AuthScreen({
   initialMode?: AuthMode;
 }) {
   const router = useRouter();
+  const dispatch = useAppDispatch();
+
+  const [registerCoach] = useRegisterCoachMutation();
+  const [registerCustomer] = useRegisterCustomerMutation();
+  const [loginCoach] = useLoginCoachMutation();
+  const [loginCustomer] = useLoginCustomerMutation();
+
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [role, setRole] = useState<AuthRole>("client");
   const [fname, setFname] = useState("");
@@ -66,27 +82,92 @@ export function AuthScreen({
     }, 600);
   };
 
-  const submit = () => {
+  const submit = async () => {
     if (!valid) {
       setErr("Please fill all fields.");
       return;
     }
     setErr(null);
-    // New accounts verify a 4-digit code first; returning users sign straight in.
-    if (isSignup) {
-      router.push({
-        pathname: "/(auth)/verify",
-        params: {
+    setBusy(true);
+
+    try {
+      if (isSignup) {
+        if (role === "coach") {
+          await registerCoach({
+            firstName: fname.trim(),
+            lastName: lname.trim(),
+            email: email.trim(),
+            password: pw,
+            confirmPassword: pw,
+            businessName: `${fname.trim()} ${lname.trim()} Coaching`,
+          }).unwrap();
+        } else {
+          await registerCustomer({
+            firstName: fname.trim(),
+            lastName: lname.trim(),
+            email: email.trim(),
+            password: pw,
+            confirmPassword: pw,
+          }).unwrap();
+        }
+      }
+
+      // Login to obtain authentication tokens
+      let loginRes;
+      if (role === "coach") {
+        loginRes = await loginCoach({
           email: email.trim(),
-          role,
-          fname: fname.trim(),
-          lname: lname.trim(),
-        },
-      });
-      return;
+          password: pw,
+        }).unwrap();
+      } else {
+        loginRes = await loginCustomer({
+          email: email.trim(),
+          password: pw,
+        }).unwrap();
+      }
+
+      const { accessToken, refreshToken, user } = loginRes;
+      if (accessToken && refreshToken) {
+        const persona = role === "coach" ? "coach" : "customer";
+        await saveTokens(accessToken, refreshToken, persona);
+        dispatch(setAuth({ userId: user?.id || "user-id", persona }));
+
+        const profileDone = await hasCompletedProfile();
+        if (role === "coach") {
+          if (profileDone) {
+            router.replace("/(coach)/(tabs)/home");
+          } else {
+            router.replace({
+              pathname: "/(setup)/coach-profile",
+              params: {
+                email: email.trim(),
+                fname: fname.trim(),
+                lname: lname.trim(),
+              },
+            });
+          }
+        } else {
+          if (!(await hasOnboarded())) {
+            router.replace("/(onboarding)/onboarding");
+          } else {
+            router.replace(
+              profileDone ? "/(client)/(tabs)/today" : "/(setup)/client-profile"
+            );
+          }
+        }
+      } else {
+        setErr("Invalid authentication response from server.");
+      }
+    } catch (e: any) {
+      console.warn("Auth mutation error:", e);
+      const message = e?.data?.message || e?.message || "An authentication error occurred.";
+      setErr(Array.isArray(message) ? message[0] : message);
+    } finally {
+      setBusy(false);
     }
-    enterApp();
   };
+
+
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>

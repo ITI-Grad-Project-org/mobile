@@ -3,7 +3,7 @@ import * as SecureStore from "expo-secure-store";
 const DONE_KEY = "uply.hasCompletedProfile";
 const DATA_KEY = "uply.profile";
 
-const ALWAYS_SHOW_SETUP = true;
+const ALWAYS_SHOW_SETUP = false;
 
 export async function markProfileComplete(
   data?: Record<string, unknown>

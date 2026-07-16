@@ -6,7 +6,7 @@ const KEY = "uply.hasOnboarded";
 
 // TEMP (dev only): set to true to always re-show onboarding, ignoring the saved
 // flag. Remove / set back to false before shipping.
-const ALWAYS_SHOW_ONBOARDING = true;
+const ALWAYS_SHOW_ONBOARDING = false;
 
 export async function markOnboarded(): Promise<void> {
   await SecureStore.setItemAsync(KEY, "1");

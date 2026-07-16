@@ -1,10 +1,11 @@
 import { useRole as useSharedRole } from "@/shared/hooks/useRole";
 
 export function useRole() {
-  const role = useSharedRole() || "client";
+  const { role } = useSharedRole();
+  const activeRole = role || "client";
   return {
-    role,
-    accent: "green" as "green" | "orange",
+    role: activeRole,
+    accent: (activeRole === "owner" ? "orange" : "green") as "green" | "orange",
     clientProfile: {
       fname: "Alex",
       lname: "Rivera",
@@ -26,6 +27,7 @@ export function useRole() {
     },
   };
 }
+
 
 export function useActiveCoach() {
   return {

@@ -27,7 +27,16 @@ const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQue
   async (args, api, extraOptions) => {
     let result = await rawBaseQuery(args, api, extraOptions);
 
-    if (result.error?.status === 401) {
+    const url = typeof args === 'string' ? args : args.url;
+    const isAuthRequest =
+      url.includes('/auth/login') ||
+      url.includes('/auth/register') ||
+      url.includes('/auth/refresh') ||
+      url.includes('/auth/customer/login') ||
+      url.includes('/auth/customer/register') ||
+      url.includes('/auth/customer/refresh');
+
+    if (result.error?.status === 401 && !isAuthRequest) {
       const state = api.getState() as any;
       const persona = state.auth.persona;
       const refreshToken = await SecureStore.getItemAsync('refreshToken');

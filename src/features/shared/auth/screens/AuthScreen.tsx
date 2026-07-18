@@ -1,6 +1,10 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Platform } from "react-native";
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
 
 import { hasOnboarded } from "@/shared/hooks/useOnboarding";
 import { hasCompletedProfile } from "@/shared/hooks/useProfileSetup";
@@ -9,15 +13,16 @@ import { AuthField } from "../components/AuthField";
 import { GoogleButton } from "../components/GoogleButton";
 import { PasswordField } from "../components/PasswordField";
 import { RoleToggle, type AuthRole } from "../components/RoleToggle";
+import { getAuthErrorMessage } from "../utils/authError";
 
 import {
-  useRegisterCoachMutation,
-  useRegisterCustomerMutation,
   useLoginCoachMutation,
   useLoginCustomerMutation,
+  useRegisterCoachMutation,
+  useRegisterCustomerMutation,
 } from "@/api/endpoints/auth.endpoints";
-import { saveTokens, setAuth } from "@/store/authSlice";
 import { useAppDispatch } from "@/store";
+import { saveTokens, setAuth } from "@/store/authSlice";
 
 export type AuthMode = "signup" | "login";
 
@@ -38,16 +43,29 @@ export function AuthScreen({
   const [role, setRole] = useState<AuthRole>("client");
   const [fname, setFname] = useState("");
   const [lname, setLname] = useState("");
+  const [businessName, setBusinessName] = useState("");
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const isSignup = mode === "signup";
+  const isCoach = role === "coach";
+
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const pwOk = pw.length >= 6;
 
   const valid = isSignup
-    ? Boolean(fname.trim() && lname.trim() && email.trim() && pw.length >= 1)
-    : Boolean(email.trim() && pw.length >= 1);
+    ? Boolean(
+        fname.trim() &&
+          lname.trim() &&
+          (!isCoach || businessName.trim()) &&
+          emailOk &&
+          pwOk &&
+          pw === confirmPw
+      )
+    : Boolean(emailOk && pw.length >= 1);
 
   const enterApp = () => {
     setBusy(true);
@@ -83,8 +101,29 @@ export function AuthScreen({
   };
 
   const submit = async () => {
-    if (!valid) {
-      setErr("Please fill all fields.");
+    if (isSignup) {
+      if (!fname.trim() || !lname.trim()) {
+        setErr("Please enter your first and last name.");
+        return;
+      }
+      if (isCoach && !businessName.trim()) {
+        setErr("Please enter your business name.");
+        return;
+      }
+      if (!emailOk) {
+        setErr("Please enter a valid email address.");
+        return;
+      }
+      if (!pwOk) {
+        setErr("Password must be at least 6 characters.");
+        return;
+      }
+      if (pw !== confirmPw) {
+        setErr("Passwords do not match.");
+        return;
+      }
+    } else if (!valid) {
+      setErr("Please enter your email and password.");
       return;
     }
     setErr(null);
@@ -98,8 +137,8 @@ export function AuthScreen({
             lastName: lname.trim(),
             email: email.trim(),
             password: pw,
-            confirmPassword: pw,
-            businessName: `${fname.trim()} ${lname.trim()} Coaching`,
+            confirmPassword: confirmPw,
+            businessName: businessName.trim(),
           }).unwrap();
         } else {
           await registerCustomer({
@@ -107,7 +146,7 @@ export function AuthScreen({
             lastName: lname.trim(),
             email: email.trim(),
             password: pw,
-            confirmPassword: pw,
+            confirmPassword: confirmPw,
           }).unwrap();
         }
       }
@@ -132,7 +171,13 @@ export function AuthScreen({
         await saveTokens(accessToken, refreshToken, persona);
 
         const profileDone = await hasCompletedProfile();
-        dispatch(setAuth({ userId: user?.id || "user-id", persona, profileCompleted: profileDone }));
+        dispatch(
+          setAuth({
+            userId: user?.id || "user-id",
+            persona,
+            profileCompleted: profileDone,
+          })
+        );
 
         if (role === "coach") {
           if (profileDone) {
@@ -160,15 +205,15 @@ export function AuthScreen({
         setErr("Invalid authentication response from server.");
       }
     } catch (e: any) {
+      if (e?.name === "AbortError") {
+        return;
+      }
       console.warn("Auth mutation error:", e);
-      const message = e?.data?.message || e?.message || "An authentication error occurred.";
-      setErr(Array.isArray(message) ? message[0] : message);
+      setErr(getAuthErrorMessage(e, isSignup ? "signup" : "login"));
     } finally {
       setBusy(false);
     }
   };
-
-
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
@@ -239,6 +284,17 @@ export function AuthScreen({
               </View>
             ) : null}
 
+            {isSignup && isCoach ? (
+              <AuthField
+                icon="briefcase"
+                value={businessName}
+                onChangeText={setBusinessName}
+                placeholder="Business name"
+                autoCapitalize="words"
+                textContentType="organizationName"
+              />
+            ) : null}
+
             <AuthField
               icon="mail"
               value={email}
@@ -249,7 +305,19 @@ export function AuthScreen({
               textContentType="emailAddress"
             />
 
-            <PasswordField value={pw} onChangeText={setPw} />
+            <PasswordField
+              value={pw}
+              onChangeText={setPw}
+              placeholder={isSignup ? "Password (min. 6 characters)" : "Password"}
+            />
+
+            {isSignup ? (
+              <PasswordField
+                value={confirmPw}
+                onChangeText={setConfirmPw}
+                placeholder="Confirm password"
+              />
+            ) : null}
 
             {!isSignup ? (
               <Pressable
@@ -287,6 +355,12 @@ export function AuthScreen({
             <Pressable
               onPress={() => {
                 setErr(null);
+                setFname("");
+                setLname("");
+                setBusinessName("");
+                setEmail("");
+                setPw("");
+                setConfirmPw("");
                 setMode(isSignup ? "login" : "signup");
               }}
             >

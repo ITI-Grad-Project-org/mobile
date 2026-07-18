@@ -1,6 +1,10 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Platform } from "react-native";
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
 
 import { hasOnboarded } from "@/shared/hooks/useOnboarding";
 import { hasCompletedProfile } from "@/shared/hooks/useProfileSetup";
@@ -9,6 +13,16 @@ import { AuthField } from "../components/AuthField";
 import { GoogleButton } from "../components/GoogleButton";
 import { PasswordField } from "../components/PasswordField";
 import { RoleToggle, type AuthRole } from "../components/RoleToggle";
+import { getAuthErrorMessage } from "../utils/authError";
+
+import {
+  useLoginCoachMutation,
+  useLoginCustomerMutation,
+  useRegisterCoachMutation,
+  useRegisterCustomerMutation,
+} from "@/api/endpoints/auth.endpoints";
+import { useAppDispatch } from "@/store";
+import { saveTokens, setAuth } from "@/store/authSlice";
 
 export type AuthMode = "signup" | "login";
 
@@ -18,20 +32,40 @@ export function AuthScreen({
   initialMode?: AuthMode;
 }) {
   const router = useRouter();
+  const dispatch = useAppDispatch();
+
+  const [registerCoach] = useRegisterCoachMutation();
+  const [registerCustomer] = useRegisterCustomerMutation();
+  const [loginCoach] = useLoginCoachMutation();
+  const [loginCustomer] = useLoginCustomerMutation();
+
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [role, setRole] = useState<AuthRole>("client");
   const [fname, setFname] = useState("");
   const [lname, setLname] = useState("");
+  const [businessName, setBusinessName] = useState("");
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const isSignup = mode === "signup";
+  const isCoach = role === "coach";
+
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const pwOk = pw.length >= 6;
 
   const valid = isSignup
-    ? Boolean(fname.trim() && lname.trim() && email.trim() && pw.length >= 1)
-    : Boolean(email.trim() && pw.length >= 1);
+    ? Boolean(
+        fname.trim() &&
+          lname.trim() &&
+          (!isCoach || businessName.trim()) &&
+          emailOk &&
+          pwOk &&
+          pw === confirmPw
+      )
+    : Boolean(emailOk && pw.length >= 1);
 
   const enterApp = () => {
     setBusy(true);
@@ -66,26 +100,119 @@ export function AuthScreen({
     }, 600);
   };
 
-  const submit = () => {
-    if (!valid) {
-      setErr("Please fill all fields.");
+  const submit = async () => {
+    if (isSignup) {
+      if (!fname.trim() || !lname.trim()) {
+        setErr("Please enter your first and last name.");
+        return;
+      }
+      if (isCoach && !businessName.trim()) {
+        setErr("Please enter your business name.");
+        return;
+      }
+      if (!emailOk) {
+        setErr("Please enter a valid email address.");
+        return;
+      }
+      if (!pwOk) {
+        setErr("Password must be at least 6 characters.");
+        return;
+      }
+      if (pw !== confirmPw) {
+        setErr("Passwords do not match.");
+        return;
+      }
+    } else if (!valid) {
+      setErr("Please enter your email and password.");
       return;
     }
     setErr(null);
-    // New accounts verify a 4-digit code first; returning users sign straight in.
-    if (isSignup) {
-      router.push({
-        pathname: "/(auth)/verify",
-        params: {
+    setBusy(true);
+
+    try {
+      if (isSignup) {
+        if (role === "coach") {
+          await registerCoach({
+            firstName: fname.trim(),
+            lastName: lname.trim(),
+            email: email.trim(),
+            password: pw,
+            confirmPassword: confirmPw,
+            businessName: businessName.trim(),
+          }).unwrap();
+        } else {
+          await registerCustomer({
+            firstName: fname.trim(),
+            lastName: lname.trim(),
+            email: email.trim(),
+            password: pw,
+            confirmPassword: confirmPw,
+          }).unwrap();
+        }
+      }
+
+      // Login to obtain authentication tokens
+      let loginRes;
+      if (role === "coach") {
+        loginRes = await loginCoach({
           email: email.trim(),
-          role,
-          fname: fname.trim(),
-          lname: lname.trim(),
-        },
-      });
-      return;
+          password: pw,
+        }).unwrap();
+      } else {
+        loginRes = await loginCustomer({
+          email: email.trim(),
+          password: pw,
+        }).unwrap();
+      }
+
+      const { accessToken, refreshToken, user } = loginRes;
+      if (accessToken && refreshToken) {
+        const persona = role === "coach" ? "coach" : "customer";
+        await saveTokens(accessToken, refreshToken, persona);
+
+        const profileDone = await hasCompletedProfile();
+        dispatch(
+          setAuth({
+            userId: user?.id || "user-id",
+            persona,
+            profileCompleted: profileDone,
+          })
+        );
+
+        if (role === "coach") {
+          if (profileDone) {
+            router.replace("/(coach)/(tabs)/home");
+          } else {
+            router.replace({
+              pathname: "/(setup)/coach-profile",
+              params: {
+                email: email.trim(),
+                fname: fname.trim(),
+                lname: lname.trim(),
+              },
+            });
+          }
+        } else {
+          if (!(await hasOnboarded())) {
+            router.replace("/(onboarding)/onboarding");
+          } else {
+            router.replace(
+              profileDone ? "/(client)/(tabs)/today" : "/(setup)/client-profile"
+            );
+          }
+        }
+      } else {
+        setErr("Invalid authentication response from server.");
+      }
+    } catch (e: any) {
+      if (e?.name === "AbortError") {
+        return;
+      }
+      console.warn("Auth mutation error:", e);
+      setErr(getAuthErrorMessage(e, isSignup ? "signup" : "login"));
+    } finally {
+      setBusy(false);
     }
-    enterApp();
   };
 
   return (
@@ -157,6 +284,17 @@ export function AuthScreen({
               </View>
             ) : null}
 
+            {isSignup && isCoach ? (
+              <AuthField
+                icon="briefcase"
+                value={businessName}
+                onChangeText={setBusinessName}
+                placeholder="Business name"
+                autoCapitalize="words"
+                textContentType="organizationName"
+              />
+            ) : null}
+
             <AuthField
               icon="mail"
               value={email}
@@ -167,7 +305,19 @@ export function AuthScreen({
               textContentType="emailAddress"
             />
 
-            <PasswordField value={pw} onChangeText={setPw} />
+            <PasswordField
+              value={pw}
+              onChangeText={setPw}
+              placeholder={isSignup ? "Password (min. 6 characters)" : "Password"}
+            />
+
+            {isSignup ? (
+              <PasswordField
+                value={confirmPw}
+                onChangeText={setConfirmPw}
+                placeholder="Confirm password"
+              />
+            ) : null}
 
             {!isSignup ? (
               <Pressable
@@ -205,6 +355,12 @@ export function AuthScreen({
             <Pressable
               onPress={() => {
                 setErr(null);
+                setFname("");
+                setLname("");
+                setBusinessName("");
+                setEmail("");
+                setPw("");
+                setConfirmPw("");
                 setMode(isSignup ? "login" : "signup");
               }}
             >

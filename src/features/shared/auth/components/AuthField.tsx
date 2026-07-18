@@ -13,7 +13,12 @@ export type AuthFieldProps = {
   keyboardType?: "default" | "email-address";
   autoCapitalize?: "none" | "words";
   autoComplete?: "email" | "name" | "off";
-  textContentType?: "emailAddress" | "givenName" | "familyName" | "none";
+  textContentType?:
+    | "emailAddress"
+    | "givenName"
+    | "familyName"
+    | "organizationName"
+    | "none";
 };
 
 export function AuthField({

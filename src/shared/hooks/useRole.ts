@@ -1,5 +1,13 @@
-export type Role = "owner" | "client";
+import { useActiveTenant } from './useActiveTenant';
 
-export function useRole(): Role | null {
-  return null;
+export type Role = 'owner' | 'client';
+
+export function useRole() {
+  const { role } = useActiveTenant();
+  return {
+    role,
+    isCoach: role === 'owner',
+    isClient: role === 'client',
+  };
 }
+

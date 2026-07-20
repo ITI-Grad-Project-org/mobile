@@ -18,6 +18,11 @@ export async function markProfileComplete(
   await SecureStore.setItemAsync(DONE_KEY, "1");
 }
 
+export async function resetProfile(): Promise<void> {
+  await SecureStore.deleteItemAsync(DONE_KEY);
+  await SecureStore.deleteItemAsync(DATA_KEY);
+}
+
 export async function hasCompletedProfile(): Promise<boolean> {
   if (ALWAYS_SHOW_SETUP) return false;
   return (await SecureStore.getItemAsync(DONE_KEY)) === "1";

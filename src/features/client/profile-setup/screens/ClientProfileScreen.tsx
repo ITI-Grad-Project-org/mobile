@@ -17,13 +17,9 @@ export function ClientProfileScreen() {
     email: params.email ?? "",
   };
 
-  const done = (data: ProfileData) => {
-    // Carry the collected goal into matching so it can pick a relevant coach.
-    const goals = Array.isArray(data.goal) ? (data.goal as string[]) : [];
-    router.replace({
-      pathname: "/(setup)/match-coach",
-      params: goals.length ? { goal: goals[0] } : undefined,
-    });
+  const done = () => {
+    // Profile saved — move on to coach matching.
+    router.replace("/(setup)/match-coach");
   };
 
   return (

@@ -6,8 +6,11 @@ import {
   Platform,
 } from "react-native";
 
-import { hasOnboarded } from "@/shared/hooks/useOnboarding";
-import { hasCompletedProfile } from "@/shared/hooks/useProfileSetup";
+import { hasOnboarded, resetOnboarded } from "@/shared/hooks/useOnboarding";
+import {
+  hasCompletedProfile,
+  resetProfile,
+} from "@/shared/hooks/useProfileSetup";
 import { Pressable, SafeAreaView, ScrollView, Text, View } from "@/tw";
 import { AuthField } from "../components/AuthField";
 import { GoogleButton } from "../components/GoogleButton";
@@ -89,14 +92,14 @@ export function AuthScreen({
         return;
       }
 
-      // Client: run onboarding first, then profile setup, before the app.
-      if (!(await hasOnboarded())) {
+      // Client flow: onboarding -> profile setup -> match-coach.
+      if (profileDone) {
+        router.replace("/(client)/(tabs)/today");
+      } else if (!(await hasOnboarded())) {
         router.replace("/(onboarding)/onboarding");
-        return;
+      } else {
+        router.replace("/(setup)/client-profile");
       }
-      router.replace(
-        profileDone ? "/(client)/(tabs)/today" : "/(setup)/client-profile"
-      );
     }, 600);
   };
 
@@ -149,6 +152,10 @@ export function AuthScreen({
             confirmPassword: confirmPw,
           }).unwrap();
         }
+        // New account: clear any leftover onboarding/profile flags from a
+        // previous user so a fresh signup always starts at onboarding.
+        await resetOnboarded();
+        await resetProfile();
       }
 
       // Login to obtain authentication tokens
@@ -193,12 +200,13 @@ export function AuthScreen({
             });
           }
         } else {
-          if (!(await hasOnboarded())) {
+          // Client flow: onboarding -> profile setup -> match-coach.
+          if (profileDone) {
+            router.replace("/(client)/(tabs)/today");
+          } else if (!(await hasOnboarded())) {
             router.replace("/(onboarding)/onboarding");
           } else {
-            router.replace(
-              profileDone ? "/(client)/(tabs)/today" : "/(setup)/client-profile"
-            );
+            router.replace("/(setup)/client-profile");
           }
         }
       } else {

@@ -20,8 +20,11 @@ import {
 } from "@/tw";
 import { Image } from "@/tw/image";
 import { Tone } from "@/tw/Tone";
+import { FieldRenderer } from "@/features/shared/setup/components/FieldRenderer";
+import type { ProfileData } from "@/features/shared/setup";
 import { CoachCard } from "../components/CoachCard";
 import { CoachSheet } from "../components/CoachSheet";
+import { GOAL_STEPS } from "../config";
 import {
   COACHES,
   SPECIALTY_TAGS,
@@ -38,6 +41,12 @@ const TABS = [
 
 export function MatchCoachScreen() {
   const router = useRouter();
+
+  // Goals & preferences, collected on the invite-code confirmation screen.
+  const [goalData, setGoalData] = useState<ProfileData>({});
+  const setGoal = (k: string, v: unknown) =>
+    setGoalData((d) => ({ ...d, [k]: v }));
+
   const [tab, setTab] = useState<Tab>("invite");
 
   // Invite flow
@@ -59,7 +68,7 @@ export function MatchCoachScreen() {
   const lilacInk = useCSSVariable("--lilac-ink") as string;
 
   const enterAppWith = async (c: SearchCoach) => {
-    await markProfileComplete({ coachId: c.id, days, level, focus });
+    await markProfileComplete({ ...goalData, coachId: c.id, days, level, focus });
     router.replace("/(client)/(tabs)/today");
   };
 
@@ -113,7 +122,7 @@ export function MatchCoachScreen() {
     return () => clearTimeout(id);
   }, [sentTo]);
 
-  // ===== Invite: last step (days + level + focus) =====
+  // ===== Invite: last step (days + level + focus + goals & preferences) =====
   if (codeOK) {
     const ready = Boolean(days && level);
     const firstName = codeOK.name.split(" ")[0];
@@ -206,6 +215,29 @@ export function MatchCoachScreen() {
               />
             </View>
           </View>
+
+          {GOAL_STEPS.map((step) => (
+            <View key={step.title} className="mt-8">
+              <Text className="text-[20px] font-bold text-foreground">
+                {step.title}
+              </Text>
+              {step.subtitle ? (
+                <Text className="mt-1 text-[13.5px] text-muted-foreground">
+                  {step.subtitle}
+                </Text>
+              ) : null}
+              <View className="mt-5 gap-5">
+                {step.fields.map((f) => (
+                  <FieldRenderer
+                    key={f.key}
+                    field={f}
+                    value={goalData[f.key]}
+                    onChange={(v) => setGoal(f.key, v)}
+                  />
+                ))}
+              </View>
+            </View>
+          ))}
         </ScrollView>
 
         <View className="border-t border-border/60 px-5 pt-3">

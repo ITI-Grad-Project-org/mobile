@@ -106,6 +106,13 @@ export const baseApi = createApi({
     'Invitations',
     'Reviews',
     'Memberships',
+    'Directory',
+    'JoinRequests',
+    'Exercises',
+    'Programs',
+    'Program',
+    'Calendar',
+    'WorkoutLog',
   ],
   endpoints: () => ({}),
 });

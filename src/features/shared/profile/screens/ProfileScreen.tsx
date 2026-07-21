@@ -219,7 +219,8 @@ function CoachProfile() {
                       </Text>
                     </View>
                     <Text className="text-muted-foreground text-[11.5px]">
-                      {c.issuer ? `${c.issuer}` : "Verified Issuer"} {c.year ? `· ${c.year}` : ""}
+                      {c.issuer ? `${c.issuer}` : "Verified Issuer"}
+                      {c.issueDate ? ` · ${new Date(c.issueDate).getFullYear()}` : ""}
                     </Text>
                   </View>
                 </View>

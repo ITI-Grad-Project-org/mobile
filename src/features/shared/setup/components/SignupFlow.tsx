@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { KeyboardAvoidingView, Platform } from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Platform } from "react-native";
 import Reanimated, {
   useAnimatedStyle,
   useSharedValue,
@@ -33,6 +33,7 @@ export type SignupFlowProps = {
   title: string;
   steps: Step[];
   onClose: () => void;
+  onSubmit?: (data: ProfileData) => void | Promise<void>;
   onDone: (data: ProfileData) => void;
   showWelcome?: boolean;
   initialData?: ProfileData;
@@ -44,6 +45,7 @@ export function SignupFlow({
   title,
   steps,
   onClose,
+  onSubmit,
   onDone,
   showWelcome = true,
   initialData,
@@ -53,6 +55,8 @@ export function SignupFlow({
   const [idx, setIdx] = useState(0);
   const [done, setDone] = useState(false);
   const [data, setData] = useState<ProfileData>(initialData ?? {});
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const step = steps[idx];
   const isLast = idx === steps.length - 1;
@@ -60,10 +64,25 @@ export function SignupFlow({
 
   const set = (k: string, v: unknown) => setData((d) => ({ ...d, [k]: v }));
 
-  // When there's no welcome screen, finish as soon as the last step is submitted.
-  useEffect(() => {
-    if (done && !showWelcome) onDone(data);
-  }, [done, showWelcome, onDone, data]);
+  // Tapping Finish: run the (possibly async) save. On success advance to the
+  // welcome screen (or straight to onDone); on failure stay put and show why.
+  const finish = async () => {
+    if (saving) return;
+    setSaveError(null);
+    setSaving(true);
+    try {
+      await onSubmit?.(data);
+    } catch (e: any) {
+      setSaveError(
+        e?.data?.message || e?.message || "Something went wrong. Please try again."
+      );
+      return;
+    } finally {
+      setSaving(false);
+    }
+    if (showWelcome) setDone(true);
+    else onDone(data);
+  };
 
   if (done && showWelcome) {
     return (
@@ -93,7 +112,8 @@ export function SignupFlow({
   if (done) return null;
 
   const goBack = () => (idx === 0 ? onClose() : setIdx((i) => i - 1));
-  const goNext = () => (isLast ? setDone(true) : setIdx((i) => i + 1));
+  // On the last step, Finish runs the save; earlier steps just advance.
+  const goNext = () => (isLast ? finish() : setIdx((i) => i + 1));
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
@@ -161,25 +181,35 @@ export function SignupFlow({
         </ScrollView>
 
         {/* Footer */}
-        <View className="flex-row gap-3 border-t border-border/60 px-4 pb-2 pt-3">
-          {idx > 0 ? (
+        <View className="border-t border-border/60 px-4 pb-2 pt-3">
+          {saveError ? (
+            <Text className="mb-2 text-center text-[12px] font-medium text-destructive">
+              {saveError}
+            </Text>
+          ) : null}
+          <View className="flex-row gap-3">
+            {idx > 0 ? (
+              <Pressable
+                onPress={() => setIdx((i) => i - 1)}
+                disabled={saving}
+                className="h-14 flex-1 items-center justify-center rounded-2xl bg-secondary active:opacity-90 disabled:opacity-60"
+              >
+                <Text className="text-[14px] font-semibold text-foreground">
+                  Back
+                </Text>
+              </Pressable>
+            ) : null}
             <Pressable
-              onPress={() => setIdx((i) => i - 1)}
-              className="h-14 flex-1 items-center justify-center rounded-2xl bg-secondary active:opacity-90"
+              onPress={goNext}
+              disabled={saving}
+              className="h-14 flex-2 flex-row items-center justify-center gap-2 rounded-2xl bg-primary shadow-soft active:opacity-90 disabled:opacity-60"
             >
-              <Text className="text-[14px] font-semibold text-foreground">
-                Back
+              {saving ? <ActivityIndicator color="white" /> : null}
+              <Text className="text-[14px] font-semibold text-primary-foreground">
+                {isLast ? "Finish" : "Continue"}
               </Text>
             </Pressable>
-          ) : null}
-          <Pressable
-            onPress={goNext}
-            className="h-14 flex-2 items-center justify-center rounded-2xl bg-primary shadow-soft active:opacity-90"
-          >
-            <Text className="text-[14px] font-semibold text-primary-foreground">
-              {isLast ? "Finish" : "Continue"}
-            </Text>
-          </Pressable>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>

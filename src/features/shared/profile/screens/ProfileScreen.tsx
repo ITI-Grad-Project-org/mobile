@@ -1,5 +1,7 @@
 import { baseApi } from "@/api/baseApi";
 import {
+  useDeleteClientProfileMutation,
+  useDeleteCoachProfileMutation,
   useGetClientProfileQuery,
   useGetCoachProfileQuery,
 } from "@/api/endpoints/profile.endpoints";
@@ -9,6 +11,7 @@ import {
 } from "@/api/endpoints/auth.endpoints";
 import { useActiveCoach } from "@/lib/role";
 import { cn } from "@/lib/utils";
+import { resetProfile } from "@/shared/hooks/useProfileSetup";
 import { Card } from "@/shared/ui/Card";
 import { GlassButton } from "@/shared/ui/GlassButton";
 import { Icon, type IconName } from "@/shared/ui/Icon";
@@ -21,6 +24,8 @@ import { Image } from "@/tw/image";
 import { useRouter, useSegments } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator } from "react-native";
+
+import { DeleteAccountSheet } from "../components/DeleteAccountSheet";
 
 type StreakAccent = "green" | "orange";
 
@@ -77,8 +82,30 @@ function CoachProfile() {
   const dispatch = useAppDispatch();
   const { data: profile, isLoading } = useGetCoachProfileQuery();
   const [logoutCoach] = useLogoutCoachMutation();
+  const [deleteCoach] = useDeleteCoachProfileMutation();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
-  const openEdit = () => { };
+  const openEdit = () => {
+    // Dismiss this profile modal first, otherwise the pushed edit screen renders
+    // behind it (it's a root-stack route under the modal).
+    if (router.canDismiss()) router.dismiss();
+    router.push({
+      pathname: "/(setup)/coach-profile",
+      params: { edit: "1" },
+    });
+  };
+
+  // Clear all local session state and return to login. Shared by sign-out and
+  // account deletion.
+  const resetAndLeave = async () => {
+    await clearTokens();
+    dispatch(clearAuth());
+    dispatch(clearActiveTenant());
+    dispatch(clearMemberships());
+    dispatch(baseApi.util.resetApiState());
+    router.replace("/(auth)/login");
+  };
 
   const signOut = async () => {
     try {
@@ -86,12 +113,20 @@ function CoachProfile() {
     } catch (e) {
       console.warn("Coach logout failed:", e);
     }
-    await clearTokens();
-    dispatch(clearAuth());
-    dispatch(clearActiveTenant());
-    dispatch(clearMemberships());
-    dispatch(baseApi.util.resetApiState());
-    router.replace("/(auth)/login");
+    await resetAndLeave();
+  };
+
+  const deleteAccount = async () => {
+    setDeleting(true);
+    try {
+      await deleteCoach().unwrap();
+      await resetProfile();
+      setConfirmDelete(false);
+      await resetAndLeave();
+    } catch (e) {
+      console.warn("Coach account deletion failed:", e);
+      setDeleting(false);
+    }
   };
 
   if (isLoading) {
@@ -104,7 +139,7 @@ function CoachProfile() {
 
   const coachName = profile ? `${profile.firstName} ${profile.lastName}` : "Coach";
   const coachEmail = profile?.email || "";
-  const coachAvatar = profile?.avatar || "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=200&q=80";
+  const coachAvatar = profile?.avatarUrl || profile?.avatar || "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=200&q=80";
   const certs = profile?.certifications || [];
 
   return (
@@ -280,7 +315,24 @@ function CoachProfile() {
             Log out
           </Text>
         </Pressable>
+
+        {/* Delete account */}
+        <Pressable
+          onPress={() => setConfirmDelete(true)}
+          className="items-center justify-center rounded-2xl py-3 active:opacity-70"
+        >
+          <Text className="text-destructive text-[13px] font-semibold">
+            Delete account
+          </Text>
+        </Pressable>
       </ScrollView>
+
+      <DeleteAccountSheet
+        visible={confirmDelete}
+        busy={deleting}
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={deleteAccount}
+      />
     </View>
   );
 }
@@ -292,14 +344,34 @@ function ClientProfile() {
 
   const { data: profile, isLoading } = useGetClientProfileQuery();
   const [logoutCustomer] = useLogoutCustomerMutation();
+  const [deleteClient] = useDeleteClientProfileMutation();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const [selectedAccent, setSelectedAccent] = useState<StreakAccent>("green");
   const [activeCoachId, setActiveCoachId] = useState(coaches[0].id);
 
-  const openEdit = () => { };
+  const openEdit = () => {
+    // Dismiss this profile modal first, otherwise the pushed edit screen renders
+    // behind it (it's a root-stack route under the modal).
+    if (router.canDismiss()) router.dismiss();
+    router.push({
+      pathname: "/(setup)/client-profile",
+      params: { edit: "1" },
+    });
+  };
   const openAddCoach = () => {
     if (router.canDismiss()) router.dismiss();
     router.push("/(setup)/match-coach");
+  };
+
+  const resetAndLeave = async () => {
+    await clearTokens();
+    dispatch(clearAuth());
+    dispatch(clearActiveTenant());
+    dispatch(clearMemberships());
+    dispatch(baseApi.util.resetApiState());
+    router.replace("/(auth)/login");
   };
 
   const signOut = async () => {
@@ -308,12 +380,20 @@ function ClientProfile() {
     } catch (e) {
       console.warn("Client logout failed:", e);
     }
-    await clearTokens();
-    dispatch(clearAuth());
-    dispatch(clearActiveTenant());
-    dispatch(clearMemberships());
-    dispatch(baseApi.util.resetApiState());
-    router.replace("/(auth)/login");
+    await resetAndLeave();
+  };
+
+  const deleteAccount = async () => {
+    setDeleting(true);
+    try {
+      await deleteClient().unwrap();
+      await resetProfile();
+      setConfirmDelete(false);
+      await resetAndLeave();
+    } catch (e) {
+      console.warn("Client account deletion failed:", e);
+      setDeleting(false);
+    }
   };
 
   if (isLoading) {
@@ -326,7 +406,7 @@ function ClientProfile() {
 
   const clientName = profile ? `${profile.firstName} ${profile.lastName}` : "Client";
   const clientEmail = profile?.email || "";
-  const clientAvatar = profile?.avatar || null;
+  const clientAvatar = profile?.avatarUrl || profile?.avatar || null;
 
   return (
     <View className="flex-1 bg-background">
@@ -543,7 +623,24 @@ function ClientProfile() {
             Log out
           </Text>
         </Pressable>
+
+        {/* Delete account */}
+        <Pressable
+          onPress={() => setConfirmDelete(true)}
+          className="items-center justify-center rounded-2xl py-3 active:opacity-70"
+        >
+          <Text className="text-destructive text-[13px] font-semibold">
+            Delete account
+          </Text>
+        </Pressable>
       </ScrollView>
+
+      <DeleteAccountSheet
+        visible={confirmDelete}
+        busy={deleting}
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={deleteAccount}
+      />
     </View>
   );
 }

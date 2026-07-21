@@ -9,6 +9,8 @@ import {
 import { hasOnboarded, resetOnboarded } from "@/shared/hooks/useOnboarding";
 import {
   hasCompletedProfile,
+  markProfileComplete,
+  profileLooksComplete,
   resetProfile,
 } from "@/shared/hooks/useProfileSetup";
 import { Pressable, SafeAreaView, ScrollView, Text, View } from "@/tw";
@@ -24,6 +26,10 @@ import {
   useRegisterCoachMutation,
   useRegisterCustomerMutation,
 } from "@/api/endpoints/auth.endpoints";
+import {
+  useLazyGetClientProfileQuery,
+  useLazyGetCoachProfileQuery,
+} from "@/api/endpoints/profile.endpoints";
 import { useAppDispatch } from "@/store";
 import { saveTokens, setAuth } from "@/store/authSlice";
 
@@ -41,6 +47,8 @@ export function AuthScreen({
   const [registerCustomer] = useRegisterCustomerMutation();
   const [loginCoach] = useLoginCoachMutation();
   const [loginCustomer] = useLoginCustomerMutation();
+  const [fetchCoachProfile] = useLazyGetCoachProfileQuery();
+  const [fetchClientProfile] = useLazyGetClientProfileQuery();
 
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [role, setRole] = useState<AuthRole>("client");
@@ -152,8 +160,6 @@ export function AuthScreen({
             confirmPassword: confirmPw,
           }).unwrap();
         }
-        // New account: clear any leftover onboarding/profile flags from a
-        // previous user so a fresh signup always starts at onboarding.
         await resetOnboarded();
         await resetProfile();
       }
@@ -177,7 +183,21 @@ export function AuthScreen({
         const persona = role === "coach" ? "coach" : "customer";
         await saveTokens(accessToken, refreshToken, persona);
 
-        const profileDone = await hasCompletedProfile();
+        let profileDone: boolean;
+        try {
+          const serverProfile =
+            role === "coach"
+              ? await fetchCoachProfile().unwrap()
+              : await fetchClientProfile().unwrap();
+          profileDone = profileLooksComplete(serverProfile, persona);
+        } catch {
+          profileDone = await hasCompletedProfile();
+        }
+        if (profileDone) {
+          await markProfileComplete();
+        } else {
+          await resetProfile();
+        }
         dispatch(
           setAuth({
             userId: user?.id || "user-id",

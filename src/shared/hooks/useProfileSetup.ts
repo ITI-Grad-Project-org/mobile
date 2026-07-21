@@ -28,6 +28,32 @@ export async function hasCompletedProfile(): Promise<boolean> {
   return (await SecureStore.getItemAsync(DONE_KEY)) === "1";
 }
 
+export function profileLooksComplete(
+  profile: any,
+  persona: "coach" | "customer"
+): boolean {
+  if (!profile) return false;
+  if (persona === "coach") {
+    return Boolean(
+      profile.phone ||
+        profile.age != null ||
+        profile.gender ||
+        profile.location ||
+        profile.bio ||
+        (Array.isArray(profile.specialties) && profile.specialties.length) ||
+        profile.yearsExperience != null ||
+        profile.careerExperience
+    );
+  }
+  return Boolean(
+    profile.dateOfBirth ||
+      profile.gender ||
+      profile.heightCm != null ||
+      profile.weightKg != null ||
+      profile.avatarUrl
+  );
+}
+
 export async function loadProfile<T = Record<string, unknown>>(): Promise<
   T | null
 > {

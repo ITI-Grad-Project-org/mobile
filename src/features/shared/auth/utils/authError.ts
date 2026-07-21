@@ -1,6 +1,6 @@
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 
-type AuthAction = "signup" | "login";
+type AuthAction = "signup" | "login" | "forgot" | "reset";
 
 export function getAuthErrorMessage(
   error: unknown,
@@ -47,6 +47,16 @@ export function getAuthErrorMessage(
   if (text.includes("not found") && action === "login") {
     return "No account found with that email.";
   }
+  // Reset code that doesn't match or has aged out.
+  if (
+    action === "reset" &&
+    (text.includes("token") ||
+      text.includes("expired") ||
+      text.includes("invalid") ||
+      text.includes("code"))
+  ) {
+    return "That code is invalid or has expired. Request a new one.";
+  }
 
   switch (status) {
     case 400:
@@ -58,9 +68,10 @@ export function getAuthErrorMessage(
     case 403:
       return "This account isn't allowed to sign in here.";
     case 404:
-      return action === "login"
-        ? "No account found with that email."
-        : backendMessage || "Something went wrong. Please try again.";
+      if (action === "login") return "No account found with that email.";
+      if (action === "reset")
+        return "That code is invalid or has expired. Request a new one.";
+      return backendMessage || "Something went wrong. Please try again.";
     case 409:
       return "An account with this email already exists. Try signing in.";
     case 429:
@@ -73,10 +84,12 @@ export function getAuthErrorMessage(
     return "The server ran into a problem. Please try again shortly.";
   }
 
-  return (
-    backendMessage ||
-    (action === "signup"
-      ? "Couldn't create your account. Please try again."
-      : "Couldn't sign you in. Please try again.")
-  );
+  const fallbackByAction: Record<AuthAction, string> = {
+    signup: "Couldn't create your account. Please try again.",
+    login: "Couldn't sign you in. Please try again.",
+    forgot: "Couldn't send the reset code. Please try again.",
+    reset: "Couldn't reset your password. Please try again.",
+  };
+
+  return backendMessage || fallbackByAction[action];
 }

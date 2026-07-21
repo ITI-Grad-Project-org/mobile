@@ -329,7 +329,12 @@ export function AuthScreen({
 
             {!isSignup ? (
               <Pressable
-                onPress={() => router.push("/(auth)/forgot-password")}
+                onPress={() =>
+                  router.push({
+                    pathname: "/(auth)/forgot-password",
+                    params: { role },
+                  })
+                }
                 className="-mt-1 self-end active:opacity-70"
               >
                 <Text className="text-[13px] font-semibold text-foreground underline">

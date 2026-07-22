@@ -258,13 +258,17 @@ export interface CreateMeasurementDto {
 export type UpdateMeasurementDto = Partial<CreateMeasurementDto>;
 
 // ---------------------------------------------------------------------------
-// Invitations
+// Invitations & Onboarding
 // ---------------------------------------------------------------------------
 export interface CreateInvitationDto {
   email: string;
   name?: string; // personalises the email
 }
-export interface AcceptInvitationDto {
+export interface ValidateOnboardingDto {
+  code: string; // 6-digit code from invite or approval email
+}
+export interface ConfirmOnboardingDto {
+  code: string; // 6-digit code
   intake?: CreateClientIntakeDto; // optionally submit intake in the same call
 }
 

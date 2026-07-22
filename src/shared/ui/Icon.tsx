@@ -56,6 +56,12 @@ export type IconName =
   | "arrow-up"
   | "lightbulb"
   | "megaphone"
+  | "user"
+  | "user-minus"
+  | "user-check"
+  | "users"
+  | "mail"
+  | "trash";
 
 interface IconProps {
   name: IconName;
@@ -113,6 +119,12 @@ const SYMBOLS: Record<IconName, { ios: string; android: string }> = {
   "arrow-up": { ios: "arrow.up", android: "arrow_upward" },
   "lightbulb": { ios: "lightbulb.fill", android: "lightbulb" },
   "megaphone": { ios: "megaphone.fill", android: "campaign" },
+  "user": { ios: "person.fill", android: "person" },
+  "user-minus": { ios: "person.badge.minus", android: "person_remove" },
+  "user-check": { ios: "person.badge.checkmark", android: "person_add_check" },
+  "users": { ios: "person.2.fill", android: "group" },
+  "mail": { ios: "envelope.fill", android: "mail" },
+  "trash": { ios: "trash.fill", android: "delete" },
 };
 
 export function Icon({ name, size = 20, color = "#000000", className }: IconProps) {

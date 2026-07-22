@@ -1,4 +1,5 @@
 export { MatchCoachScreen } from "./screens/MatchCoachScreen";
+export { ClientIntakeScreen } from "./screens/ClientIntakeScreen";
 export {
   COACHES,
   SPECIALTY_TAGS,

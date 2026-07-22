@@ -57,11 +57,11 @@ function AppContent() {
   const activeTenantId = useAppSelector((state) => state.activeTenant.tenantId);
 
   // Queries to load active tenant / memberships details
-  const { data: coachMe, isLoading: loadingCoach, isSuccess: coachSuccess } = useGetCoachMeQuery(undefined, {
+  const { data: coachMe, isLoading: loadingCoach } = useGetCoachMeQuery(undefined, {
     skip: !isAuthenticated || persona !== 'coach',
   });
 
-  const { data: memberships, isLoading: loadingMemberships, isSuccess: membershipsSuccess } = useGetCustomerMembershipsQuery(undefined, {
+  const { data: memberships, isLoading: loadingMemberships } = useGetCustomerMembershipsQuery(undefined, {
     skip: !isAuthenticated || persona !== 'customer',
   });
 
@@ -85,13 +85,16 @@ function AppContent() {
 
   // Set memberships and active tenant for customer
   useEffect(() => {
-    if (memberships) {
+    if (memberships && memberships.length > 0) {
       dispatch(setMemberships(memberships));
       
-      if (!activeTenantId && memberships.length === 1) {
-        const firstTenantId = memberships[0].tenantId;
-        dispatch(setActiveTenant(firstTenantId));
-        SecureStore.setItemAsync('activeTenantId', firstTenantId);
+      if (!activeTenantId) {
+        const activeM: any = memberships.find((m: any) => m.status === 'active') || memberships[0];
+        const tenantId = activeM?.tenantId || activeM?.tenant?.id || activeM?.id;
+        if (tenantId) {
+          dispatch(setActiveTenant(tenantId));
+          SecureStore.setItemAsync('activeTenantId', tenantId);
+        }
       }
     }
   }, [memberships, activeTenantId, dispatch]);
@@ -102,17 +105,8 @@ function AppContent() {
     }
   }, [authRestored, loadingCoach, loadingMemberships]);
 
-  // Determine if the local Redux state is still syncing with loaded profile/membership data
-  const hasTenantInCoachQuery = coachMe && (coachMe.currentTenant?.id || coachMe.tenant?.id);
-  const hasMembershipsInQuery = memberships && memberships.length > 0;
-
-  const isSyncing = isAuthenticated && (
-    (persona === 'coach' && coachSuccess && hasTenantInCoachQuery && !activeTenantId) ||
-    (persona === 'customer' && membershipsSuccess && hasMembershipsInQuery && !activeTenantId)
-  );
-
-  // Wait until session is restored, queries are checked, and activeTenant is synced
-  const isInitialLoading = !authRestored || (isAuthenticated && (loadingCoach || loadingMemberships || isSyncing));
+  // Wait until session is restored and initial profile/membership queries finish
+  const isInitialLoading = !authRestored || (isAuthenticated && (loadingCoach || loadingMemberships));
 
   if (isInitialLoading) {
     return null;

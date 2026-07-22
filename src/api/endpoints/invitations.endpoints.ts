@@ -1,5 +1,5 @@
 import { baseApi } from '../baseApi';
-import { CreateInvitationDto, AcceptInvitationDto } from '../types';
+import { CreateInvitationDto } from '../types';
 
 export const invitationsEndpoints = baseApi.injectEndpoints({
   endpoints: (builder) => ({
@@ -34,18 +34,6 @@ export const invitationsEndpoints = baseApi.injectEndpoints({
         { type: 'Invitations', id: `${tenantId}:${id}` },
       ],
     }),
-    previewInvitation: builder.query<any, { token: string }>({
-      query: ({ token }) => `/invitation/token/${token}`,
-    }),
-    // Accept now takes a body — send `{}` at minimum, or an embedded intake payload.
-    acceptInvitation: builder.mutation<any, { token: string; body?: AcceptInvitationDto }>({
-      query: ({ token, body }) => ({
-        url: `/invitation/token/${token}/accept`,
-        method: 'POST',
-        body: body ?? {},
-      }),
-      invalidatesTags: ['Memberships', 'Tenant', 'Me', 'Intake'],
-    }),
   }),
 });
 
@@ -55,7 +43,5 @@ export const {
   useLazyListInvitationsQuery,
   useGetInvitationQuery,
   useRevokeInvitationMutation,
-  usePreviewInvitationQuery,
-  useLazyPreviewInvitationQuery,
-  useAcceptInvitationMutation,
 } = invitationsEndpoints;
+

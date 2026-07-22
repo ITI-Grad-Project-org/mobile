@@ -1,31 +1,55 @@
-import { Feather } from "@expo/vector-icons";
 import { Modal } from "react-native";
-
 import { cn } from "@/lib/utils";
 import { GlassButton } from "@/shared/ui/GlassButton";
-import { Pressable, SafeAreaView, ScrollView, Text, View, useCSSVariable } from "@/tw";
+import { Icon } from "@/shared/ui/Icon";
+import { Pressable, ScrollView, Text, View, useCSSVariable } from "@/tw";
 import { Image } from "@/tw/image";
 import { Tone } from "@/tw/Tone";
-import type { SearchCoach } from "../data";
 
-// Full-screen coach detail with a "why we matched you" note and a request CTA.
+const DEFAULT_COVER =
+  "https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?auto=format&fit=crop&w=400&q=80";
+
 export function CoachSheet({
-  coach: c,
+  coach,
   requested,
   onClose,
   onRequest,
+  onCancelRequest,
 }: {
-  coach: SearchCoach;
+  coach: any;
   requested: boolean;
   onClose: () => void;
   onRequest: () => void;
+  onCancelRequest?: () => void;
 }) {
-  const primary = useCSSVariable("--primary") as string;
-  const success = useCSSVariable("--success") as string;
-  const onPrimary = useCSSVariable("--primary-foreground") as string;
-  const muted = useCSSVariable("--muted-foreground") as string;
-  const lilacInk = useCSSVariable("--lilac-ink") as string;
   const foreground = useCSSVariable("--foreground") as string;
+  const lilacInk = useCSSVariable("--lilac-ink") as string;
+
+  const cObj = coach?.coach || coach;
+
+  const firstName = cObj?.firstName || coach?.firstName;
+  const lastName = cObj?.lastName || coach?.lastName;
+  const coachName =
+    firstName || lastName
+      ? `${firstName || ""} ${lastName || ""}`.trim()
+      : coach?.tenantName || coach?.businessName || coach?.name || "Coach Profile";
+
+  const businessName = coach?.tenantName || coach?.businessName || cObj?.businessName || "Fitness Coaching";
+  const avatarUrl = cObj?.avatarUrl || coach?.avatarUrl || coach?.logoUrl || coach?.avatar;
+  const coverUrl = cObj?.coverUrl || coach?.coverUrl || coach?.cover || DEFAULT_COVER;
+  const location = cObj?.location || coach?.location || "Online";
+  const yoe = cObj?.yearsExperience ?? coach?.yearsExperience ?? cObj?.yoe ?? coach?.yoe;
+  const rating = cObj?.rating ?? coach?.rating ?? 4.9;
+  const reviews = cObj?.reviews ?? coach?.reviews ?? 24;
+  const bio = cObj?.bio || coach?.bio || "Certified coach offering personalized training programs.";
+  const specialties: string[] =
+    (cObj?.specialties?.length ? cObj.specialties : coach?.specialties?.length ? coach.specialties : null) || [
+      "Strength",
+      "Fitness",
+    ];
+  const priceFrom = cObj?.priceFrom ?? coach?.priceFrom ?? cObj?.priceTo ?? coach?.priceTo;
+
+  const isRequested = requested || coach?.membershipStatus === "requested";
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
@@ -33,95 +57,112 @@ export function CoachSheet({
         <View className="max-h-[92%] overflow-hidden rounded-t-3xl bg-card">
           <ScrollView showsVerticalScrollIndicator={false}>
             <View className="h-40 w-full">
-              <Image source={c.cover} className="h-full w-full" style={{ objectFit: "cover" }} />
+              <Image
+                source={typeof coverUrl === "string" ? { uri: coverUrl } : coverUrl}
+                className="h-full w-full object-cover"
+              />
               <View className="absolute right-4 top-4">
                 <GlassButton
                   onPress={onClose}
                   accessibilityLabel="Close"
                   className="h-9 w-9 rounded-full"
                 >
-                  <Feather name="x" size={16} color={foreground} />
+                  <Icon name="x" size={16} color={foreground} />
                 </GlassButton>
               </View>
             </View>
 
             <View className="px-5 pb-5">
               <View className="-mt-10 self-start rounded-3xl bg-card p-1.5 shadow-pop">
-                <Image
-                  source={c.avatar}
-                  className="h-20 w-20 rounded-3xl bg-secondary"
-                  style={{ objectFit: "cover" }}
-                />
+                {avatarUrl ? (
+                  <Image
+                    source={typeof avatarUrl === "string" ? { uri: avatarUrl } : avatarUrl}
+                    className="h-20 w-20 rounded-3xl bg-secondary object-cover"
+                  />
+                ) : (
+                  <View className="h-20 w-20 rounded-3xl bg-secondary items-center justify-center">
+                    <Icon name="person" size={32} color="--muted-foreground" />
+                  </View>
+                )}
               </View>
 
-              <View className="mt-3 flex-row items-center gap-2">
-                <Text className="text-[22px] font-bold text-foreground">{c.name}</Text>
-                <View className="flex-row items-center gap-1 rounded-full bg-secondary px-2 py-0.5">
-                  <Feather name="star" size={11} color={primary} />
-                  <Text className="text-[11px] font-semibold text-foreground">{c.rating}</Text>
-                  <Text className="text-[11px] text-muted-foreground">· {c.reviews}</Text>
+              <View className="mt-3 flex-row items-center justify-between">
+                <View>
+                  <Text className="text-[22px] font-bold text-foreground">{coachName}</Text>
+                  <Text className="text-[13px] font-semibold text-primary">{businessName}</Text>
+                </View>
+                <View className="flex-row items-center gap-1 rounded-full bg-secondary px-2.5 py-1">
+                  <Icon name="sparkles" size={11} color="--primary" />
+                  <Text className="text-[11px] font-semibold text-foreground">{rating}</Text>
+                  <Text className="text-[11px] text-muted-foreground">· {reviews}</Text>
                 </View>
               </View>
 
-              <View className="mt-1 flex-row items-center gap-1">
-                <Feather name="map-pin" size={13} color={muted} />
+              <View className="mt-2 flex-row items-center gap-1">
                 <Text className="text-[12.5px] text-muted-foreground">
-                  {c.location} · {c.yoe} yrs
+                  {location} {yoe != null ? `· ${yoe} yrs experience` : ""}
                 </Text>
               </View>
 
-              <Text className="mt-4 text-[14px] leading-relaxed text-foreground/85">{c.bio}</Text>
+              <Text className="mt-4 text-[14px] leading-relaxed text-foreground/85">{bio}</Text>
 
               <Text className="mt-5 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                 Specialties
               </Text>
               <View className="mt-2 flex-row flex-wrap gap-1.5">
-                {c.specialties.map((s) => (
+                {specialties.map((s: string) => (
                   <View key={s} className="flex-row items-center gap-1 rounded-full bg-secondary px-3 py-1">
-                    <Feather name="award" size={11} color={muted} />
-                    <Text className="text-[12px] font-semibold text-foreground">{s}</Text>
+                    <Text className="text-[12px] font-semibold text-foreground capitalize">{s}</Text>
                   </View>
                 ))}
               </View>
 
+              {cObj?.careerExperience ? (
+                <View className="mt-4">
+                  <Text className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                    Background
+                  </Text>
+                  <Text className="mt-1 text-[13px] text-foreground/80">{cObj.careerExperience}</Text>
+                </View>
+              ) : null}
+
               <Tone name="lilac" className="mt-5 rounded-2xl p-4">
                 <View className="flex-row items-center gap-2">
-                  <Feather name="zap" size={13} color={lilacInk} />
+                  <Icon name="sparkles" size={13} color={lilacInk} />
                   <Text className="text-[11px] font-semibold uppercase tracking-[0.14em] text-lilac-ink opacity-80">
-                    Why we matched you
+                    Pricing & Services
                   </Text>
                 </View>
                 <Text className="mt-1 text-[13.5px] font-medium text-lilac-ink">
-                  Specializes in {c.specialties[0].toLowerCase()} — aligned with your stated goal.
+                  {priceFrom != null
+                    ? `Programs starting from $${priceFrom}/month. Includes personalized plan & direct chat access.`
+                    : "Offers custom 1-on-1 coaching plans, workouts, and messaging."}
                 </Text>
               </Tone>
-            </View>
-          </ScrollView>
 
-          <SafeAreaView edges={["bottom"]} className="border-t border-border/20 px-5 pt-3">
-            <Pressable
-              onPress={onRequest}
-              disabled={requested}
-              className={cn(
-                "h-14 flex-row items-center justify-center gap-2 rounded-2xl active:opacity-90",
-                requested ? "bg-success/15" : "bg-primary shadow-soft"
-              )}
-            >
-              <Feather
-                name={requested ? "check" : "send"}
-                size={16}
-                color={requested ? success : onPrimary}
-              />
-              <Text
+              <Pressable
+                onPress={isRequested ? onCancelRequest : onRequest}
                 className={cn(
-                  "text-[15px] font-semibold",
-                  requested ? "text-success" : "text-primary-foreground"
+                  "mt-6 h-14 flex-row items-center justify-center gap-2 rounded-2xl py-3.5 shadow-soft active:opacity-90",
+                  isRequested ? "bg-success/20 border border-success/40" : "bg-primary"
                 )}
               >
-                {requested ? "Request sent" : "Send a request"}
-              </Text>
-            </Pressable>
-          </SafeAreaView>
+                <Icon
+                  name={isRequested ? "check" : "send"}
+                  size={16}
+                  color={isRequested ? "var(--success)" : "var(--primary-foreground)"}
+                />
+                <Text
+                  className={cn(
+                    "text-[15px] font-semibold",
+                    isRequested ? "text-success" : "text-primary-foreground"
+                  )}
+                >
+                  {isRequested ? "Requested (Tap to Cancel)" : "Send Join Request"}
+                </Text>
+              </Pressable>
+            </View>
+          </ScrollView>
         </View>
       </View>
     </Modal>

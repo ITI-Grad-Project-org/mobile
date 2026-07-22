@@ -40,7 +40,7 @@ export function TextField({
           multiline={multiline}
           className={
             multiline
-              ? "min-h-[112px] rounded-2xl bg-secondary px-4 py-3 text-[15px] text-foreground"
+              ? "min-h-28 rounded-2xl bg-secondary px-4 py-3 text-[15px] text-foreground"
               : "h-14 rounded-2xl bg-secondary px-4 py-0 text-[15px] text-foreground"
           }
           style={multiline ? { textAlignVertical: "top" } : undefined}

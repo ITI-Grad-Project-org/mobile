@@ -27,6 +27,9 @@ import { useState } from "react";
 import { ActivityIndicator } from "react-native";
 import { GOAL_STEPS } from "../config";
 
+const toEnumValue = (s: string) =>
+  s.trim().toLowerCase().replace(/[\s-]+/g, "_");
+
 export function ClientIntakeScreen() {
   const router = useRouter();
   const dispatch = useAppDispatch();
@@ -48,8 +51,8 @@ export function ClientIntakeScreen() {
 
   // State for Intake fields
   const [days, setDays] = useState("4");
-  const [level, setLevel] = useState("intermediate");
-  const [focus, setFocus] = useState<string[]>(["strength"]);
+  const [level, setLevel] = useState("Intermediate");
+  const [focus, setFocus] = useState<string[]>(["Strength"]);
   const [goalData, setGoalData] = useState<ProfileData>({});
   const [submitErr, setSubmitErr] = useState<string | null>(null);
 
@@ -89,12 +92,12 @@ export function ClientIntakeScreen() {
       goal: mappedGoal,
       trainingExperience: difficulty,
       trainingDaysPerWeek: Number(days) || 4,
-      focusAreas: focus as FocusArea[],
+      focusAreas: focus.map(toEnumValue) as FocusArea[],
       trainingStyles: Array.isArray(goalData.trainingPrefs)
-        ? (goalData.trainingPrefs.map((s: string) => s.toLowerCase()) as TrainingStyle[])
+        ? (goalData.trainingPrefs.map(toEnumValue) as TrainingStyle[])
         : undefined,
       dietaryPreferences: Array.isArray(goalData.foodPrefs)
-        ? (goalData.foodPrefs.map((s: string) => s.toLowerCase()) as DietaryPreference[])
+        ? (goalData.foodPrefs.map(toEnumValue) as DietaryPreference[])
         : undefined,
       injuries: goalData.injuries ? [String(goalData.injuries)] : undefined,
       medicalConditions: goalData.chronic ? [String(goalData.chronic)] : undefined,

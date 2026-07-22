@@ -6,6 +6,7 @@ export default function SetupLayout() {
       <Stack.Screen name="client-profile" />
       <Stack.Screen name="coach-profile" />
       <Stack.Screen name="match-coach" />
+      <Stack.Screen name="intake" />
     </Stack>
   );
 }

@@ -43,7 +43,7 @@ export function ForgotPasswordScreen() {
       const forgot = role === "coach" ? forgotCoach : forgotCustomer;
       await forgot({ email: email.trim() }).unwrap();
       router.push({
-        pathname: "/(auth)/reset-password",
+        pathname: "/reset-password" as any,
         params: { email: email.trim(), role },
       });
     } catch (e: any) {

@@ -11,6 +11,7 @@ import {
   useSwitchTenantMutation,
 } from "@/api/endpoints/auth.endpoints";
 import { useGetDirectoryCoachQuery } from "@/api/endpoints/directory.endpoints";
+import { MeasurementsSummaryCard } from "@/features/client/progress";
 import type { ReduxMembership } from "@/store/membershipsSlice";
 import { useActiveCoach } from "@/lib/role";
 import { cn } from "@/lib/utils";
@@ -557,6 +558,9 @@ function ClientProfile() {
             <Icon name="pencil" size={16} color="--ink-foreground" />
           </Pressable>
         </Card>
+
+        {/* Body measurements */}
+        <MeasurementsSummaryCard />
 
         {/* Switch coach */}
         <Card glass>

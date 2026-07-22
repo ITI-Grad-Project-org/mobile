@@ -9,6 +9,7 @@ export default function ClientLayout() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="profile" options={{ presentation: "modal" }} />
+        <Stack.Screen name="measurement" options={{ presentation: "modal" }} />
       </Stack>
     </View>
   );

@@ -257,6 +257,21 @@ export interface CreateMeasurementDto {
 }
 export type UpdateMeasurementDto = Partial<CreateMeasurementDto>;
 
+/** A measurement as returned by the server (create DTO fields + identity). */
+export interface Measurement extends CreateMeasurementDto {
+  id: string;
+  measuredAt: string; // YYYY-MM-DD
+  createdAt?: string;
+}
+
+/** Paginated envelope for GET /client/me/measurements. */
+export interface ListMeasurementsResponse {
+  data: Measurement[];
+  page: number;
+  limit: number;
+  total: number;
+}
+
 // ---------------------------------------------------------------------------
 // Invitations & Onboarding
 // ---------------------------------------------------------------------------

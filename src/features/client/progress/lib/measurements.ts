@@ -65,7 +65,9 @@ export function extractMeasurements(raw: unknown): Measurement[] {
 }
 
 export function deriveMeasurementStats(raw: unknown): MeasurementStats {
-  const series = extractMeasurements(raw).sort(byDateAsc);
+  // Copy before sorting: RTK Query freezes its cached arrays, and .sort()
+  // mutates in place ("Cannot assign to read-only property").
+  const series = [...extractMeasurements(raw)].sort(byDateAsc);
   const latest = series[series.length - 1];
 
   const metrics: MetricSummary[] = METRICS.map((meta) => {

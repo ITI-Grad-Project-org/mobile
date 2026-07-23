@@ -1,6 +1,13 @@
 import { baseApi } from '../baseApi';
 import { CreateInvitationDto } from '../types';
 
+// The client-facing invitation routes (GET/DELETE /client/me/invitations) are not
+// implemented server-side yet. Until they are, querying them returns 401, which the
+// global reauth wrapper escalates to a full logout (clears the active tenant + resets
+// the RTK Query cache). Keep the client invitation feature dormant until the backend
+// ships those routes — flip this to `true` then. See baseApi.ts reauth logic.
+export const CLIENT_INVITATIONS_READY = false;
+
 export const invitationsEndpoints = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     createInvitation: builder.mutation<any, { body: CreateInvitationDto; tenantId: string }>({
@@ -34,6 +41,22 @@ export const invitationsEndpoints = baseApi.injectEndpoints({
         { type: 'Invitations', id: `${tenantId}:${id}` },
       ],
     }),
+
+    // ----- Client side (/client/me/invitations) — invites addressed to the
+    // logged-in client, spanning all tenants (NOT active-tenant scoped). The
+    // 'MINE' id namespaces this feed away from the coach LIST-${tenantId} caches.
+    listMyInvitations: builder.query<any[], void>({
+      // API responses are untyped; the card types its own props locally.
+      query: () => '/client/me/invitations',
+      providesTags: [{ type: 'Invitations', id: 'MINE' }],
+    }),
+    declineInvitation: builder.mutation<any, { id: string }>({
+      query: ({ id }) => ({
+        url: `/client/me/invitations/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: [{ type: 'Invitations', id: 'MINE' }],
+    }),
   }),
 });
 
@@ -43,5 +66,7 @@ export const {
   useLazyListInvitationsQuery,
   useGetInvitationQuery,
   useRevokeInvitationMutation,
+  useListMyInvitationsQuery,
+  useDeclineInvitationMutation,
 } = invitationsEndpoints;
 

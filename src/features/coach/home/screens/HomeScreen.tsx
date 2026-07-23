@@ -3,6 +3,7 @@ import { Card } from "@/shared/ui/Card";
 import { Icon } from "@/shared/ui/Icon";
 import { SectionTitle } from "@/shared/ui/SectionTitle";
 import { Pressable, ScrollView, Text, useCSSVariable, View } from "@/tw";
+import { Tone } from "@/tw/Tone";
 import { LinearGradient } from "expo-linear-gradient";
 
 const triage = [
@@ -30,11 +31,21 @@ const triage = [
 ];
 
 const feed = [
-  { name: "Alex Rivera", avatar: "🏃", action: "completed Lower body day", time: "12m", color: "mint" },
-  { name: "Mia Chen", avatar: "🧘", action: "submitted weekly check-in", time: "1h", color: "lilac" },
-  { name: "Daniel Park", avatar: "🚴", action: "logged 5 km Zone 2 run", time: "2h", color: "sky" },
-  { name: "Sofia Reyes", avatar: "🏋️", action: "hit a new squat PR · 95 kg", time: "5h", color: "peach" },
+  { name: "Alex Rivera", action: "completed Lower body day", time: "12m", color: "mint" },
+  { name: "Mia Chen", action: "submitted weekly check-in", time: "1h", color: "lilac" },
+  { name: "Daniel Park", action: "logged 5 km Zone 2 run", time: "2h", color: "sky" },
+  { name: "Sofia Reyes", action: "hit a new squat PR · 95 kg", time: "5h", color: "peach" },
 ] as const;
+
+/** Monogram initials from a name — deterministic, always renders (unlike emoji). */
+function initials(name: string) {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? "")
+    .join("");
+}
 
 const colorMap: Record<string, { bg: string; text: string }> = {
   mint: { bg: "bg-mint", text: "text-mint-ink" },
@@ -55,9 +66,17 @@ export function HomeScreen() {
       showsVerticalScrollIndicator={false}
     >
       {/* Header */}
-      <View className="px-1">
-        <Text className="text-[13px] text-muted-foreground">Friday morning</Text>
-        <Text className="text-[26px] font-bold tracking-tight text-foreground mt-0.5">Hey, Marco 👋</Text>
+      <View className="flex-row items-center justify-between px-1">
+        <View className="min-w-0 flex-1">
+          <Text className="text-[13px] text-muted-foreground">Friday morning</Text>
+          <Text className="text-[26px] font-bold tracking-tight text-foreground mt-0.5">Hey, Marco</Text>
+        </View>
+        <Tone
+          name="ink"
+          className="h-12 w-12 shrink-0 rounded-full items-center justify-center shadow-soft"
+        >
+          <Text className="text-[16px] font-bold text-ink-foreground">M</Text>
+        </Tone>
       </View>
 
       {/* KPI row */}
@@ -88,6 +107,11 @@ export function HomeScreen() {
         />
         <View className="gap-y-3">
           {triage.map((t) => {
+            const isDarkTone = t.tone === "primary" || t.tone === "ink";
+            // Tone gradients: primary/ink are dark surfaces (need light text),
+            // sun is a light surface (needs its dark -ink text). Using
+            // text-foreground here reads dark-on-dark on primary/ink in light mode.
+            const titleColor = isDarkTone ? "text-white" : "text-sun-ink";
             return (
               <Card
                 key={t.title}
@@ -98,26 +122,20 @@ export function HomeScreen() {
                 <View
                   className={cn(
                     "h-12 w-12 shrink-0 rounded-2xl justify-center items-center",
-                    t.tone === "primary" || t.tone === "ink" ? "bg-white/15" : "bg-black/10",
+                    isDarkTone ? "bg-white/15" : "bg-black/10",
                   )}
                 >
                   <Icon
                     name={t.icon}
                     size={20}
-                    color={
-                      t.tone === "primary" || t.tone === "ink"
-                        ? "#ffffff"
-                        : t.tone === "sun"
-                          ? "--sun-ink"
-                          : "#000000"
-                    }
+                    color={isDarkTone ? "#ffffff" : "--sun-ink"}
                   />
                 </View>
                 <View className="min-w-0 flex-1">
-                  <Text className="text-[14.5px] font-bold text-foreground" numberOfLines={1}>
+                  <Text className={cn("text-[14.5px] font-bold", titleColor)} numberOfLines={1}>
                     {t.title}
                   </Text>
-                  <Text className="text-[12px] text-foreground opacity-80 mt-0.5" numberOfLines={1}>
+                  <Text className={cn("text-[12px] opacity-80 mt-0.5", titleColor)} numberOfLines={1}>
                     {t.sub}
                   </Text>
                 </View>
@@ -193,7 +211,7 @@ export function HomeScreen() {
                 )}
               >
                 <View className={cn("h-11 w-11 shrink-0 rounded-full justify-center items-center", colors.bg)}>
-                  <Text className="text-lg">{f.avatar}</Text>
+                  <Text className={cn("text-[15px] font-bold", colors.text)}>{initials(f.name)}</Text>
                 </View>
                 <View className="min-w-0 flex-1">
                   <Text className="text-[14px] font-semibold text-foreground">{f.name}</Text>

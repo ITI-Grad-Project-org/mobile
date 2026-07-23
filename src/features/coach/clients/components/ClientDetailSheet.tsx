@@ -4,6 +4,7 @@ import {
 } from "@/api/endpoints/clients.endpoints";
 import { useRevokeInvitationMutation } from "@/api/endpoints/invitations.endpoints";
 import { sfx } from "@/lib/sfx";
+import { GlassButton } from "@/shared/ui/GlassButton";
 import { Icon } from "@/shared/ui/Icon";
 import { Pressable, ScrollView, Text, View } from "@/tw";
 import { Image } from "@/tw/image";
@@ -140,12 +141,12 @@ export function ClientDetailSheet({ client, tenantId, onClose }: ClientDetailShe
           </View>
         </View>
 
-        <Pressable
+        <GlassButton
           onPress={handleClose}
           className="h-9 w-9 justify-center items-center rounded-full bg-secondary active:opacity-75"
         >
           <Icon name="x" size={16} color="--muted-foreground" />
-        </Pressable>
+        </GlassButton>
       </View>
 
       {isFetching ? (

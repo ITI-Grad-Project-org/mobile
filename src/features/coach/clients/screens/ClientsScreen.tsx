@@ -15,6 +15,7 @@ import { ClientDetailSheet } from "../components/ClientDetailSheet";
 import { InvitationCard } from "../components/InvitationCard";
 import { InviteClientSheet } from "../components/InviteClientSheet";
 import { JoinRequestCard } from "../components/JoinRequestCard";
+import { GlassButton } from "@/shared/ui/GlassButton";
 
 const LIQUID_GLASS = isLiquidGlassAvailable();
 
@@ -46,9 +47,22 @@ export function ClientsScreen() {
     { skip: !tenantId }
   );
 
-  const pendingInvitations = invitations || [];
-  const pendingRequests = joinRequests || [];
+  const pendingInvitations = (invitations || []).filter(
+    (inv: any) => (inv?.status ?? "pending") === "pending"
+  );
+  const pastInvitations = (invitations || []).filter((inv: any) =>
+    ["expired", "cancelled", "revoked"].includes(inv?.status)
+  );
+  const pendingRequests = (joinRequests || []).filter(
+    (req: any) => (req?.status ?? "pending") === "pending"
+  );
   const clientList = clients || [];
+
+  // Emails already on the roster — used to block re-inviting an existing client
+  // (the server's duplicate check only covers pending invitations, not clients).
+  const existingClientEmails = clientList
+    .map((c: any) => (c.client?.email || c.email || "").trim().toLowerCase())
+    .filter(Boolean);
 
   const totalClientsCount = clientList.length;
   const pendingCount = pendingInvitations.length + pendingRequests.length;
@@ -82,12 +96,12 @@ export function ClientsScreen() {
               {pendingCount > 0 ? ` · ${pendingCount} pending` : ""}
             </Text>
           </View>
-          <Pressable
+          <GlassButton
             onPress={() => setShowInviteSheet(true)}
             className="h-10 w-10 justify-center items-center rounded-full bg-primary shadow-soft active:opacity-85"
           >
             <Text className="text-primary-foreground text-lg font-bold">+</Text>
-          </Pressable>
+          </GlassButton>
         </View>
 
         {/* Search & Filter bar */}
@@ -279,6 +293,18 @@ export function ClientsScreen() {
                 ) : null}
               </View>
             ) : null}
+
+            {/* Past Invitations — read-only history (shown under "All" or "Pending") */}
+            {(filter === "All" || filter === "Pending") && pastInvitations.length > 0 ? (
+              <View className="gap-y-3 mt-1">
+                <Text className="text-[12px] font-bold uppercase tracking-wider text-muted-foreground px-1">
+                  Past Invitations ({pastInvitations.length})
+                </Text>
+                {pastInvitations.map((inv: any) => (
+                  <InvitationCard key={inv.id} invitation={inv} tenantId={tenantId!} />
+                ))}
+              </View>
+            ) : null}
           </View>
         )}
       </ScrollView>
@@ -288,6 +314,7 @@ export function ClientsScreen() {
         <InviteClientSheet
           visible={showInviteSheet}
           tenantId={tenantId}
+          existingClientEmails={existingClientEmails}
           onClose={() => setShowInviteSheet(false)}
         />
       ) : null}

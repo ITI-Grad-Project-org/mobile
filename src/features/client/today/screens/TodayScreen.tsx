@@ -76,6 +76,16 @@ export function TodayScreen() {
 
   const meta = PLAN_META[coach.planType] || PLAN_META.strength;
 
+  const today = useMemo(
+    () =>
+      new Date().toLocaleDateString(undefined, {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+      }),
+    [],
+  );
+
   const [done, setDone] = useState<Record<string, boolean>>({
     [exercises[0].id]: true,
   });
@@ -96,7 +106,7 @@ export function TodayScreen() {
       <View className="flex-row items-center justify-between px-1">
         <View className="flex-1 pr-4">
           <Text className="text-[13px] text-muted-foreground">
-            Friday, June 26 · with {coachFirstName}
+            {today} · with {coachFirstName}
           </Text>
           <Text className="text-[26px] font-bold tracking-tight text-foreground mt-0.5">
             Hey, {clientFirstName}{" "}

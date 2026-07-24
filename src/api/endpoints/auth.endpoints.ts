@@ -61,27 +61,16 @@ export const authEndpoints = baseApi.injectEndpoints({
       query: () => '/auth/customer/memberships',
       providesTags: ['Memberships'],
     }),
+    // Returns new tokens (the active tenant is encoded in the JWT). The caller
+    // must persist those tokens THEN reset the API cache — so we deliberately do
+    // NOT invalidate tags here, which would refetch with the stale token before
+    // the new one is saved. See ProfileScreen.handleSwitch.
     switchTenant: builder.mutation<any, SwitchTenantDto>({
       query: (body) => ({
         url: '/auth/customer/switch-tenant',
         method: 'POST',
         body,
       }),
-      invalidatesTags: [
-        'Me',
-        'Tenant',
-        'Clients',
-        'Intake',
-        'Measurements',
-        'Invitations',
-        'Reviews',
-        'JoinRequests',
-        'Exercises',
-        'Programs',
-        'Program',
-        'Calendar',
-        'WorkoutLog',
-      ],
     }),
     // Password reset — 3-step OTP flow: forgot-password -> verify-reset-otp -> reset-password
     forgotPasswordCoach: builder.mutation<any, ForgotPasswordDto>({

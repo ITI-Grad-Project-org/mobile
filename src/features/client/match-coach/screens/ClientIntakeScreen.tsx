@@ -1,5 +1,10 @@
-import { useCreateIntakeMutation } from "@/api/endpoints/intake.endpoints";
+import {
+  useCreateIntakeMutation,
+  useGetIntakeQuery,
+  useUpdateIntakeMutation,
+} from "@/api/endpoints/intake.endpoints";
 import { useConfirmOnboardingMutation } from "@/api/endpoints/onboarding.endpoints";
+import { intakeToFormState } from "../intakeMapping";
 import type {
   CreateClientIntakeDto,
   DietaryPreference,
@@ -41,6 +46,7 @@ export function ClientIntakeScreen() {
     coachName?: string;
     businessName?: string;
     avatarUrl?: string;
+    edit?: string;
   }>();
 
   const code = params.code || "";
@@ -48,6 +54,7 @@ export function ClientIntakeScreen() {
   const coachName = params.coachName || "Your Coach";
   const businessName = params.businessName || "";
   const avatarUrl = params.avatarUrl || "";
+  const isEdit = params.edit === "1";
 
   // State for Intake fields
   const [days, setDays] = useState("4");
@@ -61,10 +68,28 @@ export function ClientIntakeScreen() {
 
   const [createIntake, { isLoading: isCreatingIntake }] =
     useCreateIntakeMutation();
+  const [updateIntake, { isLoading: isUpdatingIntake }] =
+    useUpdateIntakeMutation();
   const [confirmOnboarding, { isLoading: isConfirmingOnboarding }] =
     useConfirmOnboardingMutation();
 
-  const isSubmitting = isCreatingIntake || isConfirmingOnboarding;
+  // In edit mode, load the current intake and pre-fill the form once it arrives.
+  const { data: existingIntake, isLoading: loadingIntake } = useGetIntakeQuery(
+    { tenantId: targetTenantId },
+    { skip: !isEdit || !targetTenantId }
+  );
+  const [prefilled, setPrefilled] = useState(false);
+  const intakeDto = (existingIntake as any)?.data ?? existingIntake;
+  if (isEdit && !prefilled && intakeDto) {
+    const s = intakeToFormState(intakeDto);
+    setDays(s.days);
+    setLevel(s.level);
+    setFocus(s.focus);
+    setGoalData(s.goalData);
+    setPrefilled(true);
+  }
+
+  const isSubmitting = isCreatingIntake || isUpdatingIntake || isConfirmingOnboarding;
 
   const handleSubmit = async () => {
     setSubmitErr(null);
@@ -78,8 +103,11 @@ export function ClientIntakeScreen() {
           : "intermediate"
     );
 
-    // Map goal
-    const rawGoal = (goalData.primaryGoal || goalData.goal || "strength") as string;
+    // Map goal. The chips field stores its value as an array even when
+    // single-select, so normalise to the first selected label before matching.
+    const goalSel = goalData.primaryGoal ?? goalData.goal;
+    const rawGoal =
+      (Array.isArray(goalSel) ? (goalSel[0] as string) : (goalSel as string)) || "strength";
     let mappedGoal: Goal = "strength";
     if (rawGoal.includes("fat") || rawGoal.includes("Lose")) mappedGoal = "fat_loss";
     else if (rawGoal.includes("muscle") || rawGoal.includes("Build")) mappedGoal = "muscle_gain";
@@ -105,6 +133,27 @@ export function ClientIntakeScreen() {
     };
 
     try {
+      // Edit mode: upsert the intake for this tenant and return — no onboarding,
+      // no tenant switch, no navigation to the dashboard. PATCH 404s when no
+      // intake exists yet for this coach, so fall back to POST (create).
+      if (isEdit) {
+        try {
+          await updateIntake({ body: intakeBody, tenantId: targetTenantId }).unwrap();
+        } catch (err: any) {
+          const status = err?.status ?? err?.originalStatus;
+          const msg = String(err?.data?.message || err?.error || "");
+          const notFound = status === 404 || /not\s*found/i.test(msg);
+          if (notFound) {
+            await createIntake({ body: intakeBody, tenantId: targetTenantId }).unwrap();
+          } else {
+            throw err;
+          }
+        }
+        sfx.success();
+        router.back();
+        return;
+      }
+
       // 1. Confirm onboarding code with backend if code was provided
       if (code) {
         await confirmOnboarding({
@@ -156,6 +205,14 @@ export function ClientIntakeScreen() {
   const firstName = coachName.split(" ")[0];
   const ready = Boolean(days && level);
 
+  if (isEdit && loadingIntake && !prefilled) {
+    return (
+      <SafeAreaView className="flex-1 items-center justify-center bg-background">
+        <ActivityIndicator size="large" />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
       <View className="flex-row items-center justify-between px-5 pb-3 pt-2">
@@ -167,7 +224,7 @@ export function ClientIntakeScreen() {
           <Icon name="chevron-left" size={18} color="--foreground" />
         </GlassButton>
         <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-          Client Intake
+          {isEdit ? "Edit Intake" : "Client Intake"}
         </Text>
       </View>
 
@@ -195,7 +252,7 @@ export function ClientIntakeScreen() {
 
           <View className="flex-1 min-w-0">
             <Text className="text-[11px] font-semibold uppercase tracking-wider text-mint-ink opacity-70">
-              You&apos;re joining
+              {isEdit ? "Your coach" : "You're joining"}
             </Text>
             <Text
               className="text-[18px] font-bold text-mint-ink truncate"
@@ -212,10 +269,12 @@ export function ClientIntakeScreen() {
         </Tone>
 
         <Text className="mt-7 text-[26px] font-bold text-foreground">
-          A few quick questions
+          {isEdit ? "Update your intake" : "A few quick questions"}
         </Text>
         <Text className="mt-1 text-[14px] text-muted-foreground">
-          So {firstName} can build the right plan for you.
+          {isEdit
+            ? `Keep ${firstName} up to date with your goals and preferences.`
+            : `So ${firstName} can build the right plan for you.`}
         </Text>
 
         {submitErr ? (
@@ -299,7 +358,7 @@ export function ClientIntakeScreen() {
             <ActivityIndicator color="#ffffff" size="small" />
           ) : (
             <Text className="text-[15px] font-semibold text-primary-foreground">
-              Submit Intake & Join
+              {isEdit ? "Save changes" : "Submit Intake & Join"}
             </Text>
           )}
         </Pressable>

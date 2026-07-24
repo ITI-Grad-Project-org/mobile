@@ -1,14 +1,16 @@
 import { router } from "expo-router";
-import React from "react";
+import React, { useState } from "react";
 import { ActivityIndicator } from "react-native";
 
 import { useListMeasurementsQuery } from "@/api/endpoints/measurements.endpoints";
+import type { Measurement } from "@/api/types";
 import { Card } from "@/shared/ui/Card";
 import { Icon } from "@/shared/ui/Icon";
 import { SectionTitle } from "@/shared/ui/SectionTitle";
 import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import { Image } from "@/tw/image";
 import { Pressable, ScrollView, Text, useCSSVariable, View } from "@/tw";
+import { MeasurementActionsSheet } from "../components/MeasurementActionsSheet";
 import WeightChart from "../components/WeightChart";
 import {
   deriveMeasurementStats,
@@ -98,6 +100,7 @@ function EmptyState() {
 export function ProgressScreen() {
   const { tenantId } = useActiveTenant();
   const primaryColor = (useCSSVariable("--primary") as string) || "#e5673a";
+  const [selected, setSelected] = useState<Measurement | null>(null);
 
   const { data, isLoading, isError, refetch } = useListMeasurementsQuery(
     { tenantId: tenantId ?? "", limit: 100 },
@@ -261,9 +264,10 @@ export function ProgressScreen() {
                 .reverse()
                 .slice(0, 8)
                 .map((m) => (
-                  <View
+                  <Pressable
                     key={m.id}
-                    className="flex-row items-center gap-3 rounded-2xl p-3"
+                    onPress={() => setSelected(m)}
+                    className="flex-row items-center gap-3 rounded-2xl p-3 active:opacity-70"
                   >
                     <View className="h-10 w-10 items-center justify-center rounded-xl bg-mint">
                       <Text className="text-[11px] font-bold text-mint-ink">
@@ -285,12 +289,15 @@ export function ProgressScreen() {
                           .join(" · ") || "Logged"}
                       </Text>
                     </View>
-                  </View>
+                    <Icon name="chevron-right" size={16} color="--muted-foreground" />
+                  </Pressable>
                 ))}
             </Card>
           </View>
         </>
       )}
+
+      <MeasurementActionsSheet measurement={selected} onClose={() => setSelected(null)} />
     </ScrollView>
   );
 }

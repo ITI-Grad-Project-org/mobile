@@ -21,7 +21,7 @@ import { GlassButton } from "@/shared/ui/GlassButton";
 import { Icon, type IconName } from "@/shared/ui/Icon";
 import { useAppDispatch, useAppSelector } from "@/store";
 import { clearActiveTenant, setActiveTenant } from "@/store/activeTenantSlice";
-import { clearAuth, clearTokens } from "@/store/authSlice";
+import { clearAuth, clearTokens, saveTokens } from "@/store/authSlice";
 import { clearMemberships, membershipsSelectors } from "@/store/membershipsSlice";
 import { Pressable, ScrollView, Text, View } from "@/tw";
 import { Image } from "@/tw/image";
@@ -30,6 +30,7 @@ import { useState } from "react";
 import { ActivityIndicator } from "react-native";
 import * as SecureStore from "expo-secure-store";
 
+import { CoachActionsSheet } from "../components/CoachActionsSheet";
 import { DeleteAccountSheet } from "../components/DeleteAccountSheet";
 
 type StreakAccent = "green" | "orange";
@@ -428,14 +429,26 @@ function ClientProfile() {
   );
   const [switchTenant] = useSwitchTenantMutation();
   const [switchingId, setSwitchingId] = useState<string | null>(null);
+  const [sheetMembership, setSheetMembership] = useState<ReduxMembership | null>(null);
 
   const handleSwitch = async (tenantId: string) => {
     if (tenantId === activeTenantId || switchingId) return;
     setSwitchingId(tenantId);
     try {
-      await switchTenant({ tenantId }).unwrap();
+      // switch-tenant is an auth endpoint: it returns a NEW token whose JWT
+      // encodes the newly-active tenant. We MUST persist those tokens, otherwise
+      // every later request still carries the old tenant and the switch only
+      // "takes" after a re-login.
+      const res: any = await switchTenant({ tenantId }).unwrap();
+      if (res?.accessToken && res?.refreshToken) {
+        await saveTokens(res.accessToken, res.refreshToken, "customer");
+      }
       dispatch(setActiveTenant(tenantId));
       await SecureStore.setItemAsync("activeTenantId", tenantId);
+      // New creds are in place; wipe the cache so every mounted query refetches
+      // under the new tenant. (Doing this here — not via the mutation's
+      // invalidatesTags — avoids refetching with the stale token.)
+      dispatch(baseApi.util.resetApiState());
     } catch (e) {
       console.warn("Switch tenant failed:", e);
     } finally {
@@ -585,7 +598,7 @@ function ClientProfile() {
                   active={m.tenantId === activeTenantId}
                   switching={switchingId === m.tenantId}
                   disabled={Boolean(switchingId)}
-                  onPress={() => handleSwitch(m.tenantId)}
+                  onPress={() => setSheetMembership(m)}
                 />
               ))
             )}
@@ -655,6 +668,14 @@ function ClientProfile() {
           </View>
           <Icon name="chevron-right" size={16} color="--primary-foreground" />
         </Pressable>
+
+        <CoachActionsSheet
+          membership={sheetMembership}
+          isActive={sheetMembership?.tenantId === activeTenantId}
+          switching={switchingId === sheetMembership?.tenantId}
+          onSwitch={handleSwitch}
+          onClose={() => setSheetMembership(null)}
+        />
 
         {/* Settings rows */}
         <Card className="p-2" glass>

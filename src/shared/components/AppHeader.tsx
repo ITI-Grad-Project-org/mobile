@@ -1,4 +1,8 @@
-import { CLIENT_INVITATIONS_READY, useListMyInvitationsQuery } from "@/api/endpoints/invitations.endpoints";
+import {
+  CLIENT_INVITATIONS_READY,
+  useListInvitationsQuery,
+  useListMyInvitationsQuery,
+} from "@/api/endpoints/invitations.endpoints";
 import { useListTenantJoinRequestsQuery } from "@/api/endpoints/joinRequests.endpoints";
 import { useRole } from "@/lib/role";
 import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
@@ -20,19 +24,25 @@ export function AppHeader() {
   const isCoach = segments.includes("(coach)");
 
   // Show the badge only when there's something new for the active persona:
-  // a coach's pending join requests, or a client's pending invitations.
+  // a coach's pending join requests or pending sent invitations, or a client's
+  // pending invitations (dormant until the backend serves that route).
   const { tenantId } = useActiveTenant();
   const { data: joinRequests } = useListTenantJoinRequestsQuery(
     { tenantId: tenantId ?? "" },
     { skip: !isCoach || !tenantId }
   );
-  const { data: invitations } = useListMyInvitationsQuery(undefined, {
+  const { data: coachInvitations } = useListInvitationsQuery(
+    { tenantId: tenantId ?? "" },
+    { skip: !isCoach || !tenantId }
+  );
+  const { data: clientInvitations } = useListMyInvitationsQuery(undefined, {
     skip: isCoach || !CLIENT_INVITATIONS_READY,
   });
 
   const hasNotifications = isCoach
-    ? (joinRequests ?? []).some((r) => !r.status || r.status === "pending")
-    : (invitations ?? []).some((i) => !i.status || i.status === "pending");
+    ? (joinRequests ?? []).some((r) => !r.status || r.status === "pending") ||
+      (coachInvitations ?? []).some((i) => String(i.status ?? "pending").toLowerCase() === "pending")
+    : (clientInvitations ?? []).some((i) => !i.status || i.status === "pending");
 
   const isDark = colorScheme === "dark";
 

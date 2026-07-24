@@ -65,30 +65,44 @@ function AppContent() {
     skip: !isAuthenticated || persona !== 'customer',
   });
 
-  // Set memberships and active tenant for coach
+  // Set memberships and active tenant for coach.
+  // Gated on `authRestored` so the SecureStore-persisted tenant (applied in
+  // restoreSession) always wins — otherwise this could overwrite it in a race.
   useEffect(() => {
+    if (!authRestored) return;
     if (coachMe) {
       const tenantId = coachMe.currentTenant?.id || coachMe.tenant?.id;
       if (tenantId) {
-        dispatch(setActiveTenant(tenantId));
-        SecureStore.setItemAsync('activeTenantId', tenantId);
-        
         dispatch(setMemberships([{
           tenantId,
           tenantName: coachMe.currentTenant?.name || coachMe.businessName || 'My Gym',
           role: 'owner',
           status: 'active'
         }]));
+        if (activeTenantId !== tenantId) {
+          dispatch(setActiveTenant(tenantId));
+          SecureStore.setItemAsync('activeTenantId', tenantId);
+        }
       }
     }
-  }, [coachMe, dispatch]);
+  }, [authRestored, coachMe, activeTenantId, dispatch]);
 
-  // Set memberships and active tenant for customer
+  // Set memberships and active tenant for customer.
+  // Gated on `authRestored` so the persisted tenant is applied first; we only
+  // auto-pick a tenant when there is no valid active one. This keeps the same
+  // tenant across logout/login, so tenant-scoped data (e.g. measurements) is
+  // read under the tenant it was saved with instead of a racy default.
   useEffect(() => {
+    if (!authRestored) return;
     if (memberships && memberships.length > 0) {
       dispatch(setMemberships(memberships));
-      
-      if (!activeTenantId) {
+
+      const tenantIds = memberships
+        .map((m: any) => m?.tenantId || m?.tenant?.id || m?.id)
+        .filter(Boolean);
+      const activeIsValid = activeTenantId && tenantIds.includes(activeTenantId);
+
+      if (!activeIsValid) {
         const activeM: any = memberships.find((m: any) => m.status === 'active') || memberships[0];
         const tenantId = activeM?.tenantId || activeM?.tenant?.id || activeM?.id;
         if (tenantId) {
@@ -97,7 +111,7 @@ function AppContent() {
         }
       }
     }
-  }, [memberships, activeTenantId, dispatch]);
+  }, [authRestored, memberships, activeTenantId, dispatch]);
 
   const handleRootLayout = useCallback(() => {
     if (authRestored && !loadingCoach && !loadingMemberships) {

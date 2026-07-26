@@ -32,7 +32,6 @@ import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform } from "react-native";
 
 import { CoachCard } from "../components/CoachCard";
-import { CoachSheet } from "../components/CoachSheet";
 import { JoinRequestModal } from "../components/JoinRequestModal";
 import { WithdrawRequestModal } from "../components/WithdrawRequestModal";
 import { GOAL_STEPS } from "../config";
@@ -76,7 +75,6 @@ export function MatchCoachScreen() {
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<string | null>(null);
   const [requested, setRequested] = useState<Record<string, boolean>>({});
-  const [profile, setProfile] = useState<any | null>(null);
   const [sentTo, setSentTo] = useState<any | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [requestingCoach, setRequestingCoach] = useState<any | null>(null);
@@ -107,8 +105,13 @@ export function MatchCoachScreen() {
     if (!coach) return;
     const tenantId = coach.tenantId || coach.id;
     const reqId = joinRequestMap.get(tenantId) || tenantId;
-    setProfile(null);
     setCancelingCoach({ coach, requestId: reqId });
+  };
+
+  const openCoachProfile = (coach: any) => {
+    const tenantId = coach?.tenantId || coach?.id;
+    if (!tenantId) return;
+    router.push({ pathname: "/coach/[tenantId]", params: { tenantId } });
   };
 
   // Live Coach Directory API query
@@ -208,7 +211,6 @@ export function MatchCoachScreen() {
   };
 
   const openRequestModal = (coach: any) => {
-    setProfile(null);
     setRequestingCoach(coach);
   };
 
@@ -589,7 +591,7 @@ export function MatchCoachScreen() {
                       key={id}
                       coach={c}
                       requested={isReq}
-                      onOpen={() => setProfile(c)}
+                      onOpen={() => openCoachProfile(c)}
                       onRequest={() => openRequestModal(c)}
                       onCancelRequest={() => openCancelModal(c)}
                     />
@@ -601,17 +603,6 @@ export function MatchCoachScreen() {
         </ScrollView>
 
       </KeyboardAvoidingView>
-
-      {/* Coach Detail Bottom Sheet */}
-      {profile ? (
-        <CoachSheet
-          coach={profile}
-          requested={isCoachRequested(profile)}
-          onClose={() => setProfile(null)}
-          onRequest={() => openRequestModal(profile)}
-          onCancelRequest={() => openCancelModal(profile)}
-        />
-      ) : null}
 
       {/* Join Request Custom Message Modal */}
       {requestingCoach ? (

@@ -61,6 +61,8 @@ export type IconName =
   | "user-check"
   | "users"
   | "mail"
+  | "star"
+  | "star-outline"
   | "trash";
 
 interface IconProps {
@@ -124,6 +126,8 @@ const SYMBOLS: Record<IconName, { ios: string; android: string }> = {
   "user-check": { ios: "person.badge.checkmark", android: "person_add_check" },
   "users": { ios: "person.2.fill", android: "group" },
   "mail": { ios: "envelope.fill", android: "mail" },
+  "star": { ios: "star.fill", android: "star" },
+  "star-outline": { ios: "star", android: "star_outline" },
   "trash": { ios: "trash.fill", android: "delete" },
 };
 

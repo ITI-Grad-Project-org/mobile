@@ -136,6 +136,8 @@ function AppContent() {
         <Stack.Screen name="(setup)" />
         <Stack.Screen name="(coach)" />
         <Stack.Screen name="(client)" />
+        <Stack.Screen name="my-profile" />
+        <Stack.Screen name="coach/[tenantId]" />
       </Stack>
       {!splashDone && (
         <AnimatedSplash onFinish={() => setSplashDone(true)} />

@@ -8,29 +8,28 @@ import {
 import {
   useLogoutCoachMutation,
   useLogoutCustomerMutation,
-  useSwitchTenantMutation,
 } from "@/api/endpoints/auth.endpoints";
 import { useGetDirectoryCoachQuery } from "@/api/endpoints/directory.endpoints";
 import { MeasurementsSummaryCard } from "@/features/client/progress";
 import type { ReduxMembership } from "@/store/membershipsSlice";
+import { resolveCoachFields } from "@/lib/coach";
 import { useActiveCoach } from "@/lib/role";
 import { cn } from "@/lib/utils";
 import { resetProfile } from "@/shared/hooks/useProfileSetup";
+import { useSwitchCoach } from "@/shared/hooks/useSwitchCoach";
 import { Card } from "@/shared/ui/Card";
 import { GlassButton } from "@/shared/ui/GlassButton";
 import { Icon, type IconName } from "@/shared/ui/Icon";
 import { useAppDispatch, useAppSelector } from "@/store";
-import { clearActiveTenant, setActiveTenant } from "@/store/activeTenantSlice";
-import { clearAuth, clearTokens, saveTokens } from "@/store/authSlice";
+import { clearActiveTenant } from "@/store/activeTenantSlice";
+import { clearAuth, clearTokens } from "@/store/authSlice";
 import { clearMemberships, membershipsSelectors } from "@/store/membershipsSlice";
-import { Pressable, ScrollView, Text, View } from "@/tw";
+import { Pressable, SafeAreaView, ScrollView, Text, View } from "@/tw";
 import { Image } from "@/tw/image";
 import { useRouter, useSegments } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator } from "react-native";
-import * as SecureStore from "expo-secure-store";
 
-import { CoachActionsSheet } from "../components/CoachActionsSheet";
 import { DeleteAccountSheet } from "../components/DeleteAccountSheet";
 
 type StreakAccent = "green" | "orange";
@@ -327,34 +326,24 @@ function CoachSwitchRow({
   switching,
   disabled,
   onPress,
+  onSwitch,
 }: {
   membership: ReduxMembership;
   active: boolean;
   switching: boolean;
   disabled: boolean;
+  /** Open the coach's profile screen. */
   onPress: () => void;
+  /** Make this coach the active one, without leaving the profile. */
+  onSwitch: () => void;
 }) {
   const { data: coach } = useGetDirectoryCoachQuery(membership.tenantId);
-  const cObj = coach?.coach || coach;
+  const f = resolveCoachFields(coach);
 
-  const firstName = cObj?.firstName || coach?.firstName;
-  const lastName = cObj?.lastName || coach?.lastName;
-  const fullName = `${firstName || ""} ${lastName || ""}`.trim();
-  const name = fullName || membership.tenantName;
-
-  const avatarUrl =
-    cObj?.avatarUrl ||
-    coach?.avatarUrl ||
-    coach?.logoUrl ||
-    membership.brand?.logoUrl;
-
-  const specialties: string[] = cObj?.specialties?.length
-    ? cObj.specialties
-    : coach?.specialties?.length
-      ? coach.specialties
-      : [];
+  const name = f.name || membership.tenantName;
+  const avatarUrl = f.avatarUrl || membership.brand?.logoUrl;
   const subtitle =
-    specialties.length > 0 ? specialties.slice(0, 2).join(" · ") : membership.status;
+    f.specialties.length > 0 ? f.specialties.slice(0, 2).join(" · ") : membership.status;
 
   return (
     <Pressable
@@ -399,8 +388,17 @@ function CoachSwitchRow({
           <Icon name="check" size={16} color="--primary-foreground" />
         </View>
       ) : (
-        <Text className="text-primary text-sm font-semibold">Switch</Text>
+        <Pressable
+          onPress={onSwitch}
+          disabled={disabled}
+          hitSlop={8}
+          accessibilityLabel={`Switch to ${name}`}
+          className="rounded-full bg-secondary px-3 py-1.5 active:opacity-70"
+        >
+          <Text className="text-primary text-sm font-semibold">Switch</Text>
+        </Pressable>
       )}
+      <Icon name="chevron-right" size={14} color="--muted-foreground" />
     </Pressable>
   );
 }
@@ -427,46 +425,25 @@ function ClientProfile() {
   const coachMemberships = memberships.filter(
     (m) => m.role === "client" && m.status === "active"
   );
-  const [switchTenant] = useSwitchTenantMutation();
-  const [switchingId, setSwitchingId] = useState<string | null>(null);
-  const [sheetMembership, setSheetMembership] = useState<ReduxMembership | null>(null);
+  const { switchCoach, switchingId } = useSwitchCoach();
 
-  const handleSwitch = async (tenantId: string) => {
-    if (tenantId === activeTenantId || switchingId) return;
-    setSwitchingId(tenantId);
-    try {
-      // switch-tenant is an auth endpoint: it returns a NEW token whose JWT
-      // encodes the newly-active tenant. We MUST persist those tokens, otherwise
-      // every later request still carries the old tenant and the switch only
-      // "takes" after a re-login.
-      const res: any = await switchTenant({ tenantId }).unwrap();
-      if (res?.accessToken && res?.refreshToken) {
-        await saveTokens(res.accessToken, res.refreshToken, "customer");
-      }
-      dispatch(setActiveTenant(tenantId));
-      await SecureStore.setItemAsync("activeTenantId", tenantId);
-      // New creds are in place; wipe the cache so every mounted query refetches
-      // under the new tenant. (Doing this here — not via the mutation's
-      // invalidatesTags — avoids refetching with the stale token.)
-      dispatch(baseApi.util.resetApiState());
-    } catch (e) {
-      console.warn("Switch tenant failed:", e);
-    } finally {
-      setSwitchingId(null);
-    }
+  const handleSwitch = (tenantId: string) => {
+    switchCoach(tenantId).catch((e) => console.warn("Switch tenant failed:", e));
+  };
+
+  // This screen is a plain push, so everything below is a plain push too — the
+  // back button walks the stack back here.
+  const openCoach = (tenantId: string) => {
+    router.push({ pathname: "/coach/[tenantId]", params: { tenantId } });
   };
 
   const openEdit = () => {
-    // Dismiss this profile modal first, otherwise the pushed edit screen renders
-    // behind it (it's a root-stack route under the modal).
-    if (router.canDismiss()) router.dismiss();
     router.push({
       pathname: "/(setup)/client-profile",
       params: { edit: "1" },
     });
   };
   const openAddCoach = () => {
-    if (router.canDismiss()) router.dismiss();
     router.push("/(setup)/match-coach");
   };
 
@@ -515,17 +492,20 @@ function ClientProfile() {
 
   return (
     <View className="flex-1 bg-background">
-      {/* Modal header with close control */}
-      <View className="px-4 pt-3 pb-3 flex-row items-center justify-between border-b border-border">
-        <Text className="text-foreground text-xl font-bold">Profile</Text>
-        <GlassButton
-          onPress={() => router.back()}
-          className="h-9 w-9 rounded-full bg-secondary items-center justify-center active:opacity-70"
-          accessibilityLabel="Close profile"
-        >
-          <Icon name="x" size={18} color="--muted-foreground" />
-        </GlassButton>
-      </View>
+      {/* Full-screen push: the app header is hidden for this route, so this
+          header owns the top safe area. */}
+      <SafeAreaView edges={["top"]} className="bg-background">
+        <View className="px-3 pt-1 pb-3 flex-row items-center gap-2 border-b border-border">
+          <GlassButton
+            onPress={() => router.back()}
+            className="h-9 w-9 rounded-full items-center justify-center active:opacity-70"
+            accessibilityLabel="Go back"
+          >
+            <Icon name="chevron-left" size={18} color="--foreground" />
+          </GlassButton>
+          <Text className="text-foreground text-xl font-bold">Profile</Text>
+        </View>
+      </SafeAreaView>
 
       <ScrollView
         className="flex-1"
@@ -579,10 +559,10 @@ function ClientProfile() {
         <Card glass>
           <View className="mb-3">
             <Text className="text-foreground text-lg font-bold">
-              Switch coach
+              My coaches
             </Text>
             <Text className="text-muted-foreground text-[13px]">
-              Tap to switch — your plan updates instantly.
+              Tap a coach to view their profile, or switch instantly.
             </Text>
           </View>
           <View className="gap-y-2">
@@ -598,7 +578,8 @@ function ClientProfile() {
                   active={m.tenantId === activeTenantId}
                   switching={switchingId === m.tenantId}
                   disabled={Boolean(switchingId)}
-                  onPress={() => setSheetMembership(m)}
+                  onPress={() => openCoach(m.tenantId)}
+                  onSwitch={() => handleSwitch(m.tenantId)}
                 />
               ))
             )}
@@ -668,14 +649,6 @@ function ClientProfile() {
           </View>
           <Icon name="chevron-right" size={16} color="--primary-foreground" />
         </Pressable>
-
-        <CoachActionsSheet
-          membership={sheetMembership}
-          isActive={sheetMembership?.tenantId === activeTenantId}
-          switching={switchingId === sheetMembership?.tenantId}
-          onSwitch={handleSwitch}
-          onClose={() => setSheetMembership(null)}
-        />
 
         {/* Settings rows */}
         <Card className="p-2" glass>

@@ -33,7 +33,8 @@ export function CoachCard({
   const coverUrl = cObj?.coverUrl || coach?.coverUrl || coach?.cover || DEFAULT_COVER;
   const location = cObj?.location || coach?.location || "Online";
   const yoe = cObj?.yearsExperience ?? coach?.yearsExperience ?? cObj?.yoe ?? coach?.yoe;
-  const rating = cObj?.rating ?? coach?.rating ?? 4.9;
+  const rawRating = cObj?.rating ?? coach?.rating;
+  const rating = typeof rawRating === "number" ? rawRating : null;
   const bio = cObj?.bio || coach?.bio || "Certified coach offering personalized programs on Uply.";
   const specialties: string[] =
     (cObj?.specialties?.length ? cObj.specialties : coach?.specialties?.length ? coach.specialties : null) || [
@@ -52,10 +53,12 @@ export function CoachCard({
             source={typeof coverUrl === "string" ? { uri: coverUrl } : coverUrl}
             className="h-full w-full object-cover"
           />
-          <View className="absolute right-3 top-3 flex-row items-center gap-1 rounded-full bg-black/55 px-2 py-1">
-            <Icon name="sparkles" size={11} color="#ffffff" />
-            <Text className="text-[11px] font-semibold text-white">{rating}</Text>
-          </View>
+          {rating != null ? (
+            <View className="absolute right-3 top-3 flex-row items-center gap-1 rounded-full bg-black/55 px-2 py-1">
+              <Icon name="star" size={11} color="#ffffff" />
+              <Text className="text-[11px] font-semibold text-white">{rating.toFixed(1)}</Text>
+            </View>
+          ) : null}
         </View>
         <View className="flex-row items-start gap-3 px-4 pb-3 pt-4">
           {avatarUrl ? (
@@ -117,10 +120,11 @@ export function CoachCard({
             isRequested ? "bg-success/15 border border-success/30" : "bg-primary shadow-soft"
           )}
         >
+          {/* Icon colors must be a CSS var NAME (`--x`); `var(--x)` isn't resolved. */}
           <Icon
-            name={isRequested ? "check" : "send"}
+            name={isRequested ? "check" : "user-plus"}
             size={13}
-            color={isRequested ? "var(--success)" : "var(--primary-foreground)"}
+            color={isRequested ? "--success" : "--primary-foreground"}
           />
           <Text
             className={cn(

@@ -4,6 +4,7 @@ import { Pressable, Text, TextInput, View } from "@/tw";
 import { Image } from "@/tw/image";
 import { useState } from "react";
 import { ActivityIndicator, Modal, Platform } from "react-native";
+import { GlassButton } from "@/shared/ui/GlassButton";
 
 interface JoinRequestModalProps {
   coach: any | null;
@@ -68,12 +69,12 @@ export function JoinRequestModal({
             Add a personal message to {coachName.split(" ")[0]}
           </Text>
         </View>
-        <Pressable
+        <GlassButton
           onPress={handleClose}
           className="h-9 w-9 justify-center items-center rounded-full bg-secondary active:opacity-75"
         >
           <Icon name="x" size={16} color="--muted-foreground" />
-        </Pressable>
+        </GlassButton>
       </View>
 
       {/* Coach Info Preview */}

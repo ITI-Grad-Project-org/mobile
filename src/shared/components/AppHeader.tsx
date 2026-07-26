@@ -51,7 +51,7 @@ export function AppHeader() {
   };
 
   const handleProfilePress = () => {
-    router.navigate(isCoach ? "/(coach)/profile" : "/(client)/profile");
+    router.navigate(isCoach ? "/(coach)/profile" : "/my-profile");
   };
 
   const avatar = isCoach ? coachProfile.avatar : clientProfile.avatar;

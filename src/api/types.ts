@@ -316,6 +316,25 @@ export interface UpdateReviewDto {
   rating?: number;
   comment?: string;
 }
+// Response shape. The backend doesn't document it, so every field beyond
+// rating/comment is optional and callers must render defensively.
+export interface Review {
+  id?: string;
+  rating: number;
+  comment?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  clientName?: string;
+  clientAvatarUrl?: string;
+  client?: { firstName?: string; lastName?: string; avatarUrl?: string };
+}
+export interface ReviewSummary {
+  averageRating?: number;
+  totalReviews?: number;
+  // seen in some payloads as `average` / `count`
+  average?: number;
+  count?: number;
+}
 
 // ---------------------------------------------------------------------------
 // Exercise library

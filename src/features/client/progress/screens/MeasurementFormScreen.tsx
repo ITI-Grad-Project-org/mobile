@@ -113,6 +113,7 @@ export function MeasurementFormScreen() {
     <SignupFlow
       title={isEdit ? "Edit measurement" : "New measurement"}
       steps={MEASUREMENT_STEPS}
+      uploadPersona="client"
       showWelcome={false}
       initialData={initialData}
       onClose={() => router.back()}

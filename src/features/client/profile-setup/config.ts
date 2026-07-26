@@ -9,7 +9,13 @@ export const CLIENT_STEPS: Step[] = [
       "Profile photo + a couple of basics. All optional — you can edit anytime.",
     fields: [
       { key: "avatar", label: "Profile photo", type: "image" },
-      { key: "phone", label: "Phone", type: "tel", placeholder: "+1 555 0123" },
+      {
+        key: "phone",
+        label: "Phone",
+        type: "tel",
+        placeholder: "+201000354540",
+        helper: "Include your country code, e.g. +20 for Egypt.",
+      },
       { key: "birthdate", label: "Birthdate", type: "date" },
       {
         key: "gender",
@@ -24,8 +30,27 @@ export const CLIENT_STEPS: Step[] = [
     title: "Body basics",
     subtitle: "Helps your future coach personalize your plan.",
     fields: [
-      { key: "weight", label: "Weight", type: "number", placeholder: "75", unit: "kg" },
-      { key: "height", label: "Height", type: "number", placeholder: "178", unit: "cm" },
+      {
+        key: "weight",
+        label: "Weight",
+        type: "number",
+        placeholder: "75",
+        unit: "kg",
+        decimal: true,
+        min: 20,
+        max: 400,
+        maxLength: 6,
+      },
+      {
+        key: "height",
+        label: "Height",
+        type: "number",
+        placeholder: "178",
+        unit: "cm",
+        min: 80,
+        max: 260,
+        maxLength: 3,
+      },
     ],
   },
 ];

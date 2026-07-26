@@ -58,6 +58,7 @@ export function ClientProfileScreen() {
       title={isEdit ? "Edit profile" : "Client profile"}
       steps={CLIENT_STEPS}
       initialData={initialData}
+      uploadPersona="client"
       showWelcome={!isEdit}
       onClose={
         isEdit

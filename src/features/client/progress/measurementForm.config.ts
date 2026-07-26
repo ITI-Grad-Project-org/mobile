@@ -1,4 +1,19 @@
-import type { Step } from "@/features/shared/setup";
+import type { Field, Step } from "@/features/shared/setup";
+
+/** A tape measurement in cm — decimals allowed, clamped to a plausible range. */
+function cm(key: string, label: string): Field {
+  return {
+    key,
+    label,
+    type: "number",
+    unit: "cm",
+    placeholder: "0",
+    decimal: true,
+    min: 1,
+    max: 300,
+    maxLength: 5,
+  };
+}
 
 // Body-measurement check-in. Fields map 1:1 onto `CreateMeasurementDto`
 // (numeric fields carry a trailing unit; `photos` is the multi-image field).
@@ -8,19 +23,39 @@ export const MEASUREMENT_STEPS: Step[] = [
     subtitle: "Log today's numbers. Everything is optional — fill what you have.",
     fields: [
       { key: "measuredAt", label: "Date", type: "date" },
-      { key: "weightKg", label: "Weight", type: "number", unit: "kg", placeholder: "0.0" },
-      { key: "bodyFatPct", label: "Body fat", type: "number", unit: "%", placeholder: "0.0" },
+      {
+        key: "weightKg",
+        label: "Weight",
+        type: "number",
+        unit: "kg",
+        placeholder: "0.0",
+        decimal: true,
+        min: 20,
+        max: 400,
+        maxLength: 6,
+      },
+      {
+        key: "bodyFatPct",
+        label: "Body fat",
+        type: "number",
+        unit: "%",
+        placeholder: "0.0",
+        decimal: true,
+        min: 1,
+        max: 70,
+        maxLength: 4,
+      },
     ],
   },
   {
     title: "Measurements",
     subtitle: "Tape measurements, in centimetres.",
     fields: [
-      { key: "chestCm", label: "Chest", type: "number", unit: "cm", placeholder: "0" },
-      { key: "waistCm", label: "Waist", type: "number", unit: "cm", placeholder: "0" },
-      { key: "hipsCm", label: "Hips", type: "number", unit: "cm", placeholder: "0" },
-      { key: "armCm", label: "Arm", type: "number", unit: "cm", placeholder: "0" },
-      { key: "thighCm", label: "Thigh", type: "number", unit: "cm", placeholder: "0" },
+      cm("chestCm", "Chest"),
+      cm("waistCm", "Waist"),
+      cm("hipsCm", "Hips"),
+      cm("armCm", "Arm"),
+      cm("thighCm", "Thigh"),
     ],
   },
   {

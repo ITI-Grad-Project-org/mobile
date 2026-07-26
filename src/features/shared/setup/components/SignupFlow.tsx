@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Platform } from "react-native";
+import {
+  ActivityIndicator,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
 import Reanimated, {
   useAnimatedStyle,
   useSharedValue,
@@ -10,6 +15,7 @@ import { GlassButton } from "@/shared/ui/GlassButton";
 import { Icon } from "@/shared/ui/Icon";
 import { Pressable, SafeAreaView, ScrollView, Text, View } from "@/tw";
 import type { ProfileData, Step } from "../types";
+import { UploadPersonaProvider, type UploadPersona } from "../uploadContext";
 import { FieldRenderer } from "./FieldRenderer";
 
 const AnimatedView = Reanimated.createAnimatedComponent(View);
@@ -29,7 +35,6 @@ function ProgressBar({ pct }: { pct: number }) {
 }
 
 export type SignupFlowProps = {
-  /** Uppercase eyebrow above the step counter (e.g. "Client profile"). */
   title: string;
   steps: Step[];
   onClose: () => void;
@@ -39,6 +44,8 @@ export type SignupFlowProps = {
   initialData?: ProfileData;
   welcomeTitle?: string;
   welcomeBody?: string;
+  /** Which upload bucket the flow's image fields write to. */
+  uploadPersona?: UploadPersona;
 };
 
 export function SignupFlow({
@@ -51,6 +58,7 @@ export function SignupFlow({
   initialData,
   welcomeTitle = "You're in.",
   welcomeBody = "Profile saved. Let's get you matched with the right coach.",
+  uploadPersona = "client",
 }: SignupFlowProps) {
   const [idx, setIdx] = useState(0);
   const [done, setDone] = useState(false);
@@ -64,10 +72,9 @@ export function SignupFlow({
 
   const set = (k: string, v: unknown) => setData((d) => ({ ...d, [k]: v }));
 
-  // Tapping Finish: run the (possibly async) save. On success advance to the
-  // welcome screen (or straight to onDone); on failure stay put and show why.
   const finish = async () => {
     if (saving) return;
+    Keyboard.dismiss();
     setSaveError(null);
     setSaving(true);
     try {
@@ -111,9 +118,19 @@ export function SignupFlow({
   }
   if (done) return null;
 
-  const goBack = () => (idx === 0 ? onClose() : setIdx((i) => i - 1));
+  // Leaving a step always closes the keyboard first, so the next step's fields
+  // are never hidden behind a keyboard opened for the previous one.
+  const goPrev = () => {
+    Keyboard.dismiss();
+    setIdx((i) => i - 1);
+  };
+  const goBack = () => (idx === 0 ? onClose() : goPrev());
   // On the last step, Finish runs the save; earlier steps just advance.
-  const goNext = () => (isLast ? finish() : setIdx((i) => i + 1));
+  const goNext = () => {
+    if (isLast) return finish();
+    Keyboard.dismiss();
+    setIdx((i) => i + 1);
+  };
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
@@ -153,6 +170,7 @@ export function SignupFlow({
           className="flex-1"
           contentContainerClassName="px-5 pb-8 pt-6 grow"
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
           showsVerticalScrollIndicator={false}
         >
           <View key={idx} className="animate-fade-up gap-6">
@@ -167,16 +185,18 @@ export function SignupFlow({
               ) : null}
             </View>
 
-            <View className="gap-5">
-              {step.fields.map((f) => (
-                <FieldRenderer
-                  key={f.key}
-                  field={f}
-                  value={data[f.key]}
-                  onChange={(v) => set(f.key, v)}
-                />
-              ))}
-            </View>
+            <UploadPersonaProvider persona={uploadPersona}>
+              <View className="gap-5">
+                {step.fields.map((f) => (
+                  <FieldRenderer
+                    key={f.key}
+                    field={f}
+                    value={data[f.key]}
+                    onChange={(v) => set(f.key, v)}
+                  />
+                ))}
+              </View>
+            </UploadPersonaProvider>
           </View>
         </ScrollView>
 
@@ -190,7 +210,7 @@ export function SignupFlow({
           <View className="flex-row gap-3">
             {idx > 0 ? (
               <Pressable
-                onPress={() => setIdx((i) => i - 1)}
+                onPress={goPrev}
                 disabled={saving}
                 className="h-14 flex-1 items-center justify-center rounded-2xl bg-secondary active:opacity-90 disabled:opacity-60"
               >

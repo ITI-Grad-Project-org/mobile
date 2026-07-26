@@ -82,6 +82,28 @@ function guessMimeType(uri: string): string {
 }
 
 /**
+ * A non-2xx from `/upload/*`. Carries the status and the API's own `message`
+ * so callers can show why it failed — a 500 from the storage backend and a 401
+ * are very different problems, and "upload failed" tells nobody which it was.
+ */
+export class UploadError extends Error {
+  readonly status: number;
+
+  constructor(status: number, body?: string) {
+    let detail = body?.trim() ?? '';
+    try {
+      const parsed = JSON.parse(detail);
+      if (parsed && typeof parsed.message === 'string') detail = parsed.message;
+    } catch {
+      // Not JSON (an HTML error page or empty body) — keep the raw text.
+    }
+    super(detail ? `Upload failed (${status}): ${detail}` : `Upload failed (${status})`);
+    this.name = 'UploadError';
+    this.status = status;
+  }
+}
+
+/**
  * Upload a single local image file to `/upload/image` and return `{ url, key }`.
  *
  * Uses `expo-file-system`'s native multipart upload rather than a JS
@@ -106,9 +128,7 @@ export async function uploadImage(
   });
 
   if (res.status < 200 || res.status >= 300) {
-    throw new Error(
-      `Upload failed (${res.status})${res.body ? `: ${res.body}` : ''}`
-    );
+    throw new UploadError(res.status, res.body);
   }
 
   return JSON.parse(res.body) as { url: string; key: string };

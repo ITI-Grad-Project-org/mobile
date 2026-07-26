@@ -1,11 +1,11 @@
+import { ActivityIndicator } from "react-native";
+
 import { Icon } from "@/shared/ui/Icon";
 import { Pressable, Text, View } from "@/tw";
 import { Image } from "@/tw/image";
 import type { Field } from "../../types";
 import { FieldLabel } from "./FieldLabel";
-import { pickSingleImage } from "./pickImage";
-
-// Single-photo picker (avatar). Stores a local file URI string.
+import { useImageUpload } from "./useImageUpload";
 
 export function ImageField({
   field,
@@ -17,10 +17,12 @@ export function ImageField({
   onChange: (v: string) => void;
 }) {
   const uri = typeof value === "string" ? value : "";
+  const { uploading, error, pickAndUpload } = useImageUpload();
 
   const pick = async () => {
-    const picked = await pickSingleImage();
-    if (picked) onChange(picked);
+    if (uploading) return;
+    const url = await pickAndUpload();
+    if (url) onChange(url);
   };
 
   return (
@@ -35,18 +37,36 @@ export function ImageField({
           >
             <Icon name="x" size={14} color="#ffffff" />
           </Pressable>
+          <Pressable
+            onPress={pick}
+            className="absolute bottom-0 left-0 right-0 items-center bg-black/55 py-1.5 active:opacity-80"
+          >
+            <Text className="text-[11px] font-semibold text-white">
+              {uploading ? "Uploading…" : "Change"}
+            </Text>
+          </Pressable>
         </View>
       ) : (
         <Pressable
           onPress={pick}
-          className="h-36 w-36 items-center justify-center gap-1.5 rounded-3xl border-2 border-dashed border-border bg-secondary/60 active:opacity-80"
+          disabled={uploading}
+          className="h-36 w-36 items-center justify-center gap-1.5 rounded-3xl border-2 border-dashed border-border bg-secondary/60 active:opacity-80 disabled:opacity-60"
         >
-          <Icon name="camera" size={22} color="--muted-foreground" />
+          {uploading ? (
+            <ActivityIndicator />
+          ) : (
+            <Icon name="camera" size={22} color="--muted-foreground" />
+          )}
           <Text className="text-[11px] font-semibold text-muted-foreground">
-            Upload photo
+            {uploading ? "Uploading…" : "Upload photo"}
           </Text>
         </Pressable>
       )}
+      {error ? (
+        <Text className="text-[11.5px] font-medium text-destructive">{error}</Text>
+      ) : field.helper ? (
+        <Text className="text-[11.5px] text-muted-foreground">{field.helper}</Text>
+      ) : null}
     </FieldLabel>
   );
 }

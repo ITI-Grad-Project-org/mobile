@@ -65,6 +65,7 @@ export function CoachProfileScreen() {
       title={isEdit ? "Edit profile" : "Coach profile"}
       steps={COACH_STEPS}
       initialData={initialData}
+      uploadPersona="coach"
       showWelcome={!isEdit}
       onClose={isEdit ? () => router.back() : enterApp}
       onSubmit={save}

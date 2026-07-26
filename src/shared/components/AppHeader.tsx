@@ -1,4 +1,11 @@
+import {
+  CLIENT_INVITATIONS_READY,
+  useListInvitationsQuery,
+  useListMyInvitationsQuery,
+} from "@/api/endpoints/invitations.endpoints";
+import { useListTenantJoinRequestsQuery } from "@/api/endpoints/joinRequests.endpoints";
 import { useRole } from "@/lib/role";
+import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import { Icon } from "@/shared/ui/Icon";
 import { Pressable, View } from "@/tw";
 import { Image } from "@/tw/image";
@@ -16,6 +23,27 @@ export function AppHeader() {
   const segments = useSegments() as string[];
   const isCoach = segments.includes("(coach)");
 
+  // Show the badge only when there's something new for the active persona:
+  // a coach's pending join requests or pending sent invitations, or a client's
+  // pending invitations (dormant until the backend serves that route).
+  const { tenantId } = useActiveTenant();
+  const { data: joinRequests } = useListTenantJoinRequestsQuery(
+    { tenantId: tenantId ?? "" },
+    { skip: !isCoach || !tenantId }
+  );
+  const { data: coachInvitations } = useListInvitationsQuery(
+    { tenantId: tenantId ?? "" },
+    { skip: !isCoach || !tenantId }
+  );
+  const { data: clientInvitations } = useListMyInvitationsQuery(undefined, {
+    skip: isCoach || !CLIENT_INVITATIONS_READY,
+  });
+
+  const hasNotifications = isCoach
+    ? (joinRequests ?? []).some((r) => !r.status || r.status === "pending") ||
+      (coachInvitations ?? []).some((i) => String(i.status ?? "pending").toLowerCase() === "pending")
+    : (clientInvitations ?? []).some((i) => !i.status || i.status === "pending");
+
   const isDark = colorScheme === "dark";
 
   const toggleTheme = () => {
@@ -23,14 +51,13 @@ export function AppHeader() {
   };
 
   const handleProfilePress = () => {
-    router.navigate(isCoach ? "/(coach)/profile" : "/(client)/profile");
+    router.navigate(isCoach ? "/(coach)/profile" : "/my-profile");
   };
 
   const avatar = isCoach ? coachProfile.avatar : clientProfile.avatar;
 
   const handleNotificationPress = () => {
-    // Notification action placeholder
-    console.log("Notification button pressed");
+    router.navigate(isCoach ? "/(coach)/notifications" : "/(client)/notifications");
   };
 
   return (
@@ -73,8 +100,10 @@ export function AppHeader() {
             accessibilityLabel="Notifications"
           >
             <Icon name="bell" size={18} color="--muted-foreground" />
-            {/* Red badge dot indicator */}
-            <View className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive border border-card" />
+            {/* Red badge dot — only when there's a new notification */}
+            {hasNotifications ? (
+              <View className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive border border-card" />
+            ) : null}
           </Pressable>
 
           {/* Profile Button */}

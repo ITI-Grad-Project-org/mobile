@@ -14,7 +14,9 @@ import { useMemo, useState } from "react";
 import { ExerciseSheet } from "../components/ExerciseSheet";
 import { StreakHero } from "../components/StreakGrid";
 import { WorkoutCard } from "../components/WorkoutCard";
-
+import { useGetClientProfileQuery } from "@/api/endpoints/profile.endpoints";
+import { useGetDirectoryCoachQuery } from "@/api/endpoints/directory.endpoints";
+import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 const PLAN_META: Record<
   string,
   {
@@ -54,6 +56,18 @@ export function TodayScreen() {
   const coach = useActiveCoach();
   const { clientProfile } = useRole();
 
+  const { tenantId } = useActiveTenant();
+  const { data: clientProfileData } = useGetClientProfileQuery();
+  const { data: coachDir } = useGetDirectoryCoachQuery(tenantId ?? "", {
+    skip: !tenantId,
+  });
+
+  const clientFirstName =
+    clientProfileData?.lastName || clientProfile.lname || "there";
+  const coachObj = coachDir?.coach || coachDir;
+  const coachFirstName =
+    coachObj?.firstName + " " + coachObj?.lastName || coachDir?.firstName + " " + coachDir?.lastName || coach.name.split(" ")[0];
+
   const exercises = useMemo(() => {
     if (coach.planType === "yoga") return yogaExercises;
     if (coach.planType === "endurance") return enduranceExercises;
@@ -61,6 +75,16 @@ export function TodayScreen() {
   }, [coach.planType]);
 
   const meta = PLAN_META[coach.planType] || PLAN_META.strength;
+
+  const today = useMemo(
+    () =>
+      new Date().toLocaleDateString(undefined, {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+      }),
+    [],
+  );
 
   const [done, setDone] = useState<Record<string, boolean>>({
     [exercises[0].id]: true,
@@ -82,10 +106,10 @@ export function TodayScreen() {
       <View className="flex-row items-center justify-between px-1">
         <View className="flex-1 pr-4">
           <Text className="text-[13px] text-muted-foreground">
-            Friday, June 26 · with {coach.name.split(" ")[0]}
+            {today} · with {coachFirstName}
           </Text>
           <Text className="text-[26px] font-bold tracking-tight text-foreground mt-0.5">
-            Hey, {clientProfile.fname}{" "}
+            Hey, {clientFirstName}{" "}
             <Icon name="wave" size={26} color="--primary" />
           </Text>
         </View>

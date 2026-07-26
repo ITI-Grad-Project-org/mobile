@@ -6,8 +6,13 @@ import {
   Platform,
 } from "react-native";
 
-import { hasOnboarded } from "@/shared/hooks/useOnboarding";
-import { hasCompletedProfile } from "@/shared/hooks/useProfileSetup";
+import { hasOnboarded, resetOnboarded } from "@/shared/hooks/useOnboarding";
+import {
+  hasCompletedProfile,
+  markProfileComplete,
+  profileLooksComplete,
+  resetProfile,
+} from "@/shared/hooks/useProfileSetup";
 import { Pressable, SafeAreaView, ScrollView, Text, View } from "@/tw";
 import { AuthField } from "../components/AuthField";
 import { GoogleButton } from "../components/GoogleButton";
@@ -21,6 +26,10 @@ import {
   useRegisterCoachMutation,
   useRegisterCustomerMutation,
 } from "@/api/endpoints/auth.endpoints";
+import {
+  useLazyGetClientProfileQuery,
+  useLazyGetCoachProfileQuery,
+} from "@/api/endpoints/profile.endpoints";
 import { useAppDispatch } from "@/store";
 import { saveTokens, setAuth } from "@/store/authSlice";
 
@@ -38,6 +47,8 @@ export function AuthScreen({
   const [registerCustomer] = useRegisterCustomerMutation();
   const [loginCoach] = useLoginCoachMutation();
   const [loginCustomer] = useLoginCustomerMutation();
+  const [fetchCoachProfile] = useLazyGetCoachProfileQuery();
+  const [fetchClientProfile] = useLazyGetClientProfileQuery();
 
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [role, setRole] = useState<AuthRole>("client");
@@ -89,14 +100,14 @@ export function AuthScreen({
         return;
       }
 
-      // Client: run onboarding first, then profile setup, before the app.
-      if (!(await hasOnboarded())) {
+      // Client flow: onboarding -> profile setup -> match-coach.
+      if (profileDone) {
+        router.replace("/(client)/(tabs)/today");
+      } else if (!(await hasOnboarded())) {
         router.replace("/(onboarding)/onboarding");
-        return;
+      } else {
+        router.replace("/(setup)/client-profile");
       }
-      router.replace(
-        profileDone ? "/(client)/(tabs)/today" : "/(setup)/client-profile"
-      );
     }, 600);
   };
 
@@ -149,6 +160,8 @@ export function AuthScreen({
             confirmPassword: confirmPw,
           }).unwrap();
         }
+        await resetOnboarded();
+        await resetProfile();
       }
 
       // Login to obtain authentication tokens
@@ -170,7 +183,21 @@ export function AuthScreen({
         const persona = role === "coach" ? "coach" : "customer";
         await saveTokens(accessToken, refreshToken, persona);
 
-        const profileDone = await hasCompletedProfile();
+        let profileDone: boolean;
+        try {
+          const serverProfile =
+            role === "coach"
+              ? await fetchCoachProfile().unwrap()
+              : await fetchClientProfile().unwrap();
+          profileDone = profileLooksComplete(serverProfile, persona);
+        } catch {
+          profileDone = await hasCompletedProfile();
+        }
+        if (profileDone) {
+          await markProfileComplete();
+        } else {
+          await resetProfile();
+        }
         dispatch(
           setAuth({
             userId: user?.id || "user-id",
@@ -193,12 +220,13 @@ export function AuthScreen({
             });
           }
         } else {
-          if (!(await hasOnboarded())) {
+          // Client flow: onboarding -> profile setup -> match-coach.
+          if (profileDone) {
+            router.replace("/(client)/(tabs)/today");
+          } else if (!(await hasOnboarded())) {
             router.replace("/(onboarding)/onboarding");
           } else {
-            router.replace(
-              profileDone ? "/(client)/(tabs)/today" : "/(setup)/client-profile"
-            );
+            router.replace("/(setup)/client-profile");
           }
         }
       } else {
@@ -321,7 +349,12 @@ export function AuthScreen({
 
             {!isSignup ? (
               <Pressable
-                onPress={() => router.push("/(auth)/forgot-password")}
+                onPress={() =>
+                  router.push({
+                    pathname: "/(auth)/forgot-password",
+                    params: { role },
+                  })
+                }
                 className="-mt-1 self-end active:opacity-70"
               >
                 <Text className="text-[13px] font-semibold text-foreground underline">

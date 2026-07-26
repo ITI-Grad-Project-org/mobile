@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import { KeyboardAvoidingView, Platform } from "react-native";
+import {
+  ActivityIndicator,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
 import Reanimated, {
   useAnimatedStyle,
   useSharedValue,
@@ -10,6 +15,7 @@ import { GlassButton } from "@/shared/ui/GlassButton";
 import { Icon } from "@/shared/ui/Icon";
 import { Pressable, SafeAreaView, ScrollView, Text, View } from "@/tw";
 import type { ProfileData, Step } from "../types";
+import { UploadPersonaProvider, type UploadPersona } from "../uploadContext";
 import { FieldRenderer } from "./FieldRenderer";
 
 const AnimatedView = Reanimated.createAnimatedComponent(View);
@@ -29,30 +35,36 @@ function ProgressBar({ pct }: { pct: number }) {
 }
 
 export type SignupFlowProps = {
-  /** Uppercase eyebrow above the step counter (e.g. "Client profile"). */
   title: string;
   steps: Step[];
   onClose: () => void;
+  onSubmit?: (data: ProfileData) => void | Promise<void>;
   onDone: (data: ProfileData) => void;
   showWelcome?: boolean;
   initialData?: ProfileData;
   welcomeTitle?: string;
   welcomeBody?: string;
+  /** Which upload bucket the flow's image fields write to. */
+  uploadPersona?: UploadPersona;
 };
 
 export function SignupFlow({
   title,
   steps,
   onClose,
+  onSubmit,
   onDone,
   showWelcome = true,
   initialData,
   welcomeTitle = "You're in.",
   welcomeBody = "Profile saved. Let's get you matched with the right coach.",
+  uploadPersona = "client",
 }: SignupFlowProps) {
   const [idx, setIdx] = useState(0);
   const [done, setDone] = useState(false);
   const [data, setData] = useState<ProfileData>(initialData ?? {});
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const step = steps[idx];
   const isLast = idx === steps.length - 1;
@@ -60,10 +72,24 @@ export function SignupFlow({
 
   const set = (k: string, v: unknown) => setData((d) => ({ ...d, [k]: v }));
 
-  // When there's no welcome screen, finish as soon as the last step is submitted.
-  useEffect(() => {
-    if (done && !showWelcome) onDone(data);
-  }, [done, showWelcome, onDone, data]);
+  const finish = async () => {
+    if (saving) return;
+    Keyboard.dismiss();
+    setSaveError(null);
+    setSaving(true);
+    try {
+      await onSubmit?.(data);
+    } catch (e: any) {
+      setSaveError(
+        e?.data?.message || e?.message || "Something went wrong. Please try again."
+      );
+      return;
+    } finally {
+      setSaving(false);
+    }
+    if (showWelcome) setDone(true);
+    else onDone(data);
+  };
 
   if (done && showWelcome) {
     return (
@@ -92,8 +118,19 @@ export function SignupFlow({
   }
   if (done) return null;
 
-  const goBack = () => (idx === 0 ? onClose() : setIdx((i) => i - 1));
-  const goNext = () => (isLast ? setDone(true) : setIdx((i) => i + 1));
+  // Leaving a step always closes the keyboard first, so the next step's fields
+  // are never hidden behind a keyboard opened for the previous one.
+  const goPrev = () => {
+    Keyboard.dismiss();
+    setIdx((i) => i - 1);
+  };
+  const goBack = () => (idx === 0 ? onClose() : goPrev());
+  // On the last step, Finish runs the save; earlier steps just advance.
+  const goNext = () => {
+    if (isLast) return finish();
+    Keyboard.dismiss();
+    setIdx((i) => i + 1);
+  };
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
@@ -133,6 +170,7 @@ export function SignupFlow({
           className="flex-1"
           contentContainerClassName="px-5 pb-8 pt-6 grow"
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
           showsVerticalScrollIndicator={false}
         >
           <View key={idx} className="animate-fade-up gap-6">
@@ -147,39 +185,51 @@ export function SignupFlow({
               ) : null}
             </View>
 
-            <View className="gap-5">
-              {step.fields.map((f) => (
-                <FieldRenderer
-                  key={f.key}
-                  field={f}
-                  value={data[f.key]}
-                  onChange={(v) => set(f.key, v)}
-                />
-              ))}
-            </View>
+            <UploadPersonaProvider persona={uploadPersona}>
+              <View className="gap-5">
+                {step.fields.map((f) => (
+                  <FieldRenderer
+                    key={f.key}
+                    field={f}
+                    value={data[f.key]}
+                    onChange={(v) => set(f.key, v)}
+                  />
+                ))}
+              </View>
+            </UploadPersonaProvider>
           </View>
         </ScrollView>
 
         {/* Footer */}
-        <View className="flex-row gap-3 border-t border-border/60 px-4 pb-2 pt-3">
-          {idx > 0 ? (
+        <View className="border-t border-border/60 px-4 pb-2 pt-3">
+          {saveError ? (
+            <Text className="mb-2 text-center text-[12px] font-medium text-destructive">
+              {saveError}
+            </Text>
+          ) : null}
+          <View className="flex-row gap-3">
+            {idx > 0 ? (
+              <Pressable
+                onPress={goPrev}
+                disabled={saving}
+                className="h-14 flex-1 items-center justify-center rounded-2xl bg-secondary active:opacity-90 disabled:opacity-60"
+              >
+                <Text className="text-[14px] font-semibold text-foreground">
+                  Back
+                </Text>
+              </Pressable>
+            ) : null}
             <Pressable
-              onPress={() => setIdx((i) => i - 1)}
-              className="h-14 flex-1 items-center justify-center rounded-2xl bg-secondary active:opacity-90"
+              onPress={goNext}
+              disabled={saving}
+              className="h-14 flex-2 flex-row items-center justify-center gap-2 rounded-2xl bg-primary shadow-soft active:opacity-90 disabled:opacity-60"
             >
-              <Text className="text-[14px] font-semibold text-foreground">
-                Back
+              {saving ? <ActivityIndicator color="white" /> : null}
+              <Text className="text-[14px] font-semibold text-primary-foreground">
+                {isLast ? "Finish" : "Continue"}
               </Text>
             </Pressable>
-          ) : null}
-          <Pressable
-            onPress={goNext}
-            className="h-14 flex-2 items-center justify-center rounded-2xl bg-primary shadow-soft active:opacity-90"
-          >
-            <Text className="text-[14px] font-semibold text-primary-foreground">
-              {isLast ? "Finish" : "Continue"}
-            </Text>
-          </Pressable>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>

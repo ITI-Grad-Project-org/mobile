@@ -1,30 +1,83 @@
-import { clientsList, nutritionPlans, trainingPlans } from "@/lib/data";
+import { useGetClientsQuery } from "@/api/endpoints/clients.endpoints";
+import { useListInvitationsQuery } from "@/api/endpoints/invitations.endpoints";
+import { useListTenantJoinRequestsQuery } from "@/api/endpoints/joinRequests.endpoints";
 import { cn } from "@/lib/utils";
+import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import { Card } from "@/shared/ui/Card";
 import { Icon } from "@/shared/ui/Icon";
-import { SectionTitle } from "@/shared/ui/SectionTitle";
 import { Pressable, ScrollView, Text, TextInput, View } from "@/tw";
 import { Image } from "@/tw/image";
-import { useState } from "react";
-import { Modal, Platform } from "react-native";
 import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
+import { useState } from "react";
+import { ActivityIndicator } from "react-native";
 
-// Apple Liquid Glass is iOS 26+ only — fall back to a frosted card elsewhere.
+import { ClientDetailSheet } from "../components/ClientDetailSheet";
+import { InvitationCard } from "../components/InvitationCard";
+import { InviteClientSheet } from "../components/InviteClientSheet";
+import { JoinRequestCard } from "../components/JoinRequestCard";
+import { GlassButton } from "@/shared/ui/GlassButton";
+
 const LIQUID_GLASS = isLiquidGlassAvailable();
 
-type Status = "All" | "Active" | "Paused" | "New";
-type Client = (typeof clientsList)[number];
+type FilterStatus = "All" | "Active" | "Pending";
 
 export function ClientsScreen() {
-  const [filter, setFilter] = useState<Status>("All");
-  const [search, setSearch] = useState("");
-  const [active, setActive] = useState<Client | null>(null);
+  const { tenantId } = useActiveTenant();
 
-  const filtered = clientsList.filter(
-    (c) =>
-      (filter === "All" || c.status === filter) &&
-      c.name.toLowerCase().includes(search.toLowerCase())
+  const [filter, setFilter] = useState<FilterStatus>("All");
+  const [search, setSearch] = useState("");
+  const [activeClient, setActiveClient] = useState<any | null>(null);
+  const [showInviteSheet, setShowInviteSheet] = useState(false);
+
+  // Fetch clients, invitations, and join requests
+  const {
+    data: clients,
+    isLoading: isClientsLoading,
+    isError: isClientsError,
+    refetch: refetchClients,
+  } = useGetClientsQuery({ tenantId: tenantId! }, { skip: !tenantId });
+
+  const { data: invitations } = useListInvitationsQuery(
+    { tenantId: tenantId! },
+    { skip: !tenantId }
   );
+
+  const { data: joinRequests } = useListTenantJoinRequestsQuery(
+    { tenantId: tenantId! },
+    { skip: !tenantId }
+  );
+
+  const pendingInvitations = (invitations || []).filter(
+    (inv: any) => (inv?.status ?? "pending") === "pending"
+  );
+  const pastInvitations = (invitations || []).filter((inv: any) =>
+    ["expired", "cancelled", "revoked"].includes(inv?.status)
+  );
+  const pendingRequests = (joinRequests || []).filter(
+    (req: any) => (req?.status ?? "pending") === "pending"
+  );
+  const clientList = clients || [];
+
+  // Emails already on the roster — used to block re-inviting an existing client
+  // (the server's duplicate check only covers pending invitations, not clients).
+  const existingClientEmails = clientList
+    .map((c: any) => (c.client?.email || c.email || "").trim().toLowerCase())
+    .filter(Boolean);
+
+  const totalClientsCount = clientList.length;
+  const pendingCount = pendingInvitations.length + pendingRequests.length;
+
+  // Filter client roster
+  const filteredClients = clientList.filter((c: any) => {
+    const cObj = c.client || c;
+    const firstName = cObj.firstName || c.firstName || "";
+    const lastName = cObj.lastName || c.lastName || "";
+    const email = cObj.email || c.email || "";
+    const searchTarget = `${firstName} ${lastName} ${email}`.toLowerCase();
+    return searchTarget.includes(search.toLowerCase());
+  });
+
+  const isLoading = isClientsLoading;
 
   return (
     <View className="flex-1 bg-background">
@@ -39,12 +92,16 @@ export function ClientsScreen() {
           <View>
             <Text className="text-[26px] font-bold tracking-tight text-foreground">Clients</Text>
             <Text className="text-[13.5px] text-muted-foreground mt-0.5">
-              {clientsList.length} total · {clientsList.filter((c) => c.status === "Active").length} active
+              {totalClientsCount} total client{totalClientsCount !== 1 ? "s" : ""}
+              {pendingCount > 0 ? ` · ${pendingCount} pending` : ""}
             </Text>
           </View>
-          <Pressable className="h-10 w-10 justify-center items-center rounded-full bg-primary shadow-soft active:opacity-85">
+          <GlassButton
+            onPress={() => setShowInviteSheet(true)}
+            className="h-10 w-10 justify-center items-center rounded-full bg-primary shadow-soft active:opacity-85"
+          >
             <Text className="text-primary-foreground text-lg font-bold">+</Text>
-          </Pressable>
+          </GlassButton>
         </View>
 
         {/* Search & Filter bar */}
@@ -92,13 +149,13 @@ export function ClientsScreen() {
           );
         })()}
 
-        {/* Category Pills */}
+        {/* Filter Pills */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerClassName="gap-x-2 pb-1"
         >
-          {(["All", "Active", "Paused", "New"] as Status[]).map((s) => (
+          {(["All", "Active", "Pending"] as FilterStatus[]).map((s) => (
             <Pressable
               key={s}
               onPress={() => setFilter(s)}
@@ -113,283 +170,163 @@ export function ClientsScreen() {
                   filter === s ? "text-background" : "text-muted-foreground"
                 )}
               >
-                {s}
+                {s} {s === "Pending" && pendingCount > 0 ? `(${pendingCount})` : ""}
               </Text>
             </Pressable>
           ))}
         </ScrollView>
 
-        {/* Roster list */}
-        <View className="gap-y-3">
-          {filtered.length > 0 ? (
-            filtered.map((c) => (
-              <Card
-                key={c.id}
-                interactive
-                onPress={() => setActive(c)}
-                className="flex-row items-center gap-x-3 p-3"
-                glass
-              >
-                <Image
-                  source={{ uri: c.avatar }}
-                  className="h-12 w-12 shrink-0 rounded-2xl object-cover"
-                />
-                <View className="min-w-0 flex-1">
-                  <View className="flex-row items-center gap-x-2">
-                    <Text className="truncate text-[15px] font-semibold text-foreground" numberOfLines={1}>
-                      {c.name}
-                    </Text>
-                    {c.status !== "Active" && (
-                      <View
-                        className={cn(
-                          "shrink-0 rounded-full px-2 py-0.5",
-                          c.status === "Paused" && "bg-sun",
-                          c.status === "New" && "bg-mint"
-                        )}
+        {/* Loading State */}
+        {isLoading ? (
+          <View className="py-12 items-center justify-center">
+            <ActivityIndicator size="large" />
+            <Text className="text-[13px] text-muted-foreground mt-3">Loading clients…</Text>
+          </View>
+        ) : isClientsError ? (
+          <View className="py-10 items-center justify-center rounded-2xl border border-destructive/20 bg-destructive/10 p-4">
+            <Text className="text-[14px] font-medium text-destructive">Failed to load clients</Text>
+            <Pressable
+              onPress={() => refetchClients()}
+              className="mt-3 rounded-xl bg-destructive px-4 py-2"
+            >
+              <Text className="text-[12px] font-semibold text-destructive-foreground">Retry</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View className="gap-y-4">
+            {/* Pending Requests & Invitations (shown when "All" or "Pending" filter is active) */}
+            {(filter === "All" || filter === "Pending") &&
+              (pendingRequests.length > 0 || pendingInvitations.length > 0) ? (
+              <View className="gap-y-3">
+                <Text className="text-[12px] font-bold uppercase tracking-wider text-muted-foreground px-1">
+                  Pending Actions ({pendingCount})
+                </Text>
+
+                {/* Join Requests */}
+                {pendingRequests.map((req: any) => (
+                  <JoinRequestCard key={req.id} request={req} tenantId={tenantId!} />
+                ))}
+
+                {/* Email Invitations */}
+                {pendingInvitations.map((inv: any) => (
+                  <InvitationCard key={inv.id} invitation={inv} tenantId={tenantId!} />
+                ))}
+              </View>
+            ) : null}
+
+            {/* Client Roster List (shown when "All" or "Active" filter is active) */}
+            {filter === "All" || filter === "Active" ? (
+              <View className="gap-y-3">
+                {(filter === "All" && pendingCount > 0) ? (
+                  <Text className="text-[12px] font-bold uppercase tracking-wider text-muted-foreground px-1 mt-1">
+                    Client Roster ({filteredClients.length})
+                  </Text>
+                ) : null}
+
+                {filteredClients.length > 0 ? (
+                  filteredClients.map((c: any) => {
+                    const cObj = c.client || c;
+                    const firstName = cObj.firstName || c.firstName;
+                    const lastName = cObj.lastName || c.lastName;
+                    const fullName =
+                      firstName || lastName
+                        ? `${firstName || ""} ${lastName || ""}`.trim()
+                        : cObj.name || cObj.email || c.name || c.email || "Client";
+                    const email = cObj.email || c.email || "";
+                    const avatarUrl = cObj.avatarUrl || c.avatarUrl || c.avatar;
+                    const status = c.status || c.membershipStatus || "Active";
+
+                    return (
+                      <Card
+                        key={c.id || c.membershipId}
+                        interactive
+                        onPress={() => setActiveClient(c)}
+                        className="flex-row items-center gap-x-3 p-3"
+                        glass
                       >
-                        <Text
-                          className={cn(
-                            "text-[10px] font-semibold",
-                            c.status === "Paused" && "text-sun-ink",
-                            c.status === "New" && "text-mint-ink"
-                          )}
-                        >
-                          {c.status}
-                        </Text>
-                      </View>
-                    )}
+                        {avatarUrl ? (
+                          <Image
+                            source={{ uri: avatarUrl }}
+                            className="h-12 w-12 shrink-0 rounded-2xl object-cover"
+                          />
+                        ) : (
+                          <View className="h-12 w-12 shrink-0 rounded-2xl bg-secondary items-center justify-center">
+                            <Icon name="user" size={20} color="--muted-foreground" />
+                          </View>
+                        )}
+
+                        <View className="min-w-0 flex-1">
+                          <View className="flex-row items-center gap-x-2">
+                            <Text
+                              className="truncate text-[15px] font-semibold text-foreground"
+                              numberOfLines={1}
+                            >
+                              {fullName}
+                            </Text>
+                          </View>
+
+                          <Text className="text-[12px] text-muted-foreground mt-0.5" numberOfLines={1}>
+                            {email || status}
+                          </Text>
+                        </View>
+
+                        <View className="shrink-0 items-end justify-center">
+                          <View className="rounded-full bg-mint px-2 py-0.5">
+                            <Text className="text-[10px] font-bold text-mint-ink uppercase">
+                              {status}
+                            </Text>
+                          </View>
+                        </View>
+                      </Card>
+                    );
+                  })
+                ) : filter === "Active" || pendingCount === 0 ? (
+                  <View className="py-12 items-center justify-center">
+                    <View className="h-12 w-12 items-center justify-center rounded-2xl bg-secondary mb-3">
+                      <Icon name="users" size={24} color="--muted-foreground" />
+                    </View>
+                    <Text className="text-[14px] font-medium text-foreground">No clients found</Text>
+                    <Text className="text-[12px] text-muted-foreground mt-1 text-center">
+                      Tap {`"+"`} above to invite your first client by email.
+                    </Text>
                   </View>
-                  <Text className="text-[12px] text-muted-foreground mt-0.5">
-                    {c.goal} · last seen {c.last}
-                  </Text>
-                </View>
-                <View className="shrink-0 items-end justify-center">
-                  <Text
-                    className={cn(
-                      "text-[15px] font-bold",
-                      c.adh >= 80
-                        ? "text-success"
-                        : c.adh >= 60
-                          ? "text-warning"
-                          : "text-destructive"
-                    )}
-                  >
-                    {c.adh}%
-                  </Text>
-                  <Text className="text-[10px] text-muted-foreground mt-0.5">adherence</Text>
-                </View>
-              </Card>
-            ))
-          ) : (
-            <View className="py-12 items-center justify-center">
-              <Text className="text-[14px] text-muted-foreground">No clients found</Text>
-            </View>
-          )}
-        </View>
+                ) : null}
+              </View>
+            ) : null}
+
+            {/* Past Invitations — read-only history (shown under "All" or "Pending") */}
+            {(filter === "All" || filter === "Pending") && pastInvitations.length > 0 ? (
+              <View className="gap-y-3 mt-1">
+                <Text className="text-[12px] font-bold uppercase tracking-wider text-muted-foreground px-1">
+                  Past Invitations ({pastInvitations.length})
+                </Text>
+                {pastInvitations.map((inv: any) => (
+                  <InvitationCard key={inv.id} invitation={inv} tenantId={tenantId!} />
+                ))}
+              </View>
+            ) : null}
+          </View>
+        )}
       </ScrollView>
 
+      {/* Invite Client Sheet */}
+      {tenantId ? (
+        <InviteClientSheet
+          visible={showInviteSheet}
+          tenantId={tenantId}
+          existingClientEmails={existingClientEmails}
+          onClose={() => setShowInviteSheet(false)}
+        />
+      ) : null}
+
       {/* Detail drawer sheet */}
-      <ClientDetail client={active} onClose={() => setActive(null)} />
+      {tenantId ? (
+        <ClientDetailSheet
+          client={activeClient}
+          tenantId={tenantId}
+          onClose={() => setActiveClient(null)}
+        />
+      ) : null}
     </View>
-  );
-}
-
-function ClientDetail({ client, onClose }: { client: Client | null; onClose: () => void }) {
-  const [picked, setPicked] = useState<Record<string, boolean>>({});
-  const [confirmed, setConfirmed] = useState(false);
-
-  if (!client) return null;
-
-  const count = Object.values(picked).filter(Boolean).length;
-  const isIOS = Platform.OS === "ios";
-
-  const handleClose = () => {
-    setPicked({});
-    setConfirmed(false);
-    onClose();
-  };
-
-  const content = (
-    <View className="flex-1 bg-card px-5 pt-3 pb-8">
-      {/* Notch handle indicator */}
-      <View className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-border" />
-
-      {/* Header */}
-      <View className="flex-row items-start justify-between">
-        <View className="flex-row items-center gap-x-3">
-          <Image
-            source={{ uri: client.avatar }}
-            className="h-14 w-14 rounded-2xl object-cover"
-          />
-          <View>
-            <Text className="text-[18px] font-bold leading-tight text-foreground">{client.name}</Text>
-            <Text className="text-[12px] text-muted-foreground mt-0.5">
-              {client.goal} · {client.adh}% adherence
-            </Text>
-          </View>
-        </View>
-        <Pressable
-          onPress={handleClose}
-          className="h-9 w-9 justify-center items-center rounded-full bg-secondary active:opacity-75"
-        >
-          <Icon name="x" size={16} color="--muted-foreground" />
-        </Pressable>
-      </View>
-
-      {confirmed ? (
-        <View className="my-8 items-center text-center justify-center flex-1">
-          <View className="h-16 w-16 justify-center items-center rounded-full bg-success shadow-soft">
-            <Icon name="check" size={32} color="#ffffff" />
-          </View>
-          <Text className="mt-4 text-[17px] font-bold text-foreground text-center">
-            {count} plan{count !== 1 ? "s" : ""} assigned to {client.name}
-          </Text>
-          <Pressable
-            onPress={handleClose}
-            className="mt-6 w-full rounded-2xl bg-foreground py-3.5 active:opacity-90"
-          >
-            <Text className="text-center text-[14px] font-semibold text-background">Done</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <ScrollView className="flex-1 mt-4" showsVerticalScrollIndicator={false}>
-          {/* Training Plans */}
-          <View>
-            <SectionTitle
-              title="Training plans"
-              action={
-                <View className="flex-row items-center gap-x-1">
-                  <Icon name="clipboard-list" size={13} color="--muted-foreground" />
-                  <Text className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
-                    Training
-                  </Text>
-                </View>
-              }
-            />
-            <View className="gap-y-2 mt-1 mb-4">
-              {trainingPlans.map((p) => (
-                <PickRow
-                  key={p.id}
-                  cover={p.cover}
-                  title={p.name}
-                  sub={`${p.weeks} weeks · ${p.days} d/wk`}
-                  picked={!!picked[p.id]}
-                  onToggle={() => setPicked((s) => ({ ...s, [p.id]: !s[p.id] }))}
-                />
-              ))}
-            </View>
-          </View>
-
-          {/* Nutrition Plans */}
-          <View>
-            <SectionTitle
-              title="Nutrition plans"
-              action={
-                <View className="flex-row items-center gap-x-1">
-                  <Icon name="apple" size={13} color="--muted-foreground" />
-                  <Text className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
-                    Nutrition
-                  </Text>
-                </View>
-              }
-            />
-            <View className="gap-y-2 mt-1 mb-4">
-              {nutritionPlans.map((p) => (
-                <PickRow
-                  key={p.id}
-                  cover={p.cover}
-                  title={p.name}
-                  sub={`${p.kcal} kcal · ${p.protein}g P`}
-                  picked={!!picked[p.id]}
-                  onToggle={() => setPicked((s) => ({ ...s, [p.id]: !s[p.id] }))}
-                />
-              ))}
-            </View>
-          </View>
-
-          {/* Submit action */}
-          <Pressable
-            onPress={() => setConfirmed(true)}
-            disabled={count === 0}
-            className={cn(
-              "mt-2 w-full rounded-2xl bg-primary py-4 shadow-soft active:opacity-90",
-              count === 0 && "opacity-40"
-            )}
-          >
-            <Text className="text-center text-[15px] font-semibold text-primary-foreground">
-              Assign {count > 0 ? `${count} plan${count !== 1 ? "s" : ""}` : "plans"} to{" "}
-              {client.name.split(" ")[0]}
-            </Text>
-          </Pressable>
-        </ScrollView>
-      )}
-    </View>
-  );
-
-  if (isIOS) {
-    return (
-      <Modal
-        visible={client !== null}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={handleClose}
-      >
-        {content}
-      </Modal>
-    );
-  }
-
-  return (
-    <Modal
-      visible={client !== null}
-      transparent
-      animationType="slide"
-      statusBarTranslucent
-      onRequestClose={handleClose}
-    >
-      <View className="flex-1 justify-end">
-        <Pressable className="absolute inset-0 bg-black/40" onPress={handleClose} />
-        <View className="min-h-[85%] w-full overflow-hidden shadow-pop bg-card rounded-t-3xl">
-          {content}
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-function PickRow({
-  cover,
-  title,
-  sub,
-  picked,
-  onToggle,
-}: {
-  cover: string;
-  title: string;
-  sub: string;
-  picked: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onToggle}
-      className="flex-row w-full items-center gap-x-3 rounded-2xl bg-secondary/50 p-2 active:bg-secondary"
-    >
-      <Image source={{ uri: cover }} className="h-12 w-12 shrink-0 rounded-xl object-cover" />
-      <View className="min-w-0 flex-1">
-        <Text className="truncate text-[13.5px] font-semibold text-foreground" numberOfLines={1}>
-          {title}
-        </Text>
-        <Text className="text-[11.5px] text-muted-foreground mt-0.5">{sub}</Text>
-      </View>
-      <View
-        className={cn(
-          "h-7 w-7 shrink-0 justify-center items-center rounded-full border-2",
-          picked ? "border-primary bg-primary" : "border-border bg-card"
-        )}
-      >
-        <Icon name="check" size={12} color={picked ? "#ffffff" : "transparent"} />
-      </View>
-    </Pressable>
   );
 }

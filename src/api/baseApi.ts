@@ -23,6 +23,48 @@ const rawBaseQuery = fetchBaseQuery({
   },
 });
 
+let refreshInFlight: Promise<boolean> | null = null;
+
+async function refreshTokens(
+  api: Parameters<BaseQueryFn>[1]
+): Promise<boolean> {
+  const state = api.getState() as any;
+  const persona = state.auth.persona as 'coach' | 'customer' | null;
+  const refreshToken = await SecureStore.getItemAsync('refreshToken');
+  if (!persona || !refreshToken) return false;
+
+  const refreshPath = persona === 'coach' ? '/auth/refresh' : '/auth/customer/refresh';
+  try {
+    const refreshResult = await rawBaseQuery(
+      {
+        url: refreshPath,
+        method: 'POST',
+        headers: { authorization: `Bearer ${refreshToken}` },
+      },
+      api,
+      {}
+    );
+    const data = refreshResult.data as
+      | { accessToken?: string; refreshToken?: string }
+      | undefined;
+    if (data?.accessToken && data?.refreshToken) {
+      await saveTokens(data.accessToken, data.refreshToken, persona);
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function forceLogout(api: Parameters<BaseQueryFn>[1]) {
+  clearTokens();
+  api.dispatch(clearAuth());
+  api.dispatch(clearActiveTenant());
+  api.dispatch(clearMemberships());
+  api.dispatch(baseApi.util.resetApiState());
+}
+
 const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> =
   async (args, api, extraOptions) => {
     let result = await rawBaseQuery(args, api, extraOptions);
@@ -37,58 +79,19 @@ const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQue
       url.includes('/auth/customer/refresh');
 
     if (result.error?.status === 401 && !isAuthRequest) {
-      const state = api.getState() as any;
-      const persona = state.auth.persona;
-      const refreshToken = await SecureStore.getItemAsync('refreshToken');
+      // Coalesce concurrent 401s onto one refresh attempt.
+      if (!refreshInFlight) {
+        refreshInFlight = refreshTokens(api).finally(() => {
+          refreshInFlight = null;
+        });
+      }
+      const refreshed = await refreshInFlight;
 
-      if (persona && refreshToken) {
-        const refreshPath = persona === 'coach' ? '/auth/refresh' : '/auth/customer/refresh';
-
-        try {
-          const refreshResult = await rawBaseQuery(
-            {
-              url: refreshPath,
-              method: 'POST',
-              headers: { authorization: `Bearer ${refreshToken}` },
-            },
-            api,
-            extraOptions
-          );
-
-          if (refreshResult.data) {
-            const data = refreshResult.data as {
-              accessToken: string;
-              refreshToken: string;
-              user?: { id: string };
-            };
-            
-            // Save new tokens
-            await saveTokens(data.accessToken, data.refreshToken, persona);
-
-            // Retry original request
-            result = await rawBaseQuery(args, api, extraOptions);
-          } else {
-            // Failed to refresh - log out
-            await clearTokens();
-            api.dispatch(clearAuth());
-            api.dispatch(clearActiveTenant());
-            api.dispatch(clearMemberships());
-            api.dispatch(baseApi.util.resetApiState());
-          }
-        } catch {
-          await clearTokens();
-          api.dispatch(clearAuth());
-          api.dispatch(clearActiveTenant());
-          api.dispatch(clearMemberships());
-          api.dispatch(baseApi.util.resetApiState());
-        }
+      if (refreshed) {
+        // Retry the original request with the new token.
+        result = await rawBaseQuery(args, api, extraOptions);
       } else {
-        // No tokens or persona, log out
-        await clearTokens();
-        api.dispatch(clearAuth());
-        api.dispatch(clearActiveTenant());
-        api.dispatch(clearMemberships());
-        api.dispatch(baseApi.util.resetApiState());
+        forceLogout(api);
       }
     }
     return result;
@@ -106,6 +109,13 @@ export const baseApi = createApi({
     'Invitations',
     'Reviews',
     'Memberships',
+    'Directory',
+    'JoinRequests',
+    'Exercises',
+    'Programs',
+    'Program',
+    'Calendar',
+    'WorkoutLog',
   ],
   endpoints: () => ({}),
 });

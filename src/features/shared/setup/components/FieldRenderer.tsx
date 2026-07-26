@@ -2,6 +2,7 @@ import type { Field } from "../types";
 import { CertsField } from "./fields/CertsField";
 import { ChipsField } from "./fields/ChipsField";
 import { DateField } from "./fields/DateField";
+import { HoursField } from "./fields/HoursField";
 import { ImageField } from "./fields/ImageField";
 import { ImagesField } from "./fields/ImagesField";
 import { SelectField } from "./fields/SelectField";
@@ -30,6 +31,8 @@ export function FieldRenderer({
       return <ImagesField field={field} value={value} onChange={onChange} />;
     case "certs":
       return <CertsField field={field} value={value} onChange={onChange} />;
+    case "hours":
+      return <HoursField field={field} value={value} onChange={onChange} />;
     default:
       // text | email | tel | number | url | textarea
       return <TextField field={field} value={value} onChange={onChange} />;

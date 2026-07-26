@@ -15,7 +15,8 @@ export type FieldType =
   | "url"
   | "image"
   | "images"
-  | "certs";
+  | "certs"
+  | "hours";
 
 export type Field = {
   key: string;
@@ -27,6 +28,15 @@ export type Field = {
   multi?: boolean;
   /** Trailing unit shown inside numeric/text inputs (e.g. "cm", "kg"). */
   unit?: string;
+  /** Grey hint under the control — units, formats, why we ask. */
+  helper?: string;
+  /** For `number`: allow a decimal point (weight) vs integers only (age). */
+  decimal?: boolean;
+  /** For `number`: clamped on blur so the API never sees an absurd value. */
+  min?: number;
+  max?: number;
+  /** Caps the typed length (digits for `number`/`tel`, characters otherwise). */
+  maxLength?: number;
 };
 
 export type Step = {

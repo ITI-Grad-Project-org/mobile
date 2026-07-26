@@ -1,5 +1,7 @@
 import { baseApi } from "@/api/baseApi";
 import {
+  useDeleteClientProfileMutation,
+  useDeleteCoachProfileMutation,
   useGetClientProfileQuery,
   useGetCoachProfileQuery,
 } from "@/api/endpoints/profile.endpoints";
@@ -7,44 +9,30 @@ import {
   useLogoutCoachMutation,
   useLogoutCustomerMutation,
 } from "@/api/endpoints/auth.endpoints";
+import { useGetDirectoryCoachQuery } from "@/api/endpoints/directory.endpoints";
+import { MeasurementsSummaryCard } from "@/features/client/progress";
+import type { ReduxMembership } from "@/store/membershipsSlice";
+import { resolveCoachFields } from "@/lib/coach";
 import { useActiveCoach } from "@/lib/role";
 import { cn } from "@/lib/utils";
+import { resetProfile } from "@/shared/hooks/useProfileSetup";
+import { useSwitchCoach } from "@/shared/hooks/useSwitchCoach";
 import { Card } from "@/shared/ui/Card";
 import { GlassButton } from "@/shared/ui/GlassButton";
 import { Icon, type IconName } from "@/shared/ui/Icon";
-import { useAppDispatch } from "@/store";
+import { useAppDispatch, useAppSelector } from "@/store";
 import { clearActiveTenant } from "@/store/activeTenantSlice";
 import { clearAuth, clearTokens } from "@/store/authSlice";
-import { clearMemberships } from "@/store/membershipsSlice";
-import { Pressable, ScrollView, Text, View } from "@/tw";
+import { clearMemberships, membershipsSelectors } from "@/store/membershipsSlice";
+import { Pressable, SafeAreaView, ScrollView, Text, View } from "@/tw";
 import { Image } from "@/tw/image";
 import { useRouter, useSegments } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator } from "react-native";
 
-type StreakAccent = "green" | "orange";
+import { DeleteAccountSheet } from "../components/DeleteAccountSheet";
 
-const coaches: {
-  id: string;
-  name: string;
-  specialty: string;
-  avatar: string;
-}[] = [
-    {
-      id: "mike",
-      name: "Coach Mike",
-      specialty: "Strength & conditioning",
-      avatar:
-        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80",
-    },
-    {
-      id: "sara",
-      name: "Coach Sara",
-      specialty: "Mobility & yoga",
-      avatar:
-        "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80",
-    },
-  ];
+type StreakAccent = "green" | "orange";
 
 const swatches: { key: StreakAccent; label: string; color: string }[] = [
   { key: "green", label: "Forest", color: "#30a14e" },
@@ -77,8 +65,30 @@ function CoachProfile() {
   const dispatch = useAppDispatch();
   const { data: profile, isLoading } = useGetCoachProfileQuery();
   const [logoutCoach] = useLogoutCoachMutation();
+  const [deleteCoach] = useDeleteCoachProfileMutation();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
-  const openEdit = () => { };
+  const openEdit = () => {
+    // Dismiss this profile modal first, otherwise the pushed edit screen renders
+    // behind it (it's a root-stack route under the modal).
+    if (router.canDismiss()) router.dismiss();
+    router.push({
+      pathname: "/(setup)/coach-profile",
+      params: { edit: "1" },
+    });
+  };
+
+  // Clear all local session state and return to login. Shared by sign-out and
+  // account deletion.
+  const resetAndLeave = async () => {
+    await clearTokens();
+    dispatch(clearAuth());
+    dispatch(clearActiveTenant());
+    dispatch(clearMemberships());
+    dispatch(baseApi.util.resetApiState());
+    router.replace("/(auth)/login");
+  };
 
   const signOut = async () => {
     try {
@@ -86,12 +96,20 @@ function CoachProfile() {
     } catch (e) {
       console.warn("Coach logout failed:", e);
     }
-    await clearTokens();
-    dispatch(clearAuth());
-    dispatch(clearActiveTenant());
-    dispatch(clearMemberships());
-    dispatch(baseApi.util.resetApiState());
-    router.replace("/(auth)/login");
+    await resetAndLeave();
+  };
+
+  const deleteAccount = async () => {
+    setDeleting(true);
+    try {
+      await deleteCoach().unwrap();
+      await resetProfile();
+      setConfirmDelete(false);
+      await resetAndLeave();
+    } catch (e) {
+      console.warn("Coach account deletion failed:", e);
+      setDeleting(false);
+    }
   };
 
   if (isLoading) {
@@ -104,7 +122,7 @@ function CoachProfile() {
 
   const coachName = profile ? `${profile.firstName} ${profile.lastName}` : "Coach";
   const coachEmail = profile?.email || "";
-  const coachAvatar = profile?.avatar || "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=200&q=80";
+  const coachAvatar = profile?.avatarUrl || profile?.avatar || "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=200&q=80";
   const certs = profile?.certifications || [];
 
   return (
@@ -219,7 +237,8 @@ function CoachProfile() {
                       </Text>
                     </View>
                     <Text className="text-muted-foreground text-[11.5px]">
-                      {c.issuer ? `${c.issuer}` : "Verified Issuer"} {c.year ? `· ${c.year}` : ""}
+                      {c.issuer ? `${c.issuer}` : "Verified Issuer"}
+                      {c.issueDate ? ` · ${new Date(c.issueDate).getFullYear()}` : ""}
                     </Text>
                   </View>
                 </View>
@@ -279,8 +298,108 @@ function CoachProfile() {
             Log out
           </Text>
         </Pressable>
+
+        {/* Delete account */}
+        <Pressable
+          onPress={() => setConfirmDelete(true)}
+          className="items-center justify-center rounded-2xl py-3 active:opacity-70"
+        >
+          <Text className="text-destructive text-[13px] font-semibold">
+            Delete account
+          </Text>
+        </Pressable>
       </ScrollView>
+
+      <DeleteAccountSheet
+        visible={confirmDelete}
+        busy={deleting}
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={deleteAccount}
+      />
     </View>
+  );
+}
+
+function CoachSwitchRow({
+  membership,
+  active,
+  switching,
+  disabled,
+  onPress,
+  onSwitch,
+}: {
+  membership: ReduxMembership;
+  active: boolean;
+  switching: boolean;
+  disabled: boolean;
+  /** Open the coach's profile screen. */
+  onPress: () => void;
+  /** Make this coach the active one, without leaving the profile. */
+  onSwitch: () => void;
+}) {
+  const { data: coach } = useGetDirectoryCoachQuery(membership.tenantId);
+  const f = resolveCoachFields(coach);
+
+  const name = f.name || membership.tenantName;
+  const avatarUrl = f.avatarUrl || membership.brand?.logoUrl;
+  const subtitle =
+    f.specialties.length > 0 ? f.specialties.slice(0, 2).join(" · ") : membership.status;
+
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      className={cn(
+        "flex-row items-center gap-3 rounded-2xl border-2 p-3 active:opacity-80",
+        active
+          ? "border-primary bg-primary/5"
+          : "border-transparent bg-secondary/50",
+        disabled && !switching && "opacity-50"
+      )}
+    >
+      {avatarUrl ? (
+        <Image
+          source={{ uri: avatarUrl }}
+          className="h-12 w-12 rounded-2xl bg-secondary"
+        />
+      ) : (
+        <View className="h-12 w-12 rounded-2xl bg-secondary items-center justify-center">
+          <Icon name="person" size={22} color="--muted-foreground" />
+        </View>
+      )}
+      <View className="flex-1 min-w-0">
+        <Text
+          className="text-foreground text-base font-bold"
+          numberOfLines={1}
+        >
+          {name}
+        </Text>
+        <Text
+          className="text-muted-foreground text-[13px] capitalize"
+          numberOfLines={1}
+        >
+          {subtitle}
+        </Text>
+      </View>
+      {switching ? (
+        <ActivityIndicator size="small" />
+      ) : active ? (
+        <View className="h-7 w-7 rounded-full bg-primary items-center justify-center">
+          <Icon name="check" size={16} color="--primary-foreground" />
+        </View>
+      ) : (
+        <Pressable
+          onPress={onSwitch}
+          disabled={disabled}
+          hitSlop={8}
+          accessibilityLabel={`Switch to ${name}`}
+          className="rounded-full bg-secondary px-3 py-1.5 active:opacity-70"
+        >
+          <Text className="text-primary text-sm font-semibold">Switch</Text>
+        </Pressable>
+      )}
+      <Icon name="chevron-right" size={14} color="--muted-foreground" />
+    </Pressable>
   );
 }
 
@@ -291,14 +410,50 @@ function ClientProfile() {
 
   const { data: profile, isLoading } = useGetClientProfileQuery();
   const [logoutCustomer] = useLogoutCustomerMutation();
+  const [deleteClient] = useDeleteClientProfileMutation();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const [selectedAccent, setSelectedAccent] = useState<StreakAccent>("green");
-  const [activeCoachId, setActiveCoachId] = useState(coaches[0].id);
 
-  const openEdit = () => { };
+  const activeTenantId = useAppSelector((s) => s.activeTenant.tenantId);
+  const memberships = useAppSelector((s) =>
+    membershipsSelectors.selectAll(s.memberships)
+  );
+  // Only active tenants where the user trains as a client — exclude any owner
+  // membership and any non-active status (invited/paused/removed).
+  const coachMemberships = memberships.filter(
+    (m) => m.role === "client" && m.status === "active"
+  );
+  const { switchCoach, switchingId } = useSwitchCoach();
+
+  const handleSwitch = (tenantId: string) => {
+    switchCoach(tenantId).catch((e) => console.warn("Switch tenant failed:", e));
+  };
+
+  // This screen is a plain push, so everything below is a plain push too — the
+  // back button walks the stack back here.
+  const openCoach = (tenantId: string) => {
+    router.push({ pathname: "/coach/[tenantId]", params: { tenantId } });
+  };
+
+  const openEdit = () => {
+    router.push({
+      pathname: "/(setup)/client-profile",
+      params: { edit: "1" },
+    });
+  };
   const openAddCoach = () => {
-    if (router.canDismiss()) router.dismiss();
     router.push("/(setup)/match-coach");
+  };
+
+  const resetAndLeave = async () => {
+    await clearTokens();
+    dispatch(clearAuth());
+    dispatch(clearActiveTenant());
+    dispatch(clearMemberships());
+    dispatch(baseApi.util.resetApiState());
+    router.replace("/(auth)/login");
   };
 
   const signOut = async () => {
@@ -307,12 +462,20 @@ function ClientProfile() {
     } catch (e) {
       console.warn("Client logout failed:", e);
     }
-    await clearTokens();
-    dispatch(clearAuth());
-    dispatch(clearActiveTenant());
-    dispatch(clearMemberships());
-    dispatch(baseApi.util.resetApiState());
-    router.replace("/(auth)/login");
+    await resetAndLeave();
+  };
+
+  const deleteAccount = async () => {
+    setDeleting(true);
+    try {
+      await deleteClient().unwrap();
+      await resetProfile();
+      setConfirmDelete(false);
+      await resetAndLeave();
+    } catch (e) {
+      console.warn("Client account deletion failed:", e);
+      setDeleting(false);
+    }
   };
 
   if (isLoading) {
@@ -325,21 +488,24 @@ function ClientProfile() {
 
   const clientName = profile ? `${profile.firstName} ${profile.lastName}` : "Client";
   const clientEmail = profile?.email || "";
-  const clientAvatar = profile?.avatar || null;
+  const clientAvatar = profile?.avatarUrl || profile?.avatar || null;
 
   return (
     <View className="flex-1 bg-background">
-      {/* Modal header with close control */}
-      <View className="px-4 pt-3 pb-3 flex-row items-center justify-between border-b border-border">
-        <Text className="text-foreground text-xl font-bold">Profile</Text>
-        <GlassButton
-          onPress={() => router.back()}
-          className="h-9 w-9 rounded-full bg-secondary items-center justify-center active:opacity-70"
-          accessibilityLabel="Close profile"
-        >
-          <Icon name="x" size={18} color="--muted-foreground" />
-        </GlassButton>
-      </View>
+      {/* Full-screen push: the app header is hidden for this route, so this
+          header owns the top safe area. */}
+      <SafeAreaView edges={["top"]} className="bg-background">
+        <View className="px-3 pt-1 pb-3 flex-row items-center gap-2 border-b border-border">
+          <GlassButton
+            onPress={() => router.back()}
+            className="h-9 w-9 rounded-full items-center justify-center active:opacity-70"
+            accessibilityLabel="Go back"
+          >
+            <Icon name="chevron-left" size={18} color="--foreground" />
+          </GlassButton>
+          <Text className="text-foreground text-xl font-bold">Profile</Text>
+        </View>
+      </SafeAreaView>
 
       <ScrollView
         className="flex-1"
@@ -386,58 +552,37 @@ function ClientProfile() {
           </Pressable>
         </Card>
 
+        {/* Body measurements */}
+        <MeasurementsSummaryCard />
+
         {/* Switch coach */}
         <Card glass>
           <View className="mb-3">
             <Text className="text-foreground text-lg font-bold">
-              Switch coach
+              My coaches
             </Text>
             <Text className="text-muted-foreground text-[13px]">
-              Tap to switch — your plan updates instantly.
+              Tap a coach to view their profile, or switch instantly.
             </Text>
           </View>
           <View className="gap-y-2">
-            {coaches.map((c) => {
-              const on = c.id === activeCoachId;
-              return (
-                <Pressable
-                  key={c.id}
-                  onPress={() => setActiveCoachId(c.id)}
-                  className={cn(
-                    "flex-row items-center gap-3 rounded-2xl border-2 p-3 active:opacity-80",
-                    on
-                      ? "border-primary bg-primary/5"
-                      : "border-transparent bg-secondary/50"
-                  )}
-                >
-                  <Image source={c.avatar} className="h-12 w-12 rounded-2xl" />
-                  <View className="flex-1 min-w-0">
-                    <Text
-                      className="text-foreground text-base font-bold"
-                      numberOfLines={1}
-                    >
-                      {c.name}
-                    </Text>
-                    <Text className="text-muted-foreground text-[13px]">
-                      {c.specialty}
-                    </Text>
-                  </View>
-                  {on ? (
-                    <View className="h-7 w-7 rounded-full bg-primary items-center justify-center">
-                      <Icon
-                        name="check"
-                        size={16}
-                        color="--primary-foreground"
-                      />
-                    </View>
-                  ) : (
-                    <Text className="text-primary text-sm font-semibold">
-                      Switch
-                    </Text>
-                  )}
-                </Pressable>
-              );
-            })}
+            {coachMemberships.length === 0 ? (
+              <Text className="text-muted-foreground text-[13px] pb-1">
+                You&apos;re not training with any coach yet.
+              </Text>
+            ) : (
+              coachMemberships.map((m) => (
+                <CoachSwitchRow
+                  key={m.tenantId}
+                  membership={m}
+                  active={m.tenantId === activeTenantId}
+                  switching={switchingId === m.tenantId}
+                  disabled={Boolean(switchingId)}
+                  onPress={() => openCoach(m.tenantId)}
+                  onSwitch={() => handleSwitch(m.tenantId)}
+                />
+              ))
+            )}
             <Pressable
               onPress={openAddCoach}
               className="flex-row items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border bg-secondary/30 py-3 active:opacity-70"
@@ -542,7 +687,24 @@ function ClientProfile() {
             Log out
           </Text>
         </Pressable>
+
+        {/* Delete account */}
+        <Pressable
+          onPress={() => setConfirmDelete(true)}
+          className="items-center justify-center rounded-2xl py-3 active:opacity-70"
+        >
+          <Text className="text-destructive text-[13px] font-semibold">
+            Delete account
+          </Text>
+        </Pressable>
       </ScrollView>
+
+      <DeleteAccountSheet
+        visible={confirmDelete}
+        busy={deleting}
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={deleteAccount}
+      />
     </View>
   );
 }

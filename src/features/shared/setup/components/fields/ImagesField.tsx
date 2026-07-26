@@ -1,11 +1,11 @@
+import { ActivityIndicator } from "react-native";
+
 import { Icon } from "@/shared/ui/Icon";
-import { Pressable, View } from "@/tw";
+import { Pressable, Text, View } from "@/tw";
 import { Image } from "@/tw/image";
 import type { Field } from "../../types";
 import { FieldLabel } from "./FieldLabel";
-import { pickMultipleImages } from "./pickImage";
-
-// Multi-photo gallery (e.g. progress photos). Stores an array of file URIs.
+import { useImageUpload } from "./useImageUpload";
 
 export function ImagesField({
   field,
@@ -17,10 +17,12 @@ export function ImagesField({
   onChange: (v: string[]) => void;
 }) {
   const arr: string[] = Array.isArray(value) ? (value as string[]) : [];
+  const { uploading, error, pickAndUploadMany } = useImageUpload();
 
   const add = async () => {
-    const picked = await pickMultipleImages();
-    if (picked.length) onChange([...arr, ...picked]);
+    if (uploading) return;
+    const urls = await pickAndUploadMany();
+    if (urls.length) onChange([...arr, ...urls]);
   };
 
   const removeAt = (i: number) => onChange(arr.filter((_, j) => j !== i));
@@ -45,11 +47,21 @@ export function ImagesField({
         ))}
         <Pressable
           onPress={add}
-          className="h-24 w-24 items-center justify-center rounded-2xl border-2 border-dashed border-border bg-secondary/60 active:opacity-80"
+          disabled={uploading}
+          className="h-24 w-24 items-center justify-center rounded-2xl border-2 border-dashed border-border bg-secondary/60 active:opacity-80 disabled:opacity-60"
         >
-          <Icon name="plus" size={22} color="--muted-foreground" />
+          {uploading ? (
+            <ActivityIndicator />
+          ) : (
+            <Icon name="plus" size={22} color="--muted-foreground" />
+          )}
         </Pressable>
       </View>
+      {error ? (
+        <Text className="text-[11.5px] font-medium text-destructive">{error}</Text>
+      ) : field.helper ? (
+        <Text className="text-[11.5px] text-muted-foreground">{field.helper}</Text>
+      ) : null}
     </FieldLabel>
   );
 }

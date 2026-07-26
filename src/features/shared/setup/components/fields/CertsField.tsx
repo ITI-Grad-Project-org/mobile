@@ -1,13 +1,12 @@
+import { ActivityIndicator } from "react-native";
+
 import { Icon } from "@/shared/ui/Icon";
 import { Pressable, Text, TextInput, View, useCSSVariable } from "@/tw";
 import { Image } from "@/tw/image";
 import type { Certificate, Field } from "../../types";
 import { DateField } from "./DateField";
 import { FieldLabel } from "./FieldLabel";
-import { pickSingleImage } from "./pickImage";
-
-// Coach certifications: a list of cards, each with an image, a name, and
-// issued/expires dates. Mirrors the web `certs` field.
+import { useImageUpload } from "./useImageUpload";
 
 const ISSUED_FIELD: Field = { key: "issued", label: "Issued", type: "date", placeholder: "Date" };
 const EXPIRES_FIELD: Field = { key: "expires", label: "Expires", type: "date", placeholder: "Date" };
@@ -27,9 +26,11 @@ export function CertsField({
 }) {
   const arr: Certificate[] = Array.isArray(value) ? (value as Certificate[]) : [];
   const placeholderColor = useCSSVariable("--muted-foreground") as string;
+  const { uploading, error, pickAndUpload } = useImageUpload();
 
   const add = async () => {
-    const image = await pickSingleImage();
+    if (uploading) return;
+    const image = await pickAndUpload();
     if (!image) return;
     onChange([...arr, { id: makeId(), image, name: "", issued: "", expires: "" }]);
   };
@@ -56,6 +57,10 @@ export function CertsField({
                   onChangeText={(t) => patch(c.id, { name: t })}
                   placeholder="Certificate name (e.g. NSCA-CSCS)"
                   placeholderTextColor={placeholderColor}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  returnKeyType="done"
+                  maxLength={80}
                   className="rounded-xl bg-card px-3 py-2.5 text-[13px] text-foreground"
                 />
                 <View className="flex-row gap-2">
@@ -88,13 +93,22 @@ export function CertsField({
 
         <Pressable
           onPress={add}
-          className="flex-row items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border bg-secondary/40 py-4 active:opacity-80"
+          disabled={uploading}
+          className="flex-row items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border bg-secondary/40 py-4 active:opacity-80 disabled:opacity-60"
         >
-          <Icon name="trophy" size={16} color="--muted-foreground" />
+          {uploading ? (
+            <ActivityIndicator />
+          ) : (
+            <Icon name="trophy" size={16} color="--muted-foreground" />
+          )}
           <Text className="text-[13px] font-semibold text-muted-foreground">
-            Add certificate
+            {uploading ? "Uploading…" : "Add certificate"}
           </Text>
         </Pressable>
+
+        {error ? (
+          <Text className="text-[11.5px] font-medium text-destructive">{error}</Text>
+        ) : null}
       </View>
     </FieldLabel>
   );

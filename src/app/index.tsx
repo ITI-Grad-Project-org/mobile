@@ -17,7 +17,10 @@ export default function Index() {
       }
       return <Redirect href="/(setup)/coach-profile" />;
     }
-    return <Redirect href="/(onboarding)/onboarding" />;
+    if (profileCompleted) {
+      return <Redirect href="/(client)/(tabs)/today" />;
+    }
+    return <Redirect href="/(setup)/client-profile" />;
   }
 
   return (

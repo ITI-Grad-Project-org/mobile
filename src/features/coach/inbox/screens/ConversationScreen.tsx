@@ -1,6 +1,7 @@
-import { clientsList } from "@/lib/data";
+import { useGetClientQuery } from "@/api/endpoints/clients.endpoints";
 import { sfx } from "@/lib/sfx";
 import { cn } from "@/lib/utils";
+import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import { Icon } from "@/shared/ui/Icon";
 import { Pressable, Text, TextInput, View } from "@/tw";
 import { Image } from "@/tw/image";
@@ -24,11 +25,38 @@ const seed: Msg[] = [
   { id: "6", from: "me", t: "Yes please. Set 3 will do.", time: "9:21" },
 ];
 
+/** Client avatar, falling back to a neutral placeholder when none is set. */
+function ClientAvatar({ url, className }: { url?: string; className: string }) {
+  if (!url) {
+    return (
+      <View className={cn("items-center justify-center", className)}>
+        <Icon name="user" size={14} color="--muted-foreground" />
+      </View>
+    );
+  }
+  return <Image source={{ uri: url }} className={className} />;
+}
+
 export function ConversationScreen({ clientId }: { clientId: string }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const client = clientsList.find((c) => c.id === clientId);
-  const firstName = client?.name.split(" ")[0] ?? "client";
+  const { tenantId } = useActiveTenant();
+  const { data: clientData } = useGetClientQuery(
+    { id: clientId, tenantId: tenantId! },
+    { skip: !clientId || !tenantId }
+  );
+
+  // The record comes back either as a plain client or as a membership wrapping one.
+  const cObj = clientData?.client || clientData;
+  const fullName =
+    [cObj?.firstName, cObj?.lastName].filter(Boolean).join(" ") ||
+    cObj?.name ||
+    cObj?.email ||
+    "Conversation";
+  const firstName = fullName.split(" ")[0];
+  const avatarUrl: string | undefined = cObj?.avatarUrl || undefined;
+  const status = clientData?.status || clientData?.membershipStatus || cObj?.status;
+  const subtitle = [status, cObj?.email].filter(Boolean).join(" · ");
 
   const [msgs, setMsgs] = useState<Msg[]>(seed);
   const [input, setInput] = useState("");
@@ -86,19 +114,25 @@ export function ConversationScreen({ clientId }: { clientId: string }) {
               <Icon name="chevron-left" size={22} color="--foreground" />
             </Pressable>
           )}
-          <Image
-            source={{ uri: client?.avatar }}
-            className="h-11 w-11 rounded-full bg-secondary"
-          />
+          {avatarUrl ? (
+            <Image
+              source={{ uri: avatarUrl }}
+              className="h-11 w-11 rounded-full bg-secondary"
+            />
+          ) : (
+            <View className="h-11 w-11 items-center justify-center rounded-full bg-secondary">
+              <Icon name="user" size={20} color="--muted-foreground" />
+            </View>
+          )}
           <View className="flex-1 min-w-0">
             <Text className="text-[17px] font-bold text-foreground" numberOfLines={1}>
-              {client?.name ?? "Conversation"}
+              {fullName}
             </Text>
-            {client && (
-              <Text className="text-[12.5px] text-muted-foreground mt-0.5">
-                {client.status} · {client.goal}
+            {subtitle ? (
+              <Text className="text-[12.5px] text-muted-foreground mt-0.5" numberOfLines={1}>
+                {subtitle}
               </Text>
-            )}
+            ) : null}
           </View>
           <Pressable
             className="h-9 w-9 items-center justify-center rounded-full active:bg-secondary"
@@ -136,7 +170,7 @@ export function ConversationScreen({ clientId }: { clientId: string }) {
                 )}
               >
                 {!isMe && !grouped ? (
-                  <Image source={{ uri: client?.avatar }} className="mr-2 h-7 w-7 rounded-full bg-secondary" />
+                  <ClientAvatar url={avatarUrl} className="mr-2 h-7 w-7 rounded-full bg-secondary" />
                 ) : !isMe ? (
                   <View className="mr-2 w-7" />
                 ) : null}
@@ -165,7 +199,7 @@ export function ConversationScreen({ clientId }: { clientId: string }) {
           })}
           {typing && (
             <View className="flex-row items-end justify-start mt-2">
-              <Image source={{ uri: client?.avatar }} className="mr-2 h-7 w-7 rounded-full bg-secondary" />
+              <ClientAvatar url={avatarUrl} className="mr-2 h-7 w-7 rounded-full bg-secondary" />
               <View className="rounded-3xl rounded-bl-md bg-card border border-border/30 px-4 py-3">
                 <View className="flex-row items-center gap-1">
                   <View className="h-1.5 w-1.5 rounded-full bg-foreground/60" />

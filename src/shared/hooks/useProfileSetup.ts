@@ -18,9 +18,40 @@ export async function markProfileComplete(
   await SecureStore.setItemAsync(DONE_KEY, "1");
 }
 
+export async function resetProfile(): Promise<void> {
+  await SecureStore.deleteItemAsync(DONE_KEY);
+  await SecureStore.deleteItemAsync(DATA_KEY);
+}
+
 export async function hasCompletedProfile(): Promise<boolean> {
   if (ALWAYS_SHOW_SETUP) return false;
   return (await SecureStore.getItemAsync(DONE_KEY)) === "1";
+}
+
+export function profileLooksComplete(
+  profile: any,
+  persona: "coach" | "customer"
+): boolean {
+  if (!profile) return false;
+  if (persona === "coach") {
+    return Boolean(
+      profile.phone ||
+        profile.age != null ||
+        profile.gender ||
+        profile.location ||
+        profile.bio ||
+        (Array.isArray(profile.specialties) && profile.specialties.length) ||
+        profile.yearsExperience != null ||
+        profile.careerExperience
+    );
+  }
+  return Boolean(
+    profile.dateOfBirth ||
+      profile.gender ||
+      profile.heightCm != null ||
+      profile.weightKg != null ||
+      profile.avatarUrl
+  );
 }
 
 export async function loadProfile<T = Record<string, unknown>>(): Promise<

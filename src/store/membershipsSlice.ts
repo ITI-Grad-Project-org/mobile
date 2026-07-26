@@ -5,18 +5,36 @@ export interface ReduxMembership extends Membership {
   id: string;
 }
 
+function normalizeMembership(m: any): ReduxMembership {
+  const tenantId = m?.tenantId || m?.tenant?.id || m?.id || '';
+  const tenantName = m?.tenantName || m?.tenant?.name || 'Coaching';
+  return {
+    ...m,
+    tenantId,
+    tenantName,
+    role: m?.role || 'client',
+    status: m?.status || 'active',
+    id: tenantId,
+  };
+}
+
 const membershipsAdapter = createEntityAdapter<ReduxMembership>();
 
 const membershipsSlice = createSlice({
   name: 'memberships',
   initialState: membershipsAdapter.getInitialState(),
   reducers: {
-    setMemberships: (state, action: PayloadAction<Membership[]>) => {
-      const mapped = action.payload.map((m) => ({ ...m, id: m.tenantId }));
+    setMemberships: (state, action: PayloadAction<any[]>) => {
+      const mapped = (action.payload || [])
+        .map(normalizeMembership)
+        .filter((m) => Boolean(m.tenantId));
       membershipsAdapter.setAll(state, mapped);
     },
-    upsertMembership: (state, action: PayloadAction<Membership>) => {
-      membershipsAdapter.upsertOne(state, { ...action.payload, id: action.payload.tenantId });
+    upsertMembership: (state, action: PayloadAction<any>) => {
+      const normalized = normalizeMembership(action.payload);
+      if (normalized.tenantId) {
+        membershipsAdapter.upsertOne(state, normalized);
+      }
     },
     removeMembership: membershipsAdapter.removeOne,
     clearMemberships: membershipsAdapter.removeAll,

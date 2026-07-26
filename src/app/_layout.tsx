@@ -57,44 +57,61 @@ function AppContent() {
   const activeTenantId = useAppSelector((state) => state.activeTenant.tenantId);
 
   // Queries to load active tenant / memberships details
-  const { data: coachMe, isLoading: loadingCoach, isSuccess: coachSuccess } = useGetCoachMeQuery(undefined, {
+  const { data: coachMe, isLoading: loadingCoach } = useGetCoachMeQuery(undefined, {
     skip: !isAuthenticated || persona !== 'coach',
   });
 
-  const { data: memberships, isLoading: loadingMemberships, isSuccess: membershipsSuccess } = useGetCustomerMembershipsQuery(undefined, {
+  const { data: memberships, isLoading: loadingMemberships } = useGetCustomerMembershipsQuery(undefined, {
     skip: !isAuthenticated || persona !== 'customer',
   });
 
-  // Set memberships and active tenant for coach
+  // Set memberships and active tenant for coach.
+  // Gated on `authRestored` so the SecureStore-persisted tenant (applied in
+  // restoreSession) always wins — otherwise this could overwrite it in a race.
   useEffect(() => {
+    if (!authRestored) return;
     if (coachMe) {
       const tenantId = coachMe.currentTenant?.id || coachMe.tenant?.id;
       if (tenantId) {
-        dispatch(setActiveTenant(tenantId));
-        SecureStore.setItemAsync('activeTenantId', tenantId);
-        
         dispatch(setMemberships([{
           tenantId,
           tenantName: coachMe.currentTenant?.name || coachMe.businessName || 'My Gym',
           role: 'owner',
           status: 'active'
         }]));
+        if (activeTenantId !== tenantId) {
+          dispatch(setActiveTenant(tenantId));
+          SecureStore.setItemAsync('activeTenantId', tenantId);
+        }
       }
     }
-  }, [coachMe, dispatch]);
+  }, [authRestored, coachMe, activeTenantId, dispatch]);
 
-  // Set memberships and active tenant for customer
+  // Set memberships and active tenant for customer.
+  // Gated on `authRestored` so the persisted tenant is applied first; we only
+  // auto-pick a tenant when there is no valid active one. This keeps the same
+  // tenant across logout/login, so tenant-scoped data (e.g. measurements) is
+  // read under the tenant it was saved with instead of a racy default.
   useEffect(() => {
-    if (memberships) {
+    if (!authRestored) return;
+    if (memberships && memberships.length > 0) {
       dispatch(setMemberships(memberships));
-      
-      if (!activeTenantId && memberships.length === 1) {
-        const firstTenantId = memberships[0].tenantId;
-        dispatch(setActiveTenant(firstTenantId));
-        SecureStore.setItemAsync('activeTenantId', firstTenantId);
+
+      const tenantIds = memberships
+        .map((m: any) => m?.tenantId || m?.tenant?.id || m?.id)
+        .filter(Boolean);
+      const activeIsValid = activeTenantId && tenantIds.includes(activeTenantId);
+
+      if (!activeIsValid) {
+        const activeM: any = memberships.find((m: any) => m.status === 'active') || memberships[0];
+        const tenantId = activeM?.tenantId || activeM?.tenant?.id || activeM?.id;
+        if (tenantId) {
+          dispatch(setActiveTenant(tenantId));
+          SecureStore.setItemAsync('activeTenantId', tenantId);
+        }
       }
     }
-  }, [memberships, activeTenantId, dispatch]);
+  }, [authRestored, memberships, activeTenantId, dispatch]);
 
   const handleRootLayout = useCallback(() => {
     if (authRestored && !loadingCoach && !loadingMemberships) {
@@ -102,17 +119,8 @@ function AppContent() {
     }
   }, [authRestored, loadingCoach, loadingMemberships]);
 
-  // Determine if the local Redux state is still syncing with loaded profile/membership data
-  const hasTenantInCoachQuery = coachMe && (coachMe.currentTenant?.id || coachMe.tenant?.id);
-  const hasMembershipsInQuery = memberships && memberships.length > 0;
-
-  const isSyncing = isAuthenticated && (
-    (persona === 'coach' && coachSuccess && hasTenantInCoachQuery && !activeTenantId) ||
-    (persona === 'customer' && membershipsSuccess && hasMembershipsInQuery && !activeTenantId)
-  );
-
-  // Wait until session is restored, queries are checked, and activeTenant is synced
-  const isInitialLoading = !authRestored || (isAuthenticated && (loadingCoach || loadingMemberships || isSyncing));
+  // Wait until session is restored and initial profile/membership queries finish
+  const isInitialLoading = !authRestored || (isAuthenticated && (loadingCoach || loadingMemberships));
 
   if (isInitialLoading) {
     return null;
@@ -128,6 +136,8 @@ function AppContent() {
         <Stack.Screen name="(setup)" />
         <Stack.Screen name="(coach)" />
         <Stack.Screen name="(client)" />
+        <Stack.Screen name="my-profile" />
+        <Stack.Screen name="coach/[tenantId]" />
       </Stack>
       {!splashDone && (
         <AnimatedSplash onFinish={() => setSplashDone(true)} />

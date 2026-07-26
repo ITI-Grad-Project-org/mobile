@@ -6,6 +6,10 @@ import {
   GoogleAuthDto,
   SwitchTenantDto,
   Membership,
+  ForgotPasswordDto,
+  VerifyResetOtpDto,
+  VerifyResetOtpResponse,
+  ResetPasswordDto,
 } from '../types';
 
 export const authEndpoints = baseApi.injectEndpoints({
@@ -57,36 +61,54 @@ export const authEndpoints = baseApi.injectEndpoints({
       query: () => '/auth/customer/memberships',
       providesTags: ['Memberships'],
     }),
+    // Returns new tokens (the active tenant is encoded in the JWT). The caller
+    // must persist those tokens THEN reset the API cache — so we deliberately do
+    // NOT invalidate tags here, which would refetch with the stale token before
+    // the new one is saved. See ProfileScreen.handleSwitch.
     switchTenant: builder.mutation<any, SwitchTenantDto>({
       query: (body) => ({
         url: '/auth/customer/switch-tenant',
         method: 'POST',
         body,
       }),
-      invalidatesTags: ['Me', 'Tenant', 'Clients', 'Intake', 'Measurements', 'Invitations', 'Reviews'],
     }),
-    forgotPasswordCoach: builder.mutation<any, { email: string }>({
+    // Password reset — 3-step OTP flow: forgot-password -> verify-reset-otp -> reset-password
+    forgotPasswordCoach: builder.mutation<any, ForgotPasswordDto>({
       query: (body) => ({
         url: '/auth/forgot-password',
         method: 'POST',
         body,
       }),
     }),
-    resetPasswordCoach: builder.mutation<any, { token: string; newPassword: string }>({
+    verifyResetOtpCoach: builder.mutation<VerifyResetOtpResponse, VerifyResetOtpDto>({
+      query: (body) => ({
+        url: '/auth/verify-reset-otp',
+        method: 'POST',
+        body,
+      }),
+    }),
+    resetPasswordCoach: builder.mutation<any, ResetPasswordDto>({
       query: (body) => ({
         url: '/auth/reset-password',
         method: 'POST',
         body,
       }),
     }),
-    forgotPasswordCustomer: builder.mutation<any, { email: string }>({
+    forgotPasswordCustomer: builder.mutation<any, ForgotPasswordDto>({
       query: (body) => ({
         url: '/auth/customer/forgot-password',
         method: 'POST',
         body,
       }),
     }),
-    resetPasswordCustomer: builder.mutation<any, { token: string; newPassword: string }>({
+    verifyResetOtpCustomer: builder.mutation<VerifyResetOtpResponse, VerifyResetOtpDto>({
+      query: (body) => ({
+        url: '/auth/customer/verify-reset-otp',
+        method: 'POST',
+        body,
+      }),
+    }),
+    resetPasswordCustomer: builder.mutation<any, ResetPasswordDto>({
       query: (body) => ({
         url: '/auth/customer/reset-password',
         method: 'POST',
@@ -122,8 +144,10 @@ export const {
   useLazyGetCustomerMembershipsQuery,
   useSwitchTenantMutation,
   useForgotPasswordCoachMutation,
+  useVerifyResetOtpCoachMutation,
   useResetPasswordCoachMutation,
   useForgotPasswordCustomerMutation,
+  useVerifyResetOtpCustomerMutation,
   useResetPasswordCustomerMutation,
   useLogoutCoachMutation,
   useLogoutCustomerMutation,

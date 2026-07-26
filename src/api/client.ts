@@ -1,5 +1,6 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
+import * as FileSystem from 'expo-file-system/legacy';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://api.74.162.148.3.nip.io';
 
@@ -63,61 +64,83 @@ apiClient.interceptors.response.use(
   }
 );
 
-/**
- * Upload a single image
- */
-export async function uploadImage(uri: string, type: 'coach' | 'client'): Promise<{ url: string; key: string }> {
-  const formData = new FormData();
-  
-  // React Native FormData expects an object with uri, name, and type
-  const uriParts = uri.split('/');
-  const filename = uriParts[uriParts.length - 1] || 'photo.jpg';
-  const match = /\.(\w+)$/.exec(filename);
-  const fileType = match ? `image/${match[1]}` : `image/jpeg`;
-
-  formData.append('file', {
-    uri,
-    name: filename,
-    type: fileType,
-  } as any);
-  
-  formData.append('type', type);
-
-  const response = await apiClient.post('/upload/image', formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  });
-
-  return response.data;
+function guessMimeType(uri: string): string {
+  const match = /\.(\w+)$/.exec(uri);
+  const ext = match ? match[1].toLowerCase() : 'jpg';
+  switch (ext) {
+    case 'png':
+      return 'image/png';
+    case 'webp':
+      return 'image/webp';
+    case 'heic':
+      return 'image/heic';
+    case 'heif':
+      return 'image/heif';
+    default:
+      return 'image/jpeg';
+  }
 }
 
 /**
- * Upload multiple images
+ * A non-2xx from `/upload/*`. Carries the status and the API's own `message`
+ * so callers can show why it failed — a 500 from the storage backend and a 401
+ * are very different problems, and "upload failed" tells nobody which it was.
  */
-export async function uploadImages(uris: string[], type: 'coach' | 'client'): Promise<{ url: string; key: string }[]> {
-  const formData = new FormData();
+export class UploadError extends Error {
+  readonly status: number;
 
-  uris.forEach((uri) => {
-    const uriParts = uri.split('/');
-    const filename = uriParts[uriParts.length - 1] || 'photo.jpg';
-    const match = /\.(\w+)$/.exec(filename);
-    const fileType = match ? `image/${match[1]}` : `image/jpeg`;
+  constructor(status: number, body?: string) {
+    let detail = body?.trim() ?? '';
+    try {
+      const parsed = JSON.parse(detail);
+      if (parsed && typeof parsed.message === 'string') detail = parsed.message;
+    } catch {
+      // Not JSON (an HTML error page or empty body) — keep the raw text.
+    }
+    super(detail ? `Upload failed (${status}): ${detail}` : `Upload failed (${status})`);
+    this.name = 'UploadError';
+    this.status = status;
+  }
+}
 
-    formData.append('files', {
-      uri,
-      name: filename,
-      type: fileType,
-    } as any);
+/**
+ * Upload a single local image file to `/upload/image` and return `{ url, key }`.
+ *
+ * Uses `expo-file-system`'s native multipart upload rather than a JS
+ * `FormData` + fetch/axios request: RN's JS FormData transport is unreliable for
+ * file uploads (bare "Network Error" / mangled multipart body). `uploadAsync`
+ * streams the file natively and sets the boundary correctly. This is also what
+ * docs/07-Uply-endpoints.md recommends.
+ */
+export async function uploadImage(
+  uri: string,
+  type: 'coach' | 'client'
+): Promise<{ url: string; key: string }> {
+  const token = await SecureStore.getItemAsync('accessToken');
+
+  const res = await FileSystem.uploadAsync(`${BASE_URL}/upload/image`, uri, {
+    httpMethod: 'POST',
+    uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+    fieldName: 'file',
+    mimeType: guessMimeType(uri),
+    parameters: { type },
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
 
-  formData.append('type', type);
+  if (res.status < 200 || res.status >= 300) {
+    throw new UploadError(res.status, res.body);
+  }
 
-  const response = await apiClient.post('/upload/images', formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  });
+  return JSON.parse(res.body) as { url: string; key: string };
+}
 
-  return response.data;
+/**
+ * Upload multiple local images. `uploadAsync` sends one file per request, so
+ * this uploads them in parallel and collects the results.
+ */
+export async function uploadImages(
+  uris: string[],
+  type: 'coach' | 'client'
+): Promise<{ url: string; key: string }[]> {
+  return Promise.all(uris.map((uri) => uploadImage(uri, type)));
 }

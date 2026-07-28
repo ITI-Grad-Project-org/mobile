@@ -11,85 +11,13 @@ export type Exercise = {
   muscle: string;
   image: string;
   instructions: string[];
+  gifUrl?: string;
+  videoUrl?: string;
+  demoGifUrl?: string;
+  demoVideoUrl?: string;
 };
 
-export const exercises: Exercise[] = [
-  {
-    id: "1",
-    name: "Barbell Back Squat",
-    sets: 4,
-    reps: "8",
-    weight: "80 kg",
-    muscle: "Legs",
-    image: U("photo-1574680096145-d05b474e2155"),
-    instructions: [
-      "Set the bar on your upper traps, brace your core.",
-      "Sit back and down, knees tracking over toes — 3 sec descent.",
-      "Drive through mid-foot and stand explosively, lock out hips.",
-      "Keep chest tall throughout; no rounding of the lower back.",
-    ],
-  },
-  {
-    id: "2",
-    name: "Romanian Deadlift",
-    sets: 3,
-    reps: "10",
-    weight: "70 kg",
-    muscle: "Hamstrings",
-    image: U("photo-1517836357463-d25dfeac3438"),
-    instructions: [
-      "Stand tall, bar against thighs, soft knees.",
-      "Hinge at the hips, push hips back — bar travels close to legs.",
-      "Lower until you feel a deep hamstring stretch.",
-      "Drive hips forward to return; squeeze glutes at the top.",
-    ],
-  },
-  {
-    id: "3",
-    name: "Walking Lunges",
-    sets: 3,
-    reps: "12 / side",
-    weight: "20 kg",
-    muscle: "Glutes",
-    image: U("photo-1599058917212-d750089bc07e"),
-    instructions: [
-      "Hold dumbbells at your sides, chest up.",
-      "Step forward into a long lunge, back knee just above floor.",
-      "Push through the front heel to step into the next lunge.",
-      "Keep torso upright — don't let the front knee cave in.",
-    ],
-  },
-  {
-    id: "4",
-    name: "Leg Press",
-    sets: 4,
-    reps: "12",
-    weight: "140 kg",
-    muscle: "Quads",
-    image: U("photo-1605296867304-46d5465a13f1"),
-    instructions: [
-      "Feet shoulder-width on the platform, mid-foot pressure.",
-      "Lower under control until knees reach 90°.",
-      "Press through the whole foot, don't lock out hard.",
-      "Keep lower back glued to the pad.",
-    ],
-  },
-  {
-    id: "5",
-    name: "Standing Calf Raise",
-    sets: 4,
-    reps: "15",
-    weight: "60 kg",
-    muscle: "Calves",
-    image: U("photo-1517438476312-10d79c077509"),
-    instructions: [
-      "Balls of feet on the platform, full stretch at the bottom.",
-      "Rise up onto the toes as high as possible — pause 1 sec.",
-      "Lower slowly for a 3 sec eccentric.",
-      "Keep knees straight but not locked.",
-    ],
-  },
-];
+
 
 export const yogaExercises: Exercise[] = [
   {

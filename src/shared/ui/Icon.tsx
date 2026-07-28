@@ -17,6 +17,7 @@ export type IconName =
   | "flame"
   | "x"
   | "play"
+  | "pause"
   | "sun"
   | "moon"
   | "bell"
@@ -82,6 +83,7 @@ const SYMBOLS: Record<IconName, { ios: string; android: string }> = {
   "flame": { ios: "flame.fill", android: "local_fire_department" },
   "x": { ios: "xmark", android: "close" },
   "play": { ios: "play.fill", android: "play_arrow" },
+  "pause": { ios: "pause.fill", android: "pause" },
   "sun": { ios: "sun.max.fill", android: "light_mode" },
   "moon": { ios: "moon.fill", android: "dark_mode" },
   "bell": { ios: "bell.fill", android: "notifications" },

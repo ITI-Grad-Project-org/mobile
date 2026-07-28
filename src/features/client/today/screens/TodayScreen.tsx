@@ -1,56 +1,22 @@
+import { useGetDirectoryCoachQuery } from "@/api/endpoints/directory.endpoints";
+import { useGetClientProfileQuery } from "@/api/endpoints/profile.endpoints";
 import {
-  enduranceExercises,
-  exercises as strengthExercises,
-  yogaExercises,
-  type Exercise,
-} from "@/lib/data";
+  useGetCalendarQuery,
+  useGetCurrentProgramQuery,
+  useGetMyProgramQuery,
+  useGetMyProgramsQuery,
+  useGetTrainingDayQuery,
+} from "@/api/endpoints/training.endpoints";
+import { yogaExercises } from "@/lib/data";
 import { useActiveCoach, useRole } from "@/lib/role";
-import { cn } from "@/lib/utils";
-import { Card } from "@/shared/ui/Card";
-import { Icon } from "@/shared/ui/Icon";
-import { SectionTitle } from "@/shared/ui/SectionTitle";
-import { Pressable, ScrollView, Text, View } from "@/tw";
-import { useMemo, useState } from "react";
+import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
+import { ScrollView, Text, View } from "@/tw";
+import { router } from "expo-router";
+import * as SecureStore from "expo-secure-store";
+import React, { useEffect, useMemo, useState } from "react";
 import { ExerciseSheet } from "../components/ExerciseSheet";
 import { StreakHero } from "../components/StreakGrid";
 import { WorkoutCard } from "../components/WorkoutCard";
-import { useGetClientProfileQuery } from "@/api/endpoints/profile.endpoints";
-import { useGetDirectoryCoachQuery } from "@/api/endpoints/directory.endpoints";
-import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
-const PLAN_META: Record<
-  string,
-  {
-    title: string;
-    subtitle: string;
-    tone: "mint" | "lilac" | "sky" | "peach";
-    mins: number;
-  }
-> = {
-  strength: {
-    title: "Quad-focused strength",
-    subtitle: "DAY 4 · LOWER BODY",
-    tone: "mint",
-    mins: 55,
-  },
-  yoga: {
-    title: "Vinyasa flow",
-    subtitle: "DAY 4 · HIPS & SPINE",
-    tone: "lilac",
-    mins: 45,
-  },
-  endurance: {
-    title: "Tempo run + core",
-    subtitle: "DAY 4 · THRESHOLD",
-    tone: "sky",
-    mins: 50,
-  },
-  weightloss: {
-    title: "Full-body conditioning",
-    subtitle: "DAY 4 · METABOLIC",
-    tone: "peach",
-    mins: 40,
-  },
-};
 
 export function TodayScreen() {
   const coach = useActiveCoach();
@@ -68,14 +34,6 @@ export function TodayScreen() {
   const coachFirstName =
     coachObj?.firstName + " " + coachObj?.lastName || coachDir?.firstName + " " + coachDir?.lastName || coach.name.split(" ")[0];
 
-  const exercises = useMemo(() => {
-    if (coach.planType === "yoga") return yogaExercises;
-    if (coach.planType === "endurance") return enduranceExercises;
-    return strengthExercises;
-  }, [coach.planType]);
-
-  const meta = PLAN_META[coach.planType] || PLAN_META.strength;
-
   const today = useMemo(
     () =>
       new Date().toLocaleDateString(undefined, {
@@ -83,18 +41,181 @@ export function TodayScreen() {
         month: "long",
         day: "numeric",
       }),
-    [],
+    []
   );
 
-  const [done, setDone] = useState<Record<string, boolean>>({
-    [exercises[0].id]: true,
+  const { data: myProgramsData } = useGetMyProgramsQuery();
+  const { data: currentProgData } = useGetCurrentProgramQuery();
+
+  const rawPrograms = (myProgramsData as any)?.data || myProgramsData || [];
+  const programs = Array.isArray(rawPrograms) ? rawPrograms : [];
+  const activeProgram = (currentProgData as any)?.data || currentProgData;
+  const publishedProgram = programs.length > 0 ? programs[0] : activeProgram;
+
+  const { data: fullProgramData } = useGetMyProgramQuery(publishedProgram?.id || "", {
+    skip: !publishedProgram?.id,
   });
-  const [open, setOpen] = useState<Exercise | null>(null);
+  const fullProgram = (fullProgramData as any)?.data || fullProgramData || publishedProgram;
 
-  const completed = Object.values(done).filter(Boolean).length;
-  const pct = Math.round((completed / exercises.length) * 100);
+  const todayIso = useMemo(() => new Date().toISOString().split("T")[0], []);
+  const { data: calendarData } = useGetCalendarQuery(
+    { from: todayIso, to: todayIso },
+    { skip: !todayIso }
+  );
 
-  const toggle = (id: string) => setDone((d) => ({ ...d, [id]: !d[id] }));
+  const calendarItems = useMemo(
+    () => calendarData?.data || calendarData || [],
+    [calendarData]
+  );
+  const todayDayId =
+    calendarItems[0]?.id ||
+    calendarItems[0]?.dayId ||
+    calendarItems[0]?.programDayId ||
+    calendarItems[0]?.programDay?.id ||
+    fullProgram?.weeks?.[0]?.days?.[0]?.id ||
+    fullProgram?.days?.[0]?.id ||
+    fullProgram?.programDays?.[0]?.id ||
+    activeProgram?.currentDay?.id ||
+    "";
+
+  const { data: realDayData } = useGetTrainingDayQuery(todayDayId, {
+    skip: !todayDayId,
+  });
+
+  const realDay = realDayData?.data || realDayData || calendarItems[0]?.programDay || calendarItems[0]?.day || activeProgram?.currentDay;
+
+  const exercises = useMemo(() => {
+    let rawList =
+      realDay?.exercises ||
+      realDay?.prescribedExercises ||
+      realDay?.programDay?.exercises ||
+      calendarItems[0]?.exercises ||
+      calendarItems[0]?.programDay?.exercises ||
+      calendarItems[0]?.day?.exercises ||
+      fullProgram?.weeks?.[0]?.days?.[0]?.exercises ||
+      fullProgram?.days?.[0]?.exercises ||
+      fullProgram?.programDays?.[0]?.exercises ||
+      activeProgram?.currentDay?.exercises ||
+      [];
+
+    if (!Array.isArray(rawList) || rawList.length === 0) {
+      rawList = yogaExercises;
+    }
+
+    return rawList.map((exItem: any, idx: number) => {
+      const setsArr = exItem.sets || exItem.prescribedSets || [];
+      const firstSet = Array.isArray(setsArr) ? (setsArr[0] || {}) : {};
+      const repsVal = firstSet.repsMin
+        ? firstSet.repsMax && firstSet.repsMax !== firstSet.repsMin
+          ? `${firstSet.repsMin}-${firstSet.repsMax}`
+          : `${firstSet.repsMin}`
+        : firstSet.reps
+          ? `${firstSet.reps}`
+          : exItem.reps
+            ? `${exItem.reps}`
+            : "10";
+      const weightVal = firstSet.weightKg
+        ? `${firstSet.weightKg} kg`
+        : firstSet.weight
+          ? `${firstSet.weight} kg`
+          : "Bodyweight";
+
+      return {
+        id: exItem.id || String(idx),
+        name: exItem.exercise?.name || exItem.name || `Exercise ${idx + 1}`,
+        sets: typeof setsArr === "number" ? setsArr : (Array.isArray(setsArr) && setsArr.length ? setsArr.length : (exItem.targetSets || 3)),
+        reps: String(repsVal),
+        weight: weightVal,
+        muscle: exItem.exercise?.primaryMuscle || exItem.primaryMuscle || exItem.muscle || "Full Body",
+        image: exItem.exercise?.thumbnailUrl || exItem.thumbnailUrl || exItem.image || "",
+        instructions: exItem.exercise?.instructionSteps || exItem.instructions || [
+          "Begin in starting stance with core braced.",
+          "Execute movement with controlled form.",
+          "Squeeze target muscles at full extension.",
+          "Return safely to baseline."
+        ],
+        gifUrl: exItem.exercise?.demoGifUrl || exItem.demoGifUrl || exItem.gifUrl || "",
+        videoUrl: exItem.exercise?.demoVideoUrl || exItem.demoVideoUrl || exItem.videoUrl || "",
+      };
+    });
+  }, [realDay, activeProgram, fullProgram, calendarItems]);
+
+  const displayMeta = useMemo(() => {
+    if (realDay?.name) {
+      return {
+        title: realDay.name,
+        subtitle: `TODAY · ${activeProgram?.name || "PRESCRIBED WORKOUT"}`,
+        tone: realDay.isRestDay ? ("sky" as const) : ("mint" as const),
+        mins: realDay.estimatedMinutes || 45,
+      };
+    }
+    if (activeProgram?.name) {
+      return {
+        title: activeProgram.name,
+        subtitle: "CURRENT ACTIVE PROGRAM",
+        tone: "mint" as const,
+        mins: 45,
+      };
+    }
+    return {
+      title: "No Workout Scheduled",
+      subtitle: "TODAY · REST DAY",
+      tone: "mint" as const,
+      mins: 0,
+    };
+  }, [realDay, activeProgram]);
+
+  const [done, setDone] = useState<Record<string, boolean>>({});
+  const [open, setOpen] = useState<any | null>(null);
+
+  const storageKey = useMemo(
+    () => `today_done_${todayIso}_${tenantId || "default"}`,
+    [todayIso, tenantId]
+  );
+
+  useEffect(() => {
+    let isMounted = true;
+    SecureStore.getItemAsync(storageKey)
+      .then((raw) => {
+        if (isMounted && raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === "object") {
+              setDone((prev) => ({ ...parsed, ...prev }));
+            }
+          } catch {
+            // ignore
+          }
+        }
+      })
+      .catch(() => { });
+    return () => {
+      isMounted = false;
+    };
+  }, [storageKey]);
+
+  const mergedDone = useMemo(() => {
+    const isServerCompleted = calendarItems[0]?.status === "completed";
+    if (isServerCompleted && exercises.length > 0) {
+      const serverDone: Record<string, boolean> = {};
+      exercises.forEach((ex: any) => {
+        serverDone[ex.id] = true;
+      });
+      return { ...serverDone, ...done };
+    }
+    return done;
+  }, [calendarItems, exercises, done]);
+
+  const completed = Object.values(mergedDone).filter(Boolean).length;
+  const pct = exercises.length > 0 ? Math.round((completed / exercises.length) * 100) : 0;
+
+  const toggle = (id: string) => {
+    setDone((d) => {
+      const next = { ...d, [id]: !d[id] };
+      SecureStore.setItemAsync(storageKey, JSON.stringify(next)).catch(() => { });
+      return next;
+    });
+  };
 
   return (
     <ScrollView
@@ -109,104 +230,35 @@ export function TodayScreen() {
             {today} · with {coachFirstName}
           </Text>
           <Text className="text-[26px] font-bold tracking-tight text-foreground mt-0.5">
-            Hey, {clientFirstName}{" "}
-            <Icon name="wave" size={26} color="--primary" />
+            Hey {clientFirstName} 👋
           </Text>
         </View>
       </View>
 
-      {/* GitHub-style Activity Grid */}
+      {/* Hero streak summary */}
       <StreakHero todayCompleted={completed} todayTotal={exercises.length} />
 
-      {/* Workout Card */}
+      {/* Today's workout card */}
       <WorkoutCard
         exercises={exercises}
-        meta={meta}
-        done={done}
+        meta={displayMeta}
+        done={mergedDone}
         completed={completed}
         pct={pct}
         onToggle={toggle}
         onOpenExercise={setOpen}
+        onStartWorkout={
+          todayDayId
+            ? () => router.push(`/workout/${todayDayId}` as any)
+            : undefined
+        }
       />
-
-      {/* Nutrition Cards */}
-      <View>
-        <SectionTitle
-          title="Nutrition today"
-          action={
-            <Icon name="chevron-right" size={16} color="--muted-foreground" />
-          }
-        />
-        <View className="flex-row gap-3">
-          <Card tone="peach" interactive glass className="flex-1">
-            <View className="flex-row items-center justify-between">
-              <Icon name="apple" size={20} color="--peach-ink" />
-              <Text className="text-[11px] font-semibold uppercase tracking-wider text-peach-ink opacity-70">
-                Calories
-              </Text>
-            </View>
-            <Text className="mt-3 text-3xl font-black text-peach-ink">
-              1,840
-            </Text>
-            <Text className="text-[12px] text-peach-ink opacity-80">
-              of 2,400 kcal
-            </Text>
-            <View className="mt-3 h-1.5 overflow-hidden rounded-full bg-peach-ink/15">
-              <View className="h-full w-[77%] rounded-full bg-peach-ink" />
-            </View>
-          </Card>
-
-          <Card tone="sky" interactive glass className="flex-1">
-            <View className="flex-row items-center justify-between">
-              <Icon name="droplets" size={20} color="--sky-ink" />
-              <Text className="text-[11px] font-semibold uppercase tracking-wider text-sky-ink opacity-70">
-                Water
-              </Text>
-            </View>
-            <Text className="mt-3 text-3xl font-black text-sky-ink">1.8L</Text>
-            <Text className="text-[12px] text-sky-ink opacity-80">
-              of 3.0L goal
-            </Text>
-            <View className="mt-3 flex-row gap-1">
-              {[1, 2, 3, 4, 5, 6].map((i) => (
-                <View
-                  key={i}
-                  className={cn(
-                    "h-6 flex-1 rounded-md",
-                    i <= 4 ? "bg-sky-ink" : "bg-sky-ink/15"
-                  )}
-                />
-              ))}
-            </View>
-          </Card>
-        </View>
-      </View>
-
-      {/* Next Check-in Banner */}
-      <Card tone="lilac" interactive glass>
-        <View className="flex-row items-center justify-between">
-          <View className="flex-1 pr-4">
-            <Text className="text-[11px] font-semibold uppercase tracking-[0.14em] text-lilac-ink opacity-70">
-              Next check-in
-            </Text>
-            <Text className="mt-1 text-[18px] font-bold text-lilac-ink">
-              Sunday · 6 PM
-            </Text>
-            <Text className="text-[12px] text-lilac-ink opacity-80 mt-0.5">
-              Photos + weight + waist
-            </Text>
-          </View>
-          <Pressable className="rounded-full bg-lilac-ink px-4 py-2 active:opacity-90">
-            <Text className="text-[12px] font-semibold text-background">
-              Prepare
-            </Text>
-          </Pressable>
-        </View>
-      </Card>
 
       {/* Exercise Bottom Modal Drawer */}
       <ExerciseSheet
+        key={open?.id}
         exercise={open}
+        isDone={open ? !!mergedDone[open.id] : false}
         onClose={() => setOpen(null)}
         onDone={(id) => toggle(id)}
       />

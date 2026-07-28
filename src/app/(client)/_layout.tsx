@@ -10,6 +10,8 @@ export default function ClientLayout() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="measurement" options={{ presentation: "modal" }} />
         <Stack.Screen name="notifications" options={{ presentation: "modal" }} />
+        <Stack.Screen name="workout/[programDayId]" options={{ presentation: "fullScreenModal" }} />
+        <Stack.Screen name="program/[programId]" />
       </Stack>
     </View>
   );

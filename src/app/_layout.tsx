@@ -18,6 +18,7 @@ import {
   useGetCustomerMembershipsQuery,
 } from '@/api/endpoints/auth.endpoints';
 import { hasCompletedProfile } from '@/shared/hooks/useProfileSetup';
+import { useChatEvents } from '@/features/shared/messaging';
 
 SplashScreen.preventAutoHideAsync().catch(() => {
   // Ignore — hiding may already be in progress on fast reloads.
@@ -112,6 +113,10 @@ function AppContent() {
       }
     }
   }, [authRestored, memberships, activeTenantId, dispatch]);
+
+  // One app-wide chat socket. It lives here rather than on the chat screens so
+  // inbox rows and tab badges stay live from any tab.
+  useChatEvents();
 
   const handleRootLayout = useCallback(() => {
     if (authRestored && !loadingCoach && !loadingMemberships) {

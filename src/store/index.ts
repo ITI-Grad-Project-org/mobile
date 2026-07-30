@@ -3,6 +3,7 @@ import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux';
 import authReducer from './authSlice';
 import activeTenantReducer from './activeTenantSlice';
 import membershipsReducer from './membershipsSlice';
+import chatUiReducer from './chatUiSlice';
 import { baseApi } from '@/api/baseApi';
 
 export const store = configureStore({
@@ -10,6 +11,7 @@ export const store = configureStore({
     auth: authReducer,
     activeTenant: activeTenantReducer,
     memberships: membershipsReducer,
+    chatUi: chatUiReducer,
     [baseApi.reducerPath]: baseApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>

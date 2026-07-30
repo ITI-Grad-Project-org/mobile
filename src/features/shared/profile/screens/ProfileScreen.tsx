@@ -12,6 +12,7 @@ import {
 import { useGetDirectoryCoachQuery } from "@/api/endpoints/directory.endpoints";
 import { MeasurementsSummaryCard } from "@/features/client/progress";
 import type { ReduxMembership } from "@/store/membershipsSlice";
+import { disconnectChatSocket } from "@/lib/chatSocket";
 import { resolveCoachFields } from "@/lib/coach";
 import { useActiveCoach } from "@/lib/role";
 import { cn } from "@/lib/utils";
@@ -23,6 +24,7 @@ import { Icon, type IconName } from "@/shared/ui/Icon";
 import { useAppDispatch, useAppSelector } from "@/store";
 import { clearActiveTenant } from "@/store/activeTenantSlice";
 import { clearAuth, clearTokens } from "@/store/authSlice";
+import { clearChatUi } from "@/store/chatUiSlice";
 import { clearMemberships, membershipsSelectors } from "@/store/membershipsSlice";
 import { Pressable, SafeAreaView, ScrollView, Text, View } from "@/tw";
 import { Image } from "@/tw/image";
@@ -83,7 +85,10 @@ function CoachProfile() {
   // account deletion.
   const resetAndLeave = async () => {
     await clearTokens();
+    // The chat socket authenticates with its own copy of the token.
+    disconnectChatSocket();
     dispatch(clearAuth());
+    dispatch(clearChatUi());
     dispatch(clearActiveTenant());
     dispatch(clearMemberships());
     dispatch(baseApi.util.resetApiState());
@@ -449,7 +454,10 @@ function ClientProfile() {
 
   const resetAndLeave = async () => {
     await clearTokens();
+    // The chat socket authenticates with its own copy of the token.
+    disconnectChatSocket();
     dispatch(clearAuth());
+    dispatch(clearChatUi());
     dispatch(clearActiveTenant());
     dispatch(clearMemberships());
     dispatch(baseApi.util.resetApiState());

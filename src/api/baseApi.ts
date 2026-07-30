@@ -1,6 +1,8 @@
 import { clearActiveTenant } from '@/store/activeTenantSlice';
 import { clearAuth, clearTokens, saveTokens } from '@/store/authSlice';
+import { clearChatUi } from '@/store/chatUiSlice';
 import { clearMemberships } from '@/store/membershipsSlice';
+import { disconnectChatSocket } from '@/lib/chatSocket';
 import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query';
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import * as SecureStore from 'expo-secure-store';
@@ -59,7 +61,10 @@ async function refreshTokens(
 
 function forceLogout(api: Parameters<BaseQueryFn>[1]) {
   clearTokens();
+  // The chat socket holds its own copy of the now-dead token.
+  disconnectChatSocket();
   api.dispatch(clearAuth());
+  api.dispatch(clearChatUi());
   api.dispatch(clearActiveTenant());
   api.dispatch(clearMemberships());
   api.dispatch(baseApi.util.resetApiState());
@@ -116,6 +121,8 @@ export const baseApi = createApi({
     'Program',
     'Calendar',
     'WorkoutLog',
+    'Conversations',
+    'Messages',
   ],
   endpoints: () => ({}),
 });

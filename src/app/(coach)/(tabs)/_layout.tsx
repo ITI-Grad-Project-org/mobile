@@ -1,3 +1,4 @@
+import { useUnreadCount } from "@/features/shared/messaging/useUnreadCount";
 import { NativeTabs } from "expo-router/unstable-native-tabs";
 import { useColorScheme } from "react-native";
 
@@ -18,6 +19,7 @@ const palette = {
 export default function CoachTabsLayout() {
   const colorScheme = useColorScheme();
   const c = palette[colorScheme === "dark" ? "dark" : "light"];
+  const unread = useUnreadCount();
   return (
     <NativeTabs
       tintColor={c.active}
@@ -52,6 +54,11 @@ export default function CoachTabsLayout() {
       <NativeTabs.Trigger name="inbox">
         <NativeTabs.Trigger.Label>Inbox</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={"message"} md={"inbox"} />
+        {unread > 0 && (
+          <NativeTabs.Trigger.Badge>
+            {unread > 99 ? "99+" : String(unread)}
+          </NativeTabs.Trigger.Badge>
+        )}
       </NativeTabs.Trigger>
     </NativeTabs>
   );

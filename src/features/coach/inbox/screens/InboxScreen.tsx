@@ -1,4 +1,7 @@
-import { useGetClientsQuery } from "@/api/endpoints/clients.endpoints";
+import { useGetConversationsQuery } from "@/api/endpoints/chat.endpoints";
+import { formatThreadTime } from "@/features/shared/messaging/format";
+import type { ConversationSummary } from "@/features/shared/messaging/types";
+import { cn } from "@/lib/utils";
 import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import { Icon } from "@/shared/ui/Icon";
 import { Pressable, ScrollView, Text, TextInput, View } from "@/tw";
@@ -11,31 +14,16 @@ import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 // Apple Liquid Glass is iOS 26+ only — fall back to a frosted card elsewhere.
 const LIQUID_GLASS = isLiquidGlassAvailable();
 
-type Thread = {
-  id: string;
-  name: string;
-  avatarUrl?: string;
-  subtitle: string;
-  isActive: boolean;
-};
+function clientName(c: ConversationSummary): string {
+  const full = [c.client?.firstName, c.client?.lastName].filter(Boolean).join(" ").trim();
+  return full || "Client";
+}
 
-/** Roster rows come back either as a plain client or as a membership wrapping one. */
-function toThread(row: any): Thread {
-  const c = row.client || row;
-  const firstName = c.firstName || row.firstName || "";
-  const lastName = c.lastName || row.lastName || "";
-  const email = c.email || row.email || "";
-  const name =
-    `${firstName} ${lastName}`.trim() || c.name || row.name || email || "Client";
-  const status = row.status || row.membershipStatus || c.status || "active";
-
-  return {
-    id: c.id || row.id || row.membershipId,
-    name,
-    avatarUrl: c.avatarUrl || row.avatarUrl || row.avatar || undefined,
-    subtitle: email || String(status),
-    isActive: String(status).toLowerCase() === "active",
-  };
+/** Last-message line — our own replies read "You: …", as in every chat app. */
+function preview(c: ConversationSummary): string {
+  if (!c.lastMessage) return "No messages yet";
+  const prefix = c.lastMessage.senderType === "coach" ? "You: " : "";
+  return `${prefix}${c.lastMessage.body}`;
 }
 
 export function InboxScreen() {
@@ -43,27 +31,29 @@ export function InboxScreen() {
   const { tenantId } = useActiveTenant();
   const [search, setSearch] = useState("");
 
+  // Only active/paused relationships get a thread, so this is already the set
+  // of clients the coach can actually message.
   const {
-    data: clients,
+    data: conversations,
     isLoading,
     isError,
     refetch,
-  } = useGetClientsQuery({ tenantId: tenantId! }, { skip: !tenantId });
+  } = useGetConversationsQuery({ tenantId: tenantId! }, { skip: !tenantId });
 
-  const threads = useMemo(
-    () => (clients || []).map(toThread).filter((t) => Boolean(t.id)),
-    [clients]
-  );
+  const threads = useMemo(() => conversations ?? [], [conversations]);
 
   const filtered = useMemo(
     () =>
-      threads.filter((t) =>
-        `${t.name} ${t.subtitle}`.toLowerCase().includes(search.toLowerCase())
+      threads.filter((c) =>
+        `${clientName(c)} ${preview(c)}`.toLowerCase().includes(search.toLowerCase())
       ),
     [threads, search]
   );
 
-  const activeCount = threads.filter((t) => t.isActive).length;
+  const totalUnread = useMemo(
+    () => threads.reduce((sum, c) => sum + (c.unreadCount || 0), 0),
+    [threads]
+  );
 
   return (
     <View className="flex-1 bg-background">
@@ -77,8 +67,8 @@ export function InboxScreen() {
         <View className="px-1">
           <Text className="text-[26px] font-bold tracking-tight text-foreground">Inbox</Text>
           <Text className="text-[13.5px] text-muted-foreground mt-0.5">
-            {threads.length} client{threads.length !== 1 ? "s" : ""}
-            {activeCount > 0 ? ` · ${activeCount} active` : ""}
+            {threads.length} conversation{threads.length !== 1 ? "s" : ""}
+            {totalUnread > 0 ? ` · ${totalUnread} unread` : ""}
           </Text>
         </View>
 
@@ -88,7 +78,7 @@ export function InboxScreen() {
             <>
               <Icon name="search" size={16} color="--muted-foreground" />
               <TextInput
-                placeholder="Search clients…"
+                placeholder="Search conversations…"
                 placeholderTextColor="#7c7c85"
                 value={search}
                 onChangeText={setSearch}
@@ -125,20 +115,6 @@ export function InboxScreen() {
           );
         })()}
 
-        {/* Broadcast */}
-        <Pressable className="flex-row items-center gap-x-3 rounded-2xl border border-primary/25 bg-primary/10 px-3.5 py-3 active:opacity-85">
-          <View className="h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary shadow-soft">
-            <Icon name="megaphone" size={18} color="--primary-foreground" />
-          </View>
-          <View className="min-w-0 flex-1">
-            <Text className="text-[13.5px] font-semibold text-foreground">Broadcast to active clients</Text>
-            <Text className="text-[11.5px] text-muted-foreground mt-0.5">
-              One message · {activeCount} active
-            </Text>
-          </View>
-          <Icon name="chevron-right" size={16} color="--muted-foreground" />
-        </Pressable>
-
         {/* Threads — flat list on the app surface */}
         {isLoading ? (
           <View className="items-center py-12">
@@ -147,7 +123,7 @@ export function InboxScreen() {
         ) : isError ? (
           <View className="items-center gap-y-3 py-12">
             <Text className="text-[13.5px] text-muted-foreground">
-              Couldn&apos;t load your clients.
+              Couldn&apos;t load your conversations.
             </Text>
             <Pressable
               onPress={() => refetch()}
@@ -158,38 +134,68 @@ export function InboxScreen() {
           </View>
         ) : (
           <View className="gap-y-1">
-            {filtered.map((t) => (
-              <Pressable
-                key={t.id}
-                onPress={() => router.push({ pathname: "/(coach)/chat/[id]", params: { id: t.id } })}
-                className="flex-row items-center gap-x-3.5 rounded-2xl p-3 active:bg-secondary"
-              >
-                {t.avatarUrl ? (
-                  <Image
-                    source={{ uri: t.avatarUrl }}
-                    className="h-14 w-14 shrink-0 rounded-full bg-secondary shadow-soft"
-                  />
-                ) : (
-                  <View className="h-14 w-14 shrink-0 items-center justify-center rounded-full bg-secondary shadow-soft">
-                    <Icon name="user" size={22} color="--muted-foreground" />
+            {filtered.map((c) => {
+              const unread = c.unreadCount > 0;
+              return (
+                <Pressable
+                  key={c.clientId}
+                  onPress={() =>
+                    router.push({ pathname: "/(coach)/chat/[id]", params: { id: c.clientId } })
+                  }
+                  className="flex-row items-center gap-x-3.5 rounded-2xl p-3 active:bg-secondary"
+                >
+                  {c.client?.avatarUrl ? (
+                    <Image
+                      source={{ uri: c.client.avatarUrl }}
+                      className="h-14 w-14 shrink-0 rounded-full bg-secondary shadow-soft"
+                    />
+                  ) : (
+                    <View className="h-14 w-14 shrink-0 items-center justify-center rounded-full bg-secondary shadow-soft">
+                      <Icon name="user" size={22} color="--muted-foreground" />
+                    </View>
+                  )}
+                  <View className="min-w-0 flex-1">
+                    <View className="flex-row items-center gap-x-2">
+                      <Text
+                        className={cn(
+                          "min-w-0 flex-1 text-[16px] text-foreground",
+                          unread ? "font-bold" : "font-semibold"
+                        )}
+                        numberOfLines={1}
+                      >
+                        {clientName(c)}
+                      </Text>
+                      <Text className="shrink-0 text-[11.5px] text-muted-foreground">
+                        {formatThreadTime(c.lastMessage?.createdAt)}
+                      </Text>
+                    </View>
+                    <View className="mt-1 flex-row items-center gap-x-2">
+                      <Text
+                        className={cn(
+                          "min-w-0 flex-1 text-[13.5px]",
+                          unread ? "font-medium text-foreground" : "text-muted-foreground"
+                        )}
+                        numberOfLines={1}
+                      >
+                        {preview(c)}
+                      </Text>
+                      {unread && (
+                        <View className="min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 py-0.5">
+                          <Text className="text-[11px] font-bold text-primary-foreground">
+                            {c.unreadCount > 99 ? "99+" : c.unreadCount}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
                   </View>
-                )}
-                <View className="min-w-0 flex-1">
-                  <Text className="text-[16px] font-semibold text-foreground" numberOfLines={1}>
-                    {t.name}
-                  </Text>
-                  <Text className="text-[13.5px] text-muted-foreground mt-1" numberOfLines={1}>
-                    {t.subtitle}
-                  </Text>
-                </View>
-                <Icon name="chevron-right" size={16} color="--muted-foreground" />
-              </Pressable>
-            ))}
+                </Pressable>
+              );
+            })}
 
             {threads.length === 0 && (
               <View className="items-center py-12">
                 <Text className="text-[13.5px] text-muted-foreground">
-                  No clients yet — invite one to start a conversation.
+                  No conversations yet — chat opens once a client accepts.
                 </Text>
               </View>
             )}
@@ -197,7 +203,7 @@ export function InboxScreen() {
             {threads.length > 0 && filtered.length === 0 && (
               <View className="items-center py-12">
                 <Text className="text-[13.5px] text-muted-foreground">
-                  No clients match “{search}”.
+                  No conversations match “{search}”.
                 </Text>
               </View>
             )}

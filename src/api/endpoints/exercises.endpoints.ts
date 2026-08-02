@@ -68,6 +68,17 @@ export const exercisesEndpoints = baseApi.injectEndpoints({
         { type: 'Exercises', id: `${tenantId}:${exerciseId}` },
       ],
     }),
+    // Restore an archived exercise. Only reachable via includeInactive lists.
+    unarchiveExercise: builder.mutation<any, { exerciseId: string; tenantId: string }>({
+      query: ({ exerciseId }) => ({
+        url: `/exercises/${exerciseId}/unarchive`,
+        method: 'POST',
+      }),
+      invalidatesTags: (result, error, { exerciseId, tenantId }) => [
+        { type: 'Exercises', id: `LIST-${tenantId}` },
+        { type: 'Exercises', id: `${tenantId}:${exerciseId}` },
+      ],
+    }),
   }),
 });
 
@@ -79,4 +90,5 @@ export const {
   useGetExerciseQuery,
   useUpdateExerciseMutation,
   useArchiveExerciseMutation,
+  useUnarchiveExerciseMutation,
 } = exercisesEndpoints;

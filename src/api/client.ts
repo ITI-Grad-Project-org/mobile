@@ -144,3 +144,32 @@ export async function uploadImages(
 ): Promise<{ url: string; key: string }[]> {
   return Promise.all(uris.map((uri) => uploadImage(uri, type)));
 }
+
+/**
+ * Upload a PDF or image scan to `/upload/document`. Only `certificate` is a
+ * documented `type`. Note that coach certificate scans no longer need this —
+ * `PATCH /coaches/me` takes them as `certificateFiles` parts directly; this is
+ * for standalone document uploads.
+ */
+export async function uploadDocument(
+  uri: string,
+  type: 'certificate' = 'certificate'
+): Promise<{ url: string; key: string }> {
+  const token = await SecureStore.getItemAsync('accessToken');
+  const isPdf = /\.pdf(?:\?.*)?$/i.test(uri);
+
+  const res = await FileSystem.uploadAsync(`${BASE_URL}/upload/document`, uri, {
+    httpMethod: 'POST',
+    uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+    fieldName: 'file',
+    mimeType: isPdf ? 'application/pdf' : guessMimeType(uri),
+    parameters: { type },
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+
+  if (res.status < 200 || res.status >= 300) {
+    throw new UploadError(res.status, res.body);
+  }
+
+  return JSON.parse(res.body) as { url: string; key: string };
+}

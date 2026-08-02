@@ -88,6 +88,8 @@ export const trainingEndpoints = baseApi.injectEndpoints({
       invalidatesTags: (result, error, { logId }) => [
         { type: 'WorkoutLog', id: logId },
         'Calendar',
+        // A finished workout is a new mark on the activity heatmap.
+        'Activity',
       ],
     }),
   }),

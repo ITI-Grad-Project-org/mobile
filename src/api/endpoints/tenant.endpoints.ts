@@ -1,4 +1,5 @@
 import { baseApi } from '../baseApi';
+import { appendFile } from '../formData';
 import { CreateTenantDto } from '../types';
 
 export const tenantEndpoints = baseApi.injectEndpoints({
@@ -22,6 +23,15 @@ export const tenantEndpoints = baseApi.injectEndpoints({
     getTenantBySlug: builder.query<any, string>({
       query: (slug) => `/tenant/slug/${slug}`,
     }),
+    // multipart/form-data — a single required binary `logo` part.
+    updateTenantLogo: builder.mutation<any, { uri: string }>({
+      query: ({ uri }) => {
+        const form = new FormData();
+        appendFile(form, 'logo', uri, 'logo.png');
+        return { url: '/tenant/me/logo', method: 'PATCH', body: form };
+      },
+      invalidatesTags: ['Tenant', 'Memberships'],
+    }),
   }),
 });
 
@@ -31,4 +41,5 @@ export const {
   useLazyGetTenantMeQuery,
   useGetTenantByIdQuery,
   useGetTenantBySlugQuery,
+  useUpdateTenantLogoMutation,
 } = tenantEndpoints;

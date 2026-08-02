@@ -18,6 +18,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator } from "react-native";
 import { SetRow } from "../components/SetRow";
 import { WorkoutCompleteModal } from "../components/WorkoutCompleteModal";
+import { GlassButton } from "@/shared/ui/GlassButton";
 
 interface WorkoutLogScreenProps {
   programDayId: string;
@@ -182,12 +183,12 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
       {/* Header Bar */}
       <Tone name={logError ? "peach" : "mint"} className="px-5 pt-12 pb-5" glass>
         <View className="flex-row items-center justify-between">
-          <Pressable
+          <GlassButton
             onPress={() => router.back()}
             className="h-9 w-9 items-center justify-center rounded-full bg-black/20 active:bg-black/40"
           >
             <Icon name="chevron-left" size={16} color="--foreground" />
-          </Pressable>
+          </GlassButton>
           <Text className="text-[11px] font-semibold uppercase tracking-[0.16em] text-foreground">
             {logError ? "Future Workout Preview" : "Active Workout Log"}
           </Text>

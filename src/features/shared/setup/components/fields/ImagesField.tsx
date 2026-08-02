@@ -5,7 +5,7 @@ import { Pressable, Text, View } from "@/tw";
 import { Image } from "@/tw/image";
 import type { Field } from "../../types";
 import { FieldLabel } from "./FieldLabel";
-import { useImageUpload } from "./useImageUpload";
+import { useImagePicker } from "./useImagePicker";
 
 export function ImagesField({
   field,
@@ -17,12 +17,12 @@ export function ImagesField({
   onChange: (v: string[]) => void;
 }) {
   const arr: string[] = Array.isArray(value) ? (value as string[]) : [];
-  const { uploading, error, pickAndUploadMany } = useImageUpload();
+  const { picking, error, pickMany } = useImagePicker();
 
   const add = async () => {
-    if (uploading) return;
-    const urls = await pickAndUploadMany();
-    if (urls.length) onChange([...arr, ...urls]);
+    if (picking) return;
+    const locals = await pickMany();
+    if (locals.length) onChange([...arr, ...locals]);
   };
 
   const removeAt = (i: number) => onChange(arr.filter((_, j) => j !== i));
@@ -47,10 +47,10 @@ export function ImagesField({
         ))}
         <Pressable
           onPress={add}
-          disabled={uploading}
+          disabled={picking}
           className="h-24 w-24 items-center justify-center rounded-2xl border-2 border-dashed border-border bg-secondary/60 active:opacity-80 disabled:opacity-60"
         >
-          {uploading ? (
+          {picking ? (
             <ActivityIndicator />
           ) : (
             <Icon name="plus" size={22} color="--muted-foreground" />

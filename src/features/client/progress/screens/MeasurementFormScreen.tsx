@@ -6,10 +6,9 @@ import {
   useGetMeasurementQuery,
   useUpdateMeasurementMutation,
 } from "@/api/endpoints/measurements.endpoints";
-import type { CreateMeasurementDto, Measurement } from "@/api/types";
+import type { Measurement, MeasurementFields } from "@/api/types";
 import { SignupFlow } from "@/features/shared/setup";
 import type { ProfileData } from "@/features/shared/setup";
-import { resolveImages } from "@/features/shared/setup/uploadImages";
 import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import { View } from "@/tw";
 import { MEASUREMENT_STEPS } from "../measurementForm.config";
@@ -45,17 +44,23 @@ function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function buildBody(data: ProfileData, photos: string[]): CreateMeasurementDto {
-  const body: CreateMeasurementDto = {
+function buildFields(data: ProfileData): MeasurementFields {
+  const fields: MeasurementFields = {
     measuredAt:
       typeof data.measuredAt === "string" && data.measuredAt ? data.measuredAt : todayISO(),
-    ...(photos.length ? { photos } : {}),
   };
   for (const key of NUMBER_KEYS) {
     const n = toNumber(data[key]);
-    if (n !== undefined) body[key] = n;
+    if (n !== undefined) fields[key] = n;
   }
-  return body;
+  return fields;
+}
+
+/** Photo URIs as the picker returns them — already-hosted ones are skipped. */
+function photoUris(v: unknown): string[] {
+  return Array.isArray(v)
+    ? v.filter((u): u is string => typeof u === "string" && Boolean(u.trim()))
+    : [];
 }
 
 /** Map a saved measurement back into form values (TextInput needs strings). */
@@ -86,13 +91,13 @@ export function MeasurementFormScreen() {
   const handleSubmit = async (data: ProfileData) => {
     if (!tenantId) throw new Error("No active coach selected.");
 
-    const photos = await resolveImages(data.photos, "client");
-    const body = buildBody(data, photos);
+    const fields = buildFields(data);
+    const photos = photoUris(data.photos);
 
     if (isEdit && id) {
-      await updateMeasurement({ id, body, tenantId }).unwrap();
+      await updateMeasurement({ id, fields, photoUris: photos, tenantId }).unwrap();
     } else {
-      await createMeasurement({ body, tenantId }).unwrap();
+      await createMeasurement({ fields, photoUris: photos, tenantId }).unwrap();
     }
   };
 

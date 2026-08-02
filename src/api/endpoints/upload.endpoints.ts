@@ -12,4 +12,4 @@ export const uploadEndpoints = baseApi.injectEndpoints({
 });
 
 export const { useDeleteUploadedFileMutation } = uploadEndpoints;
-export { uploadImage, uploadImages, UploadError } from '../client';
+export { uploadImage, uploadImages, uploadDocument, UploadError } from '../client';

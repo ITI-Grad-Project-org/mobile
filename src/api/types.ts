@@ -171,14 +171,19 @@ export interface Certification {
   issuer?: string;
   issueDate?: string; // YYYY-MM-DD (replaced `year`)
   expiryDate?: string; // YYYY-MM-DD
-  fileUrl?: string; // scanned certificate
   credentialUrl?: string; // public verification link
+  // No `fileUrl` — the scan rides as a `certificateFiles` part on PATCH
+  // /coaches/me, matched to this entry BY ARRAY INDEX.
 }
 
-export interface UpdateCoachDto {
+/**
+ * The JSON-encoded `data` part of `PATCH /coaches/me` (multipart/form-data).
+ * `avatar`, `transformationPhotos` and `certificateFiles` are FILE PARTS, not
+ * fields here — see UpdateCoachProfileArgs in profile.endpoints.ts.
+ */
+export interface CoachProfileData {
   firstName?: string;
   lastName?: string;
-  avatarUrl?: string;
   phone?: string;
   age?: number; // 16–100
   gender?: Gender;
@@ -188,7 +193,6 @@ export interface UpdateCoachDto {
   careerExperience?: string; // free text
   certifications?: Certification[];
   portfolioUrl?: string;
-  transformationPhotos?: string[];
   featuredReviews?: string;
   bio?: string;
   offlineAvailability?: OfflineAvailability;
@@ -211,7 +215,12 @@ export interface CreateTenantDto {
 // ---------------------------------------------------------------------------
 // Client profile
 // ---------------------------------------------------------------------------
-export interface UpdateClientDto {
+/**
+ * FLAT multipart fields on `PATCH /clients/me` — no `data` wrapper, unlike
+ * /coaches/me. The photo is an `avatar` file part, replacing the old
+ * `avatarUrl` string.
+ */
+export interface ClientProfileFields {
   firstName?: string;
   lastName?: string;
   phone?: string;
@@ -219,7 +228,6 @@ export interface UpdateClientDto {
   gender?: Gender;
   heightCm?: number;
   weightKg?: number;
-  avatarUrl?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -244,7 +252,12 @@ export type UpdateClientIntakeDto = Partial<CreateClientIntakeDto>;
 // ---------------------------------------------------------------------------
 // Measurements
 // ---------------------------------------------------------------------------
-export interface CreateMeasurementDto {
+/**
+ * FLAT multipart fields on POST/PATCH `/client/me/measurements`. Progress
+ * photos are binary `photos` parts, not URLs — `CreateMeasurementDto` /
+ * `UpdateMeasurementDto` no longer exist as JSON schemas.
+ */
+export interface MeasurementFields {
   measuredAt?: string; // YYYY-MM-DD (default today)
   weightKg?: number;
   bodyFatPct?: number;
@@ -253,15 +266,14 @@ export interface CreateMeasurementDto {
   hipsCm?: number;
   armCm?: number;
   thighCm?: number;
-  photos?: string[];
 }
-export type UpdateMeasurementDto = Partial<CreateMeasurementDto>;
 
-/** A measurement as returned by the server (create DTO fields + identity). */
-export interface Measurement extends CreateMeasurementDto {
+/** A measurement as returned by the server (fields + identity + hosted photos). */
+export interface Measurement extends MeasurementFields {
   id: string;
   measuredAt: string; // YYYY-MM-DD
   createdAt?: string;
+  photos?: string[]; // hosted URLs on the way back out
 }
 
 /** Paginated envelope for GET /client/me/measurements. */
@@ -459,4 +471,248 @@ export interface CompleteWorkoutDto {
 export interface CalendarQuery {
   from: string; // YYYY-MM-DD, inclusive
   to: string; // YYYY-MM-DD, inclusive
+}
+
+// ---------------------------------------------------------------------------
+// Nutrition — enums
+// ---------------------------------------------------------------------------
+export type ServingUnit = 'g' | 'ml' | 'piece' | 'cup' | 'tbsp' | 'scoop';
+export type MealSlot =
+  | 'breakfast'
+  | 'lunch'
+  | 'dinner'
+  | 'snack'
+  | 'pre_workout'
+  | 'post_workout';
+export type MealOutcome = 'completed' | 'partial' | 'skipped';
+/** Foods and Meals reuse the intake dietary-preference values. */
+export type DietaryTag = DietaryPreference;
+
+// ---------------------------------------------------------------------------
+// Nutrition — Food library (coach, per tenant)
+// All macro values are PER REFERENCE SERVING, not per 100g.
+// ---------------------------------------------------------------------------
+export interface CreateFoodDto {
+  name: string;
+  servingSize: number; // <=1000; the API applies a stricter max per unit
+  servingUnit: ServingUnit;
+  calories: number; // <=2000
+  proteinG: number; // <=150
+  carbsG: number; // <=300
+  fatG: number; // <=150
+  brand?: string;
+  fiberG?: number; // <=75
+  dietaryTags?: DietaryTag[];
+  allergens?: string[]; // trimmed/lowercased/deduped server-side
+}
+/** `isActive: true` restores an archived Food. */
+export type UpdateFoodDto = Partial<CreateFoodDto> & { isActive?: boolean };
+
+export interface ListFoodsQuery {
+  search?: string;
+  servingUnit?: ServingUnit;
+  dietaryTag?: DietaryTag;
+  allergen?: string;
+  includeInactive?: boolean; // default false; coach-only
+}
+
+// ---------------------------------------------------------------------------
+// Nutrition — Meal library (coach). Totals are calculated server-side.
+// ---------------------------------------------------------------------------
+export interface MealItemDto {
+  foodId: string;
+  amount: number; // <=1500, in the Food's serving unit
+}
+export interface CreateMealDto {
+  name: string;
+  items: MealItemDto[];
+  description?: string; // max 2000
+  photoUrl?: string; // upload via /upload/image first
+  prepNotes?: string; // max 5000
+  dietaryTags?: DietaryTag[];
+  allergens?: string[]; // meal-level additions on top of the Foods' own
+}
+/** Metadata only — the recipe is replaced via PUT .../items. */
+export type UpdateMealDto = Partial<Omit<CreateMealDto, 'items'>> & {
+  isActive?: boolean;
+};
+export interface ReplaceMealItemsDto {
+  items: MealItemDto[]; // full ordered replacement, not a delta
+}
+
+export interface ListMealsQuery {
+  search?: string;
+  dietaryTag?: DietaryTag;
+  allergen?: string;
+  includeInactive?: boolean; // default false
+}
+
+// ---------------------------------------------------------------------------
+// Nutrition plans (coach builder) — same lifecycle as training programs.
+// ---------------------------------------------------------------------------
+export interface NutritionTargets {
+  targetCalories?: number; // 800–6000
+  targetProteinG?: number; // 1–350
+  targetCarbsG?: number; // 0–800
+  targetFatG?: number; // 1–200
+  targetFiberG?: number; // 0–100
+  targetWaterMl?: number; // 250–6000
+}
+export interface CreateClientNutritionPlanDto extends NutritionTargets {
+  membershipId: string; // membership, not client id
+  name: string; // max 150
+  durationWeeks: number; // 1–52
+  startDate: string; // YYYY-MM-DD
+  description?: string; // max 5000
+  goal?: Goal;
+}
+export type UpdateClientNutritionPlanDto = Partial<
+  Omit<CreateClientNutritionPlanDto, 'membershipId' | 'durationWeeks'>
+>;
+/** Choosing today activates the plan immediately — it can't be rescheduled again. */
+export interface RescheduleClientNutritionPlanDto {
+  startDate: string;
+}
+
+export interface ListNutritionPlansQuery {
+  membershipId?: string;
+  status?: ProgramStatus;
+  goal?: Goal;
+  search?: string;
+  isArchived?: boolean; // default false
+}
+
+/**
+ * A flexible day has no fixed prescription — the client logs freely against
+ * targets. Planned meals may still be attached (hybrid); adding meals to a
+ * fully flexible day returns 409.
+ */
+export interface UpdateNutritionPlanDayDto {
+  isFlexibleDay?: boolean;
+  notes?: string; // max 5000
+  targetCaloriesOverride?: number;
+  targetProteinGOverride?: number;
+  targetCarbsGOverride?: number;
+  targetFatGOverride?: number;
+  targetFiberGOverride?: number;
+  targetWaterMlOverride?: number;
+}
+
+/** Amount `0` omits the ingredient from the snapshot. */
+export interface PlannedMealItemOverrideDto {
+  mealIngredientId: string;
+  amount: number; // 0–1500
+}
+export interface AddMealFromLibraryDto {
+  mealId: string;
+  slot: MealSlot;
+  position?: number; // 1–10
+  suggestedTime?: string; // e.g. "08:30"
+  coachNotes?: string; // max 5000
+  itemOverrides?: PlannedMealItemOverrideDto[];
+}
+/** Inline overrides key off `foodId` — the Meal has no ingredient ids yet. */
+export interface InlineMealPrescriptionDto
+  extends Omit<AddMealFromLibraryDto, 'mealId' | 'itemOverrides'> {
+  itemOverrides?: { foodId: string; amount: number }[];
+}
+export interface CreateLibraryMealAndAddDto {
+  meal: CreateMealDto;
+  prescription: InlineMealPrescriptionDto;
+}
+export interface UpdatePlannedMealDto {
+  slot?: MealSlot;
+  position?: number;
+  suggestedTime?: string;
+  coachNotes?: string;
+}
+/** Must list every current planned Food exactly once, in the desired order. */
+export interface ReplacePlannedMealItemsDto {
+  items: { plannedMealFoodId: string; amount: number }[];
+}
+
+// ---------------------------------------------------------------------------
+// Nutrition (client logging)
+//
+// Log writes have a WRITE DEADLINE as well as a finalized state. A 409 on any
+// mutating log endpoint means "this day is closed for editing" — finalized,
+// deadline passed, future day, or the plan was cancelled — not a validation
+// error. Render the day read-only rather than retrying.
+// ---------------------------------------------------------------------------
+export interface UpdateNutritionDayLogDto {
+  waterMlConsumed?: number; // 0–12000
+  clientNotes?: string; // max 5000
+}
+export interface UpdateLoggedMealOutcomeDto {
+  outcome: MealOutcome;
+  clientNotes?: string;
+}
+/**
+ * Two modes. Library: `foodId` + `amount`, macros derived by the API. Manual:
+ * `foodName` + macro TOTALS (not per-serving). Only `mealSlot` is required in
+ * both. Limits: amount <=5000 · calories <=5000 · protein/fat <=500 ·
+ * carbs <=1000 · fiber <=150.
+ */
+export interface CreateActualFoodLogDto {
+  mealSlot: MealSlot;
+  foodId?: string | null; // library mode
+  loggedMealId?: string | null; // link to a prescribed Meal in the same log
+  foodName?: string; // manual mode, max 200
+  brand?: string;
+  servingSize?: number;
+  servingUnit?: ServingUnit;
+  amount?: number;
+  calories?: number;
+  proteinG?: number;
+  carbsG?: number;
+  fatG?: number;
+  fiberG?: number;
+  clientNotes?: string;
+}
+export type UpdateActualFoodLogDto = Partial<CreateActualFoodLogDto>;
+
+/** Clients browse their coach's Foods read-only — no `includeInactive`. */
+export type ClientListFoodsQuery = Omit<ListFoodsQuery, 'includeInactive'>;
+
+// ---------------------------------------------------------------------------
+// Client activity graph — GET /client/me/activity
+//
+// A contributions-style heatmap spanning ALL of the client's tenants, so unlike
+// everything else under /client/me it is NOT scoped to the active tenant.
+// The only endpoint in the spec with a fully typed response body.
+// ---------------------------------------------------------------------------
+
+/** Pre-bucketed intensity, 0–4. Named to avoid colliding with intake's ActivityLevel. */
+export type ActivityGraphLevel = 0 | 1 | 2 | 3 | 4;
+
+export interface ActivityGraphDay {
+  date: string; // YYYY-MM-DD
+  activityCount: number;
+  /** Bucketed server-side — map straight to swatches, don't re-derive from
+   *  activityCount or the shading drifts from the server's. */
+  level: ActivityGraphLevel;
+}
+export interface ActivityGraphPeriod {
+  mode: 'rolling' | 'calendar_year';
+  year: number | null; // null when mode === 'rolling' — nullable, not optional
+  from: string; // YYYY-MM-DD
+  to: string; // YYYY-MM-DD
+}
+export interface ActivityGraphSummary {
+  totalActivities: number;
+  activeDays: number;
+  /** Streaks are computed by the API — no client-side streak math needed. */
+  currentStreakDays: number;
+  longestStreakDays: number;
+}
+export interface ActivityGraphResponse {
+  /** Day boundaries resolve in THIS zone, not the device's. Don't re-bucket. */
+  timezone: string;
+  period: ActivityGraphPeriod;
+  summary: ActivityGraphSummary;
+  days: ActivityGraphDay[]; // one entry per date in the period
+}
+
+export interface ActivityGraphQuery {
+  year?: number; // omit for the rolling latest 365 days
 }

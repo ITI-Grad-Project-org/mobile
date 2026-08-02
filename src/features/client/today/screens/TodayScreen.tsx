@@ -17,6 +17,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { ExerciseSheet } from "../components/ExerciseSheet";
 import { StreakHero } from "../components/StreakGrid";
 import { WorkoutCard } from "../components/WorkoutCard";
+import { Icon } from "@/shared/ui/Icon";
 
 export function TodayScreen() {
   const coach = useActiveCoach();
@@ -230,7 +231,7 @@ export function TodayScreen() {
             {today} · with {coachFirstName}
           </Text>
           <Text className="text-[26px] font-bold tracking-tight text-foreground mt-0.5">
-            Hey {clientFirstName} 👋
+            Hey {clientFirstName} 
           </Text>
         </View>
       </View>

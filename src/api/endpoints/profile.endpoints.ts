@@ -1,5 +1,26 @@
 import { baseApi } from '../baseApi';
-import { UpdateCoachDto, UpdateClientDto } from '../types';
+import { appendFields, appendFile, appendFiles } from '../formData';
+import { ClientProfileFields, CoachProfileData } from '../types';
+
+export interface UpdateCoachProfileArgs {
+  /** Profile fields — sent as one JSON-encoded `data` part. */
+  data: CoachProfileData;
+  /** Local URI. Remote URLs are ignored (nothing to re-upload). */
+  avatarUri?: string;
+  transformationUris?: string[];
+  /**
+   * Certificate scans, matched to `data.certifications` BY ARRAY INDEX.
+   * Only local URIs become parts, so alignment holds when the files are
+   * contiguous from index 0 — a certification with no new file shifts every
+   * later one. Keep already-hosted scans out of `certifications` reordering.
+   */
+  certificateUris?: (string | undefined)[];
+}
+
+export interface UpdateClientProfileArgs extends ClientProfileFields {
+  /** Local URI for the `avatar` part; replaced the old `avatarUrl` string. */
+  avatarUri?: string;
+}
 
 export const profileEndpoints = baseApi.injectEndpoints({
   endpoints: (builder) => ({
@@ -7,12 +28,16 @@ export const profileEndpoints = baseApi.injectEndpoints({
       query: () => '/coaches/me',
       providesTags: ['Me'],
     }),
-    updateCoachProfile: builder.mutation<any, UpdateCoachDto>({
-      query: (body) => ({
-        url: '/coaches/me',
-        method: 'PATCH',
-        body,
-      }),
+    // multipart/form-data: fields wrapped in a JSON `data` part, files alongside.
+    updateCoachProfile: builder.mutation<any, UpdateCoachProfileArgs>({
+      query: ({ data, avatarUri, transformationUris, certificateUris }) => {
+        const form = new FormData();
+        form.append('data', JSON.stringify(data));
+        appendFile(form, 'avatar', avatarUri, 'avatar.jpg');
+        appendFiles(form, 'transformationPhotos', transformationUris, 'transformation');
+        appendFiles(form, 'certificateFiles', certificateUris, 'certificate');
+        return { url: '/coaches/me', method: 'PATCH', body: form };
+      },
       invalidatesTags: ['Me'],
     }),
     deleteCoachProfile: builder.mutation<any, void>({
@@ -32,12 +57,15 @@ export const profileEndpoints = baseApi.injectEndpoints({
       query: () => '/clients/me',
       providesTags: ['Me'],
     }),
-    updateClientProfile: builder.mutation<any, UpdateClientDto>({
-      query: (body) => ({
-        url: '/clients/me',
-        method: 'PATCH',
-        body,
-      }),
+    // multipart/form-data too, but FLAT fields — no `data` wrapper. The two
+    // conventions differ on purpose; don't share a helper between them.
+    updateClientProfile: builder.mutation<any, UpdateClientProfileArgs>({
+      query: ({ avatarUri, ...fields }) => {
+        const form = new FormData();
+        appendFields(form, fields);
+        appendFile(form, 'avatar', avatarUri, 'avatar.jpg');
+        return { url: '/clients/me', method: 'PATCH', body: form };
+      },
       invalidatesTags: ['Me'],
     }),
     deleteClientProfile: builder.mutation<any, void>({

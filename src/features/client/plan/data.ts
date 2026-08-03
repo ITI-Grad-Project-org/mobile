@@ -26,6 +26,8 @@ export type DayPlan = {
   notes?: string;
   logState?: string;
   isCompleted?: boolean;
+  /** Today's scheduled day — highlighted in the plan list. */
+  isToday?: boolean;
 };
 
 /** Static class names per tone — NativeWind can only see literal classes, so no

@@ -1,4 +1,5 @@
 import {
+  useGetCalendarQuery,
   useGetCurrentProgramQuery,
   useGetMyProgramQuery,
   useGetMyProgramsQuery,
@@ -7,9 +8,10 @@ import { useActiveCoach } from "@/lib/role";
 import { cn } from "@/lib/utils";
 import { Card } from "@/shared/ui/Card";
 import { Icon } from "@/shared/ui/Icon";
+import { todayIso } from "@/shared/utils/dayProgress";
 import { Pressable, ScrollView, Text, View } from "@/tw";
 import { router } from "expo-router";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { DayCard } from "../components/DayCard";
 import { DaySheet } from "../components/DaySheet";
 import { NutritionTab } from "../components/NutritionTab";
@@ -28,25 +30,66 @@ export function PlanScreen() {
 
   const publishedProgram = programs.length > 0 ? programs[0] : currentProgram;
 
-  const { data: fullProgramData } = useGetMyProgramQuery(publishedProgram?.id || "", {
-    skip: !publishedProgram?.id,
-  });
+  const { data: fullProgramData } = useGetMyProgramQuery(
+    publishedProgram?.id || "",
+    {
+      skip: !publishedProgram?.id,
+    }
+  );
 
-  const fullProgram = (fullProgramData as any)?.data || fullProgramData || publishedProgram;
+  const fullProgram =
+    (fullProgramData as any)?.data || fullProgramData || publishedProgram;
 
-  const [selectedWeekIndex, setSelectedWeekIndex] = useState(0);
+  // Today's scheduled day, straight from the calendar — the program payload
+  // doesn't always carry dates, and this is what Today already keys off.
+  const iso = todayIso();
+  const { data: calendarData } = useGetCalendarQuery({ from: iso, to: iso });
+  const todayDayId = useMemo(() => {
+    const items = (calendarData as any)?.data || calendarData || [];
+    const item = Array.isArray(items) ? items[0] : null;
+    return (
+      item?.id || item?.dayId || item?.programDayId || item?.programDay?.id || null
+    );
+  }, [calendarData]);
 
   const weeksList = useMemo(() => {
-    const rawWeeks = fullProgram?.weeks || publishedProgram?.weeks || currentProgram?.weeks;
+    const rawWeeks =
+      fullProgram?.weeks || publishedProgram?.weeks || currentProgram?.weeks;
     return Array.isArray(rawWeeks) ? rawWeeks : [];
   }, [fullProgram, publishedProgram, currentProgram]);
 
   const totalWeeks = useMemo(() => {
     if (weeksList.length > 0) return weeksList.length;
-    const duration = fullProgram?.durationWeeks || publishedProgram?.durationWeeks || currentProgram?.durationWeeks;
+    const duration =
+      fullProgram?.durationWeeks ||
+      publishedProgram?.durationWeeks ||
+      currentProgram?.durationWeeks;
     if (typeof duration === "number" && duration > 1) return duration;
     return 1;
   }, [weeksList, fullProgram, publishedProgram, currentProgram]);
+
+  /** Does this raw day fall on today? By id first, then its own date. */
+  const isTodayDay = useCallback(
+    (day: any) => {
+      if (!day) return false;
+      if (todayDayId && day.id === todayDayId) return true;
+      const dateStr = day.scheduledDate || day.date || day.scheduledAt;
+      return typeof dateStr === "string" && dateStr.split("T")[0] === iso;
+    },
+    [todayDayId, iso]
+  );
+
+  const todayWeekIndex = useMemo(() => {
+    const found = weeksList.findIndex((week: any) =>
+      (week?.days || []).some(isTodayDay)
+    );
+    return found >= 0 ? found : null;
+  }, [weeksList, isTodayDay]);
+
+  // Default to the week today falls in; an arrow tap pins the choice from then
+  // on, so browsing ahead isn't yanked back when the program data refreshes.
+  const [weekOverride, setWeekOverride] = useState<number | null>(null);
+  const selectedWeekIndex = weekOverride ?? todayWeekIndex ?? 0;
 
   const days: DayPlan[] = useMemo(() => {
     let rawDays: any[] = [];
@@ -63,11 +106,16 @@ export function PlanScreen() {
 
       if (Array.isArray(flatDays) && flatDays.length > 0) {
         const weekNum = selectedWeekIndex + 1;
-        const matchingDays = flatDays.filter((d: any) => (d.weekNumber || 1) === weekNum);
+        const matchingDays = flatDays.filter(
+          (d: any) => (d.weekNumber || 1) === weekNum
+        );
         if (matchingDays.length > 0) {
           rawDays = matchingDays;
         } else if (flatDays.length > 7) {
-          rawDays = flatDays.slice(selectedWeekIndex * 7, (selectedWeekIndex + 1) * 7);
+          rawDays = flatDays.slice(
+            selectedWeekIndex * 7,
+            (selectedWeekIndex + 1) * 7
+          );
         } else {
           rawDays = flatDays;
         }
@@ -85,13 +133,16 @@ export function PlanScreen() {
         const parts = dateStr.split("T")[0].split("-").map(Number);
         if (parts.length === 3 && !parts.some(isNaN)) {
           const dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
-          shortWeekday = dateObj.toLocaleDateString("en-US", { weekday: "short" });
+          shortWeekday = dateObj.toLocaleDateString("en-US", {
+            weekday: "short",
+          });
           dayOfMonth = dateObj.getDate();
         }
       }
 
       return {
         id: day.id,
+        isToday: isTodayDay(day),
         d: shortWeekday,
         date: dayOfMonth,
         title: day.name || `Day ${day.dayNumber || day.position || i + 1}`,
@@ -100,8 +151,17 @@ export function PlanScreen() {
         type: day.isRestDay ? "REST DAY" : "WORKOUT DAY",
         icon: day.isRestDay ? "sparkles" : "dumbbell",
         desc: day.notes || "",
-        exercises: (day.exercises || day.loggedExercises || day.prescribedExercises || []).map((exItem: any, idx: number) => {
-          const setsCount = exItem.sets?.length || exItem.prescribedSets?.length || exItem.targetSets || 3;
+        exercises: (
+          day.exercises ||
+          day.loggedExercises ||
+          day.prescribedExercises ||
+          []
+        ).map((exItem: any, idx: number) => {
+          const setsCount =
+            exItem.sets?.length ||
+            exItem.prescribedSets?.length ||
+            exItem.targetSets ||
+            3;
           const firstSet = exItem.sets?.[0] || {};
           const repsVal = firstSet.repsMin
             ? firstSet.repsMax
@@ -118,28 +178,45 @@ export function PlanScreen() {
             sets: `${setsCount} sets`,
             reps: String(repsVal),
             weight: weightVal,
-            muscle: exItem.exercise?.primaryMuscle || exItem.primaryMuscle || "Full Body",
-            image: exItem.exercise?.thumbnailUrl || exItem.thumbnailUrl || exItem.image || "",
-            instructions: exItem.exercise?.instructionSteps || exItem.instructions || [
-              "Position yourself with proper stance and core tight.",
-              "Perform movement with controlled tempo.",
-              "Squeeze target muscle at peak contraction.",
-              "Return to starting position smoothly."
-            ],
-            gifUrl: exItem.exercise?.demoGifUrl || exItem.demoGifUrl || exItem.gifUrl || "",
-            videoUrl: exItem.exercise?.demoVideoUrl || exItem.demoVideoUrl || exItem.videoUrl || "",
+            muscle:
+              exItem.exercise?.primaryMuscle ||
+              exItem.primaryMuscle ||
+              "Full Body",
+            image:
+              exItem.exercise?.thumbnailUrl ||
+              exItem.thumbnailUrl ||
+              exItem.image ||
+              "",
+            instructions: exItem.exercise?.instructionSteps ||
+              exItem.instructions || [
+                "Position yourself with proper stance and core tight.",
+                "Perform movement with controlled tempo.",
+                "Squeeze target muscle at peak contraction.",
+                "Return to starting position smoothly.",
+              ],
+            gifUrl:
+              exItem.exercise?.demoGifUrl ||
+              exItem.demoGifUrl ||
+              exItem.gifUrl ||
+              "",
+            videoUrl:
+              exItem.exercise?.demoVideoUrl ||
+              exItem.demoVideoUrl ||
+              exItem.videoUrl ||
+              "",
           };
         }),
         notes: day.notes,
       };
     });
-  }, [fullProgram, publishedProgram, weeksList, selectedWeekIndex]);
+  }, [fullProgram, publishedProgram, weeksList, selectedWeekIndex, isTodayDay]);
 
   const [sub, setSub] = useState<PlanSub>("training");
   const [openDay, setOpenDay] = useState<DayPlan | null>(null);
 
   const displayTitle = publishedProgram?.name || "Training Plan";
-  const displaySubtitle = publishedProgram?.description || `Coached by ${coach.name.split(" ")[0]}`;
+  const displaySubtitle =
+    publishedProgram?.description || `Coached by ${coach.name.split(" ")[0]}`;
 
   return (
     <ScrollView
@@ -153,16 +230,23 @@ export function PlanScreen() {
           <Text className="text-[26px] font-bold tracking-tight text-foreground">
             {displayTitle}
           </Text>
-          <Text className="text-[13.5px] text-muted-foreground mt-0.5" numberOfLines={1}>
+          <Text
+            className="text-[13.5px] text-muted-foreground mt-0.5"
+            numberOfLines={1}
+          >
             {displaySubtitle}
           </Text>
         </View>
         {publishedProgram?.id ? (
           <Pressable
-            onPress={() => router.push(`/program/${publishedProgram.id}` as any)}
+            onPress={() =>
+              router.push(`/program/${publishedProgram.id}` as any)
+            }
             className="rounded-xl bg-secondary px-3.5 py-2 active:opacity-80 flex-row items-center gap-1 shrink-0"
           >
-            <Text className="text-[12px] font-semibold text-foreground">Details</Text>
+            <Text className="text-[12px] font-semibold text-foreground">
+              Details
+            </Text>
             <Icon name="chevron-right" size={14} color="--foreground" />
           </Pressable>
         ) : null}
@@ -178,7 +262,7 @@ export function PlanScreen() {
           {totalWeeks > 1 ? (
             <Card glass className="flex-row items-center justify-between p-3">
               <Pressable
-                onPress={() => setSelectedWeekIndex((w) => Math.max(0, w - 1))}
+                onPress={() => setWeekOverride(Math.max(0, selectedWeekIndex - 1))}
                 disabled={selectedWeekIndex === 0}
                 className={cn(
                   "h-9 w-9 items-center justify-center rounded-full bg-secondary active:opacity-70",
@@ -191,7 +275,9 @@ export function PlanScreen() {
 
               <View className="items-center">
                 <Text className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  {publishedProgram?.schedulePhase ? publishedProgram.schedulePhase.replace("_", " ") : "BLOCK A"}
+                  {publishedProgram?.schedulePhase
+                    ? publishedProgram.schedulePhase.replace("_", " ")
+                    : "BLOCK A"}
                 </Text>
                 <Text className="text-[16px] font-bold text-foreground">
                   Week {selectedWeekIndex + 1} of {totalWeeks}
@@ -199,7 +285,9 @@ export function PlanScreen() {
               </View>
 
               <Pressable
-                onPress={() => setSelectedWeekIndex((w) => Math.min(totalWeeks - 1, w + 1))}
+                onPress={() =>
+                  setWeekOverride(Math.min(totalWeeks - 1, selectedWeekIndex + 1))
+                }
                 disabled={selectedWeekIndex >= totalWeeks - 1}
                 className={cn(
                   "h-9 w-9 items-center justify-center rounded-full bg-secondary active:opacity-70",
@@ -219,13 +307,18 @@ export function PlanScreen() {
                 No Program Published Yet
               </Text>
               <Text className="mt-1 text-[13px] text-muted-foreground text-center leading-relaxed">
-                Your coach has not published a training program for your active tenant yet.
-                Check back soon or contact your coach to get started!
+                Your coach has not published a training program for your active
+                tenant yet. Check back soon or contact your coach to get
+                started!
               </Text>
             </Card>
           ) : (
             days.map((day) => (
-              <DayCard key={day.id || day.d} day={day} onPress={() => setOpenDay(day)} />
+              <DayCard
+                key={day.id || day.d}
+                day={day}
+                onPress={() => setOpenDay(day)}
+              />
             ))
           )}
         </View>

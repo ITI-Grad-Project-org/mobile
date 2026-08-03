@@ -6,6 +6,7 @@ import {
 import { useListTenantJoinRequestsQuery } from "@/api/endpoints/joinRequests.endpoints";
 import { useRole } from "@/lib/role";
 import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
+import { GlassButton } from "@/shared/ui/GlassButton";
 import { Icon } from "@/shared/ui/Icon";
 import { Pressable, View } from "@/tw";
 import { Image } from "@/tw/image";
@@ -81,9 +82,9 @@ export function AppHeader() {
         {/* Action Controls */}
         <View className="flex-row items-center gap-4">
           {/* Dark Mode Toggle */}
-          <Pressable
+          <GlassButton
             onPress={toggleTheme}
-            className="h-9 w-9 rounded-full bg-secondary items-center justify-center active:opacity-70"
+            className="h-9 w-9 rounded-full"
             accessibilityLabel="Toggle theme"
           >
             <Icon
@@ -91,12 +92,12 @@ export function AppHeader() {
               size={18}
               color={isDark ? "--sun-ink" : "--muted-foreground"}
             />
-          </Pressable>
+          </GlassButton>
 
           {/* Notification Button */}
-          <Pressable
+          <GlassButton
             onPress={handleNotificationPress}
-            className="h-9 w-9 rounded-full bg-secondary items-center justify-center relative active:opacity-70"
+            className="h-9 w-9 rounded-full"
             accessibilityLabel="Notifications"
           >
             <Icon name="bell" size={18} color="--muted-foreground" />
@@ -104,9 +105,9 @@ export function AppHeader() {
             {hasNotifications ? (
               <View className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive border border-card" />
             ) : null}
-          </Pressable>
+          </GlassButton>
 
-          {/* Profile Button */}
+          {/* Profile Button — the avatar fills the surface, so no glass tint. */}
           <Pressable
             onPress={handleProfilePress}
             className="h-9 w-9 rounded-full overflow-hidden border border-border active:opacity-70"

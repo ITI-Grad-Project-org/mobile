@@ -120,6 +120,7 @@ export const baseApi = createApi({
     'Programs',
     'Program',
     'Calendar',
+    'TrainingDay',
     'WorkoutLog',
     'Foods',
     'Meals',

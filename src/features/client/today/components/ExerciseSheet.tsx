@@ -1,4 +1,6 @@
 import type { Exercise } from "@/lib/data";
+import { cn } from "@/lib/utils";
+import { GlassButton } from "@/shared/ui/GlassButton";
 import { Icon } from "@/shared/ui/Icon";
 import { Pressable, ScrollView, Text, TextInput, View } from "@/tw";
 import { Tone } from "@/tw/Tone";
@@ -82,19 +84,21 @@ export function ExerciseSheet({
 
 
             {/* Close Button — sits closer to the top on iOS since the native sheet has no status-bar inset */}
-            <Pressable
+            <GlassButton
               onPress={onClose}
               className={`absolute right-4 ${isIOS ? "top-4" : "top-10"} h-9 w-9 bg-black/50 rounded-full items-center justify-center active:bg-black/75 z-10`}
               accessibilityLabel="Close"
             >
               <Icon name="x" size={16} color="#ffffff" />
-            </Pressable>
+            </GlassButton>
 
             {/* Play/Pause Video Overlay Button */}
-            <Pressable
+            <GlassButton
               onPress={() => setIsPlaying((prev) => !prev)}
-              className={`absolute top-1/2 left-1/2 -ml-8 -mt-8 h-16 w-16 rounded-full items-center justify-center shadow-pop active:scale-[0.95] active:opacity-90 z-10 ${isPlaying ? "bg-black/60 border border-white/30" : "bg-white/85"
-                }`}
+              className={cn(
+                "absolute top-1/2 left-1/2 -ml-8 -mt-8 h-16 w-16 rounded-full shadow-pop z-10",
+                isPlaying ? "bg-black/50 border border-white/30" : "bg-white/70"
+              )}
               accessibilityLabel={isPlaying ? "Pause demonstration" : "Play demonstration"}
             >
               <Icon
@@ -102,7 +106,7 @@ export function ExerciseSheet({
                 size={28}
                 color={isPlaying ? "#ffffff" : "#000000"}
               />
-            </Pressable>
+            </GlassButton>
 
             {/* Workout muscle group and Title details */}
             <View className="absolute bottom-4 left-5 right-5 pointer-events-none">

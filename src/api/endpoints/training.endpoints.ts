@@ -31,6 +31,9 @@ export const trainingEndpoints = baseApi.injectEndpoints({
     }),
     getTrainingDay: builder.query<any, string>({
       query: (programDayId) => `${T}/days/${programDayId}`,
+      providesTags: (result, error, programDayId) => [
+        { type: 'TrainingDay', id: programDayId },
+      ],
     }),
 
     // ----- Executing a workout
@@ -40,14 +43,14 @@ export const trainingEndpoints = baseApi.injectEndpoints({
         url: `${T}/days/${programDayId}/log`,
         method: 'POST',
       }),
-      invalidatesTags: ['Calendar'],
+      invalidatesTags: ['Calendar', 'TrainingDay'],
     }),
     skipTrainingDay: builder.mutation<any, string>({
       query: (programDayId) => ({
         url: `${T}/days/${programDayId}/skip`,
         method: 'POST',
       }),
-      invalidatesTags: ['Calendar'],
+      invalidatesTags: ['Calendar', 'TrainingDay'],
     }),
     getWorkoutLog: builder.query<any, string>({
       query: (logId) => `${T}/logs/${logId}`,
@@ -62,7 +65,11 @@ export const trainingEndpoints = baseApi.injectEndpoints({
         method: 'PATCH',
         body,
       }),
-      invalidatesTags: (result, error, { logId }) => [{ type: 'WorkoutLog', id: logId }],
+      invalidatesTags: (result, error, { logId }) => [
+        { type: 'WorkoutLog', id: logId },
+        'TrainingDay',
+        'Calendar',
+      ],
     }),
     addExtraSet: builder.mutation<any, { logId: string; body: CreateExtraLoggedSetDto }>({
       query: ({ logId, body }) => ({
@@ -70,14 +77,22 @@ export const trainingEndpoints = baseApi.injectEndpoints({
         method: 'POST',
         body,
       }),
-      invalidatesTags: (result, error, { logId }) => [{ type: 'WorkoutLog', id: logId }],
+      invalidatesTags: (result, error, { logId }) => [
+        { type: 'WorkoutLog', id: logId },
+        'TrainingDay',
+        'Calendar',
+      ],
     }),
     removeExtraSet: builder.mutation<any, { logId: string; loggedSetId: string }>({
       query: ({ logId, loggedSetId }) => ({
         url: `${T}/logs/${logId}/extra-sets/${loggedSetId}`,
         method: 'DELETE',
       }),
-      invalidatesTags: (result, error, { logId }) => [{ type: 'WorkoutLog', id: logId }],
+      invalidatesTags: (result, error, { logId }) => [
+        { type: 'WorkoutLog', id: logId },
+        'TrainingDay',
+        'Calendar',
+      ],
     }),
     completeWorkout: builder.mutation<any, { logId: string; body?: CompleteWorkoutDto }>({
       query: ({ logId, body }) => ({
@@ -87,6 +102,7 @@ export const trainingEndpoints = baseApi.injectEndpoints({
       }),
       invalidatesTags: (result, error, { logId }) => [
         { type: 'WorkoutLog', id: logId },
+        'TrainingDay',
         'Calendar',
         // A finished workout is a new mark on the activity heatmap.
         'Activity',

@@ -8,26 +8,131 @@ import {
   useSkipTrainingDayMutation,
   useStartOrResumeLogMutation,
 } from "@/api/endpoints/training.endpoints";
-import type { SetOutcome } from "@/api/types";
+import { cn } from "@/lib/utils";
+import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import { Card } from "@/shared/ui/Card";
-import { Icon } from "@/shared/ui/Icon";
-import { Pressable, ScrollView, Text, View } from "@/tw";
-import { Tone } from "@/tw/Tone";
-import { router } from "expo-router";
-import { useEffect, useState } from "react";
-import { ActivityIndicator } from "react-native";
-import { SetRow } from "../components/SetRow";
-import { WorkoutCompleteModal } from "../components/WorkoutCompleteModal";
 import { GlassButton } from "@/shared/ui/GlassButton";
+import { Icon } from "@/shared/ui/Icon";
+import {
+  dayProgressKey,
+  exerciseNameKey,
+  mergeDayProgress,
+  todayIso,
+} from "@/shared/utils/dayProgress";
+import { Pressable, ScrollView, Text, View } from "@/tw";
+import { Animated } from "@/tw/animated";
+import { router } from "expo-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ActivityIndicator } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from "react-native-reanimated";
+import { ExerciseRail } from "../components/ExerciseRail";
+import { RestDock } from "../components/RestDock";
+import { SetCard, draftFromKg, draftToKg, type SetDraft } from "../components/SetCard";
+import { WorkoutCompleteModal } from "../components/WorkoutCompleteModal";
+import {
+  DEFAULT_REST_SECONDS,
+  formatClock,
+  useElapsedSeconds,
+  useRestTimer,
+} from "../hooks/useRestTimer";
+import { formatWeight, fromKg, useWeightUnit, type WeightUnit } from "../lib/units";
+
+/** Past this much horizontal travel the card commits to the next exercise. */
+const SWIPE_THRESHOLD = 55;
 
 interface WorkoutLogScreenProps {
   programDayId: string;
 }
 
+/** A set, flattened out of the several shapes the training API returns. */
+interface NormalizedSet {
+  id: string;
+  setType: string;
+  isExtra: boolean;
+  target: string;
+  serverDraft: SetDraft;
+  serverLogged: boolean;
+}
+
+interface NormalizedExercise {
+  id: string;
+  /** Every id this exercise may be keyed by in the shared day-progress map. */
+  progressIds: string[];
+  name: string;
+  detailChip: string | null;
+  targetChip: string | null;
+  lastTime: string | null;
+  coachNotes: string | null;
+  restSeconds: number;
+  sets: NormalizedSet[];
+}
+
+// The training endpoints are typed `any` (see api/endpoints/training.endpoints.ts),
+// so the raw payloads are read defensively and normalized into the interfaces
+// above — `any` below is the untyped API payload, not a shortcut.
+
+function repsTarget(set: any): string | null {
+  const min = set?.repsMin ?? set?.reps;
+  const max = set?.repsMax;
+  if (min === undefined || min === null) return null;
+  return max && max !== min ? `${min}–${max}` : `${min}`;
+}
+
+function setTarget(set: any, unit: WeightUnit): string {
+  const parts: string[] = [];
+  const reps = repsTarget(set);
+  if (set?.weightKg !== undefined && set?.weightKg !== null) {
+    parts.push(`${formatWeight(fromKg(set.weightKg, unit))} ${unit}`);
+  }
+  if (reps) parts.push(`${reps} reps`);
+  if (set?.intensityValue) parts.push(`RPE ${set.intensityValue}`);
+  if (set?.durationSeconds) parts.push(`${set.durationSeconds}s`);
+  return parts.length ? parts.join(" · ") : "No target";
+}
+
+/** "Last time · 100 kg × 8, 8, 8", when the payload carries a previous session. */
+function lastTimeLine(exercise: any, unit: WeightUnit): string | null {
+  const history: any[] =
+    exercise?.lastSession?.sets ?? exercise?.previousSets ?? exercise?.lastPerformance?.sets ?? [];
+  if (!Array.isArray(history) || history.length === 0) return null;
+
+  const reps = history
+    .map((s) => s?.reps ?? s?.actualReps)
+    .filter((r) => r !== undefined && r !== null);
+  if (reps.length === 0) return null;
+
+  const weightKg = history.find((s) => (s?.weightKg ?? s?.actualWeightKg) != null);
+  const weight = weightKg
+    ? `${formatWeight(fromKg(weightKg.weightKg ?? weightKg.actualWeightKg, unit))} ${unit} × `
+    : "";
+  return `Last time · ${weight}${reps.join(", ")}`;
+}
+
 export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
   const [logId, setLogId] = useState<string | null>(null);
   const [logError, setLogError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  // Kept apart from saveError: the dock is hidden behind the completion sheet.
+  const [completeError, setCompleteError] = useState<string | null>(null);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  // Local overrides so a tap on the check lands instantly; the server value is
+  // the fallback for anything the client hasn't touched this session.
+  const [draftOverrides, setDraftOverrides] = useState<Record<string, SetDraft>>({});
+  const [loggedOverrides, setLoggedOverrides] = useState<Record<string, boolean>>({});
+
+  const { tenantId } = useActiveTenant();
+  const unit = useWeightUnit();
+  const rest = useRestTimer();
+  const [sessionStartedAt] = useState(() => Date.now());
+  const elapsed = useElapsedSeconds(sessionStartedAt);
 
   const { data: dayQueryData } = useGetTrainingDayQuery(programDayId, {
     skip: !programDayId,
@@ -39,7 +144,7 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
     skip: !logId,
   });
 
-  const [logSet, { isLoading: isLoggingSet }] = useLogSetMutation();
+  const [logSet] = useLogSetMutation();
   const [addExtraSet, { isLoading: isAddingExtra }] = useAddExtraSetMutation();
   const [removeExtraSet] = useRemoveExtraSetMutation();
   const [skipDay, { isLoading: isSkipping }] = useSkipTrainingDayMutation();
@@ -60,7 +165,6 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
         }
       })
       .catch((err) => {
-        console.warn("Could not start or resume workout log:", err);
         const errMsg = err?.data?.message || err?.message || "Future program days cannot be logged";
         setLogError(errMsg);
       });
@@ -68,75 +172,237 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
 
   const dayData = dayQueryData?.data || dayQueryData;
   const activeLog = logData?.data || logData;
-  const exercises =
-    activeLog?.exercises ||
-    activeLog?.loggedExercises ||
-    activeLog?.programDay?.exercises ||
-    dayData?.exercises ||
-    dayData?.prescribedExercises ||
-    [];
+  const rawExercises: any[] = useMemo(
+    () =>
+      activeLog?.exercises ||
+      activeLog?.loggedExercises ||
+      activeLog?.programDay?.exercises ||
+      dayData?.exercises ||
+      dayData?.prescribedExercises ||
+      [],
+    [activeLog, dayData]
+  );
   const dayTitle =
     activeLog?.programDay?.name ||
     activeLog?.name ||
     dayData?.name ||
     dayData?.title ||
-    "Prescribed Workout";
+    "Prescribed workout";
 
-  const handleSaveSet = async ({
-    loggedSetId,
-    outcome,
-    reps,
-    weightKg,
-    rpe,
-  }: {
-    loggedSetId: string;
-    outcome: SetOutcome;
-    reps?: number;
-    weightKg?: number;
-    rpe?: number;
-  }) => {
+  /** Read-only: a finalized log, or a day that can't be logged yet. */
+  const isLocked = Boolean(logError) || Boolean(activeLog?.completedAt || activeLog?.finishedAt);
+
+  const exercises: NormalizedExercise[] = useMemo(() => {
+    return rawExercises.map((item: any, index: number) => {
+      const sets: any[] = item?.sets || item?.loggedSets || [];
+      const details = [item?.exercise?.equipment, item?.exercise?.primaryMuscle]
+        .filter(Boolean)
+        .join(" · ");
+      const firstWorking = sets.find((s) => !s?.isExtra) ?? sets[0];
+
+      return {
+        id: item?.id || `exercise-${index}`,
+        // A logged exercise wraps a prescribed one, so its id usually differs
+        // from the id the Today checklist knows. Carry every alias.
+        progressIds: [
+          item?.id,
+          item?.plannedExerciseId,
+          item?.programExerciseId,
+          item?.prescribedExerciseId,
+          item?.exerciseId,
+          item?.exercise?.id,
+          exerciseNameKey(item?.exercise?.name || item?.name || ""),
+        ].filter(Boolean) as string[],
+        name: item?.exercise?.name || item?.name || `Exercise ${index + 1}`,
+        detailChip: details || null,
+        targetChip: firstWorking ? setTarget(firstWorking, unit) : null,
+        lastTime: lastTimeLine(item, unit),
+        coachNotes: item?.coachNotes || null,
+        restSeconds: item?.restSeconds ?? DEFAULT_REST_SECONDS,
+        sets: sets.map((set: any, setIndex: number) => {
+          // Prefill order: what was logged -> what the coach prescribed. A value
+          // is only ever `null` when neither exists, and the card blocks confirm.
+          const loggedWeight = set?.actualWeightKg ?? set?.loggedWeightKg;
+          const loggedReps = set?.actualReps ?? set?.loggedReps;
+          const prescribedReps = set?.repsMin ?? set?.repsMax ?? set?.reps ?? null;
+          return {
+            id: set?.id || `${item?.id}-set-${setIndex}`,
+            setType: set?.setType || "working",
+            isExtra: Boolean(set?.isExtra || set?.isExtraSet),
+            target: setTarget(set, unit),
+            serverDraft: draftFromKg(
+              loggedWeight ?? set?.weightKg ?? null,
+              loggedReps ?? prescribedReps,
+              unit
+            ),
+            serverLogged: set?.outcome === "completed" || set?.outcome === "partial",
+          };
+        }),
+      };
+    });
+  }, [rawExercises, unit]);
+
+  const clampedIndex = Math.min(activeIndex, Math.max(0, exercises.length - 1));
+  const activeExercise = exercises[clampedIndex];
+
+  const draftFor = useCallback(
+    (set: NormalizedSet) => draftOverrides[set.id] ?? set.serverDraft,
+    [draftOverrides]
+  );
+  const isSetLogged = useCallback(
+    (set: NormalizedSet) => loggedOverrides[set.id] ?? set.serverLogged,
+    [loggedOverrides]
+  );
+
+  const railSegments = useMemo(
+    () =>
+      exercises.map((exercise, index) => ({
+        label: `Ex ${index + 1}`,
+        progress: exercise.sets.length
+          ? exercise.sets.filter(isSetLogged).length / exercise.sets.length
+          : 0,
+      })),
+    [exercises, isSetLogged]
+  );
+
+  const loggedCount = activeExercise?.sets.filter(isSetLogged).length ?? 0;
+  const totalSets = activeExercise?.sets.length ?? 0;
+  const allLogged = totalSets > 0 && loggedCount === totalSets;
+  const isLastExercise = clampedIndex >= exercises.length - 1;
+
+  // Mirror per-exercise completion into the map the Today checklist reads, so a
+  // logged set ticks its box there without waiting on a day-level refetch.
+  const dayIso: string | null =
+    dayData?.date || dayData?.scheduledDate || activeLog?.date || null;
+  const progressKey = useMemo(() => dayProgressKey(todayIso(), tenantId), [tenantId]);
+
+  useEffect(() => {
+    // Only today's checklist is keyed here; logging a past day must not touch it.
+    if (dayIso && dayIso.split("T")[0] !== todayIso()) return;
+    if (exercises.length === 0) return;
+
+    // Only ever ADD completions. Writing `false` here would wipe ticks the
+    // client made by hand on Today just by opening this screen.
+    const updates: Record<string, boolean> = {};
+    exercises.forEach((exercise) => {
+      if (exercise.sets.length === 0 || !exercise.sets.every(isSetLogged)) return;
+      exercise.progressIds.forEach((id) => {
+        updates[id] = true;
+      });
+    });
+    if (Object.keys(updates).length === 0) return;
+    mergeDayProgress(progressKey, updates);
+  }, [exercises, isSetLogged, progressKey, dayIso]);
+
+  const exerciseVolume = useMemo(() => {
+    if (!activeExercise) return 0;
+    return activeExercise.sets.reduce((total, set) => {
+      if (!isSetLogged(set)) return total;
+      const draft = draftFor(set);
+      if (draft.weight === null || draft.reps === null) return total;
+      return total + draft.weight * draft.reps;
+    }, 0);
+  }, [activeExercise, draftFor, isSetLogged]);
+
+  // ----- Swipe between exercises
+  const translateX = useSharedValue(0);
+
+  const goToExercise = useCallback(
+    (index: number) => {
+      if (index < 0 || index > exercises.length - 1) return;
+      setActiveIndex(index);
+    },
+    [exercises.length]
+  );
+
+  // The card tracks the drag and snaps back under the threshold.
+  const panGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetX([-12, 12])
+        .failOffsetY([-14, 14])
+        .onUpdate((event) => {
+          translateX.set(event.translationX);
+        })
+        .onEnd((event) => {
+          if (event.translationX < -SWIPE_THRESHOLD) {
+            runOnJS(goToExercise)(clampedIndex + 1);
+          } else if (event.translationX > SWIPE_THRESHOLD) {
+            runOnJS(goToExercise)(clampedIndex - 1);
+          }
+          translateX.set(withSpring(0, { damping: 20, stiffness: 200 }));
+        }),
+    // translateX is a shared value — a stable identity, so it stays out of deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [clampedIndex, goToExercise]
+  );
+
+  const cardStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.get() }],
+  }));
+
+  // ----- Actions
+  const handleToggleSet = async (set: NormalizedSet) => {
+    const wasLogged = isSetLogged(set);
+    const draft = draftFor(set);
+
+    if (wasLogged) {
+      // The API has no "un-log" (outcome is required and has no empty state), so
+      // this clears the row locally only — see the note in the PR description.
+      setLoggedOverrides((prev) => ({ ...prev, [set.id]: false }));
+      return;
+    }
+
+    if (draft.weight === null || draft.reps === null) return;
+
+    // Optimistic: paint the completed state and start resting immediately.
+    setLoggedOverrides((prev) => ({ ...prev, [set.id]: true }));
+    setDraftOverrides((prev) => ({ ...prev, [set.id]: draft }));
+    setSaveError(null);
+    rest.start(activeExercise?.restSeconds ?? DEFAULT_REST_SECONDS);
+
     if (!logId) return;
     try {
       await logSet({
         logId,
-        loggedSetId,
+        loggedSetId: set.id,
         body: {
-          outcome,
-          reps,
-          weightKg,
-          rpe,
+          outcome: "completed",
+          reps: draft.reps,
+          weightKg: draftToKg(draft, unit),
         },
       }).unwrap();
-    } catch (err) {
-      console.warn("Failed to log set:", err);
+    } catch (err: any) {
+      setLoggedOverrides((prev) => ({ ...prev, [set.id]: wasLogged }));
+      setSaveError(err?.data?.message || "Couldn't save that set. It stays unlogged.");
     }
   };
 
-  const handleAddExtraSet = async (loggedExerciseId: string) => {
-    if (!logId) return;
+  const handleAddSet = async () => {
+    if (!logId || !activeExercise) return;
+    const lastSet = activeExercise.sets[activeExercise.sets.length - 1];
+    const draft = lastSet ? draftFor(lastSet) : { weight: null, reps: null };
     try {
       await addExtraSet({
         logId,
         body: {
-          loggedExerciseId,
+          loggedExerciseId: activeExercise.id,
           outcome: "completed",
-          reps: 10,
+          reps: draft.reps ?? 10,
+          weightKg: draftToKg(draft, unit),
         },
       }).unwrap();
-    } catch (err) {
-      console.warn("Failed to add extra set:", err);
+    } catch (err: any) {
+      setSaveError(err?.data?.message || "Couldn't add a set.");
     }
   };
 
-  const handleRemoveExtraSet = async (loggedSetId: string) => {
+  const handleRemoveSet = async (setId: string) => {
     if (!logId) return;
     try {
-      await removeExtraSet({
-        logId,
-        loggedSetId,
-      }).unwrap();
-    } catch (err) {
-      console.warn("Failed to remove extra set:", err);
+      await removeExtraSet({ logId, loggedSetId: setId }).unwrap();
+    } catch (err: any) {
+      setSaveError(err?.data?.message || "Couldn't remove that set.");
     }
   };
 
@@ -144,8 +410,24 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
     try {
       await skipDay(programDayId).unwrap();
       router.back();
-    } catch (err) {
-      console.warn("Failed to skip workout:", err);
+    } catch (err: any) {
+      setSaveError(err?.data?.message || "Couldn't skip this day.");
+    }
+  };
+
+  /**
+   * The log id comes from the mount effect, but that call can fail or land after
+   * the client reaches the last exercise — so re-resolve it rather than no-op.
+   */
+  const ensureLogId = async (): Promise<string | null> => {
+    if (logId) return logId;
+    try {
+      const res = await startOrResumeLog(programDayId).unwrap();
+      const id = res?.id ?? res?.data?.id ?? null;
+      if (id) setLogId(id);
+      return id;
+    } catch {
+      return null;
     }
   };
 
@@ -154,17 +436,37 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
     clientNotes?: string;
     overallRpe?: number;
   }) => {
-    if (!logId) return;
+    setCompleteError(null);
+
+    const id = await ensureLogId();
+    if (!id) {
+      setCompleteError(
+        logError ??
+          "This session isn't open for logging yet, so it can't be finished. Go back and start it again."
+      );
+      return;
+    }
+
     try {
-      await completeWorkout({
-        logId,
-        body: data,
-      }).unwrap();
+      await completeWorkout({ logId: id, body: data }).unwrap();
       setShowCompleteModal(false);
       router.back();
-    } catch (err) {
-      console.warn("Failed to complete workout:", err);
+    } catch (err: any) {
+      setCompleteError(
+        err?.data?.message ||
+          err?.error ||
+          "Couldn't finish the workout. Check your connection and try again."
+      );
     }
+  };
+
+  const handlePrimaryAction = () => {
+    if (isLastExercise) {
+      setCompleteError(null);
+      setShowCompleteModal(true);
+      return;
+    }
+    goToExercise(clampedIndex + 1);
   };
 
   if (isStarting || (logId && isLogLoading)) {
@@ -178,175 +480,252 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
     );
   }
 
+  if (!activeExercise) {
+    return (
+      <View className="flex-1 bg-background p-4">
+        <Card glass className="items-center py-8">
+          <Icon name="dumbbell" size={32} color="--muted-foreground" />
+          <Text className="mt-2 text-[15px] font-semibold text-foreground">
+            No exercises prescribed for today
+          </Text>
+          <Text className="mt-1 text-[12px] text-muted-foreground">
+            Check in with your coach or choose another day.
+          </Text>
+          <Pressable
+            onPress={() => router.back()}
+            className="mt-4 rounded-sm bg-secondary px-4 py-2.5 active:opacity-70"
+          >
+            <Text className="text-[13px] font-semibold text-foreground">
+              Return to training plan
+            </Text>
+          </Pressable>
+        </Card>
+      </View>
+    );
+  }
+
+  const primaryLabel = isLastExercise
+    ? "Finish workout"
+    : allLogged
+      ? "Next exercise"
+      : "Skip ahead";
+
   return (
     <View className="flex-1 bg-background">
-      {/* Header Bar */}
-      <Tone name={logError ? "peach" : "mint"} className="px-5 pt-12 pb-5" glass>
-        <View className="flex-row items-center justify-between">
-          <GlassButton
-            onPress={() => router.back()}
-            className="h-9 w-9 items-center justify-center rounded-full bg-black/20 active:bg-black/40"
+      {/* Header */}
+      <View className="flex-row items-start gap-3 px-4 pt-4 pb-3">
+        <GlassButton
+          onPress={() => router.back()}
+          accessibilityLabel="Back to training plan"
+          className="h-9 w-9 rounded-full"
+        >
+          <Icon name="chevron-left" size={16} color="--foreground" />
+        </GlassButton>
+        <View className="flex-1">
+          <Text
+            className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground"
+            numberOfLines={1}
           >
-            <Icon name="chevron-left" size={16} color="--foreground" />
-          </GlassButton>
-          <Text className="text-[11px] font-semibold uppercase tracking-[0.16em] text-foreground">
-            {logError ? "Future Workout Preview" : "Active Workout Log"}
+            {dayTitle}
           </Text>
-          {!logError ? (
-            <Pressable
-              onPress={handleSkipWorkout}
-              disabled={isSkipping}
-              className="px-3 py-1.5 rounded-full bg-black/10 active:bg-black/20"
-            >
-              <Text className="text-[11px] font-semibold text-mint-ink">
-                {isSkipping ? "Skipping..." : "Skip Day"}
-              </Text>
-            </Pressable>
-          ) : (
-            <View className="w-9" />
-          )}
+          <Text className="mt-0.5 text-[13px] font-semibold text-foreground">
+            {isLocked ? "Logged session" : "Live session"}
+          </Text>
         </View>
-
-        <Text className="mt-3 text-[24px] font-bold text-foreground">{dayTitle}</Text>
-        {activeLog?.notes || dayData?.notes ? (
-          <Text className="mt-1 text-[12.5px] text-foreground/80">
-            {activeLog?.notes || dayData?.notes}
-          </Text>
-        ) : null}
-      </Tone>
-
-      {logError ? (
-        <Tone name="sun" glass className="mx-4 mt-3 rounded-2xl p-3.5 flex-row items-center gap-3">
-          <Icon name="clock" size={20} color="--sun-ink" />
-          <View className="flex-1">
-            <Text className="font-bold text-[13px] text-sun-ink">
-              Logging Locked
-            </Text>
-            <Text className="text-[12px] text-sun-ink/90 mt-0.5">
-              {logError}
+        {!isLocked ? (
+          <View className="flex-row items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5">
+            <Icon name="clock" size={12} color="--primary" />
+            <Text
+              className="text-[13px] font-bold text-primary"
+              style={{ fontVariant: ["tabular-nums"] }}
+              accessibilityLabel={`Session elapsed ${formatClock(elapsed)}`}
+            >
+              {formatClock(elapsed)}
             </Text>
           </View>
-        </Tone>
-      ) : null}
+        ) : null}
+      </View>
 
-      {/* Exercises List */}
-      <ScrollView contentContainerClassName="p-4 gap-y-6 pb-28" showsVerticalScrollIndicator={false}>
-        {exercises.length === 0 ? (
-          <Card glass className="items-center py-8">
-            <Icon name="dumbbell" size={32} color="--muted-foreground" />
-            <Text className="mt-2 text-[15px] font-semibold text-foreground">
-              No exercises prescribed for today
-            </Text>
-            <Text className="text-[12px] text-muted-foreground mt-1">
-              Check in with your coach or choose another day.
-            </Text>
-          </Card>
-        ) : (
-          exercises.map((exItem: any, exIdx: number) => {
-            const exerciseName = exItem?.exercise?.name || exItem?.name || `Exercise ${exIdx + 1}`;
-            const sets = exItem?.sets || exItem?.loggedSets || [];
-            const loggedExId = exItem?.id;
+      {/* Whole-workout overview */}
+      <View className="px-4 pb-3">
+        <ExerciseRail
+          segments={railSegments}
+          activeIndex={clampedIndex}
+          onSelect={goToExercise}
+        />
+      </View>
 
-            return (
-              <Card key={exItem?.id || exIdx} glass className="p-4 gap-y-3">
-                {/* Exercise Header */}
-                <View className="flex-row items-center justify-between border-b border-border/40 pb-3">
-                  <View className="flex-1 pr-2">
-                    <Text className="text-[16px] font-bold text-foreground">
-                      {exIdx + 1}. {exerciseName}
-                    </Text>
-                    {exItem?.coachNotes ? (
-                      <Text className="text-[12px] text-muted-foreground mt-0.5">
-                        Note: {exItem.coachNotes}
-                      </Text>
-                    ) : null}
-                  </View>
-                  <View className="h-8 w-8 items-center justify-center rounded-xl bg-secondary">
-                    <Icon name="dumbbell" size={16} color="--foreground" />
-                  </View>
+      <GestureDetector gesture={panGesture}>
+        <Animated.View className="flex-1" style={cardStyle}>
+          {/* Exercise header */}
+          <View className="px-4 pb-3">
+            <Text className="text-[26px] font-bold leading-tight text-foreground">
+              {activeExercise.name}
+            </Text>
+            <View className="mt-2 flex-row flex-wrap items-center gap-2">
+              {activeExercise.detailChip ? (
+                <View className="rounded-full bg-secondary px-2.5 py-1">
+                  <Text className="text-[11px] font-semibold text-muted-foreground">
+                    {activeExercise.detailChip}
+                  </Text>
                 </View>
-
-                {/* Sets List */}
-                <View className="gap-y-2">
-                  {sets.map((set: any, sIdx: number) => (
-                    <View key={set.id || sIdx} className="flex-row items-center gap-1">
-                      <View className="flex-1">
-                        <SetRow
-                          setNumber={sIdx + 1}
-                          loggedSetId={set.id}
-                          setType={set.isExtra ? "extra" : set.setType}
-                          prescribedReps={set.repsMin ? `${set.repsMin}-${set.repsMax || set.repsMin}` : undefined}
-                          prescribedWeightKg={set.weightKg}
-                          prescribedRpe={set.intensityValue}
-                          initialOutcome={set.outcome}
-                          initialReps={set.actualReps ?? set.reps}
-                          initialWeightKg={set.actualWeightKg ?? set.weightKg}
-                          initialRpe={set.rpe}
-                          isSaving={isLoggingSet}
-                          onSaveSet={handleSaveSet}
-                        />
-                      </View>
-                      {set.isExtra || set.isExtraSet ? (
-                        <Pressable
-                          onPress={() => handleRemoveExtraSet(set.id)}
-                          className="h-8 w-8 items-center justify-center rounded-xl bg-destructive/10 active:bg-destructive/20"
-                        >
-                          <Icon name="x" size={14} color="--destructive" />
-                        </Pressable>
-                      ) : null}
-                    </View>
-                  ))}
+              ) : null}
+              {activeExercise.targetChip ? (
+                <View className="rounded-full bg-primary/10 px-2.5 py-1">
+                  <Text className="text-[11px] font-semibold text-primary">
+                    {activeExercise.targetChip}
+                  </Text>
                 </View>
+              ) : null}
+            </View>
+            {activeExercise.lastTime ? (
+              <Text className="mt-2 text-[12px] text-muted-foreground">
+                {activeExercise.lastTime}
+              </Text>
+            ) : null}
+            {activeExercise.coachNotes ? (
+              <Text className="mt-1 text-[12px] text-muted-foreground">
+                Note: {activeExercise.coachNotes}
+              </Text>
+            ) : null}
+          </View>
 
-                {/* Add Extra Set */}
-                {loggedExId && !logError ? (
-                  <Pressable
-                    onPress={() => handleAddExtraSet(loggedExId)}
-                    disabled={isAddingExtra}
-                    className="flex-row items-center justify-center gap-1.5 py-2.5 rounded-xl bg-secondary/50 active:bg-secondary border border-dashed border-border/60 mt-1"
-                  >
-                    <Icon name="plus" size={14} color="--muted-foreground" />
-                    <Text className="text-[12px] font-semibold text-muted-foreground">
-                      Add Extra Set
-                    </Text>
-                  </Pressable>
-                ) : null}
-              </Card>
-            );
-          })
-        )}
-      </ScrollView>
-
-      {/* Sticky Complete / Return Footer */}
-      <View className="absolute bottom-0 left-0 right-0 border-t border-border/60 bg-card/95 px-5 py-4">
-        {logError ? (
-          <Pressable
-            onPress={() => router.back()}
-            className="flex-row items-center justify-center gap-2 rounded-2xl bg-primary py-4 active:opacity-90 shadow-soft"
+          {/* Sets */}
+          <ScrollView
+            className="flex-1"
+            contentContainerClassName="px-4 pb-4 gap-y-2.5"
+            showsVerticalScrollIndicator={false}
           >
-            <Icon name="chevron-left" size={18} color="#ffffff" />
-            <Text className="text-[16px] font-bold text-primary-foreground">
-              Return to Training Plan
+            {activeExercise.sets.map((set, index) => (
+              <SetCard
+                key={set.id}
+                setNumber={index + 1}
+                setType={set.setType}
+                isExtra={set.isExtra}
+                target={set.target}
+                draft={draftFor(set)}
+                isLogged={isSetLogged(set)}
+                unit={unit}
+                disabled={isLocked}
+                onChange={(draft) =>
+                  setDraftOverrides((prev) => ({ ...prev, [set.id]: draft }))
+                }
+                onToggleLogged={() => handleToggleSet(set)}
+                onRemove={set.isExtra ? () => handleRemoveSet(set.id) : undefined}
+              />
+            ))}
+
+            {!isLocked ? (
+              <Pressable
+                onPress={handleAddSet}
+                disabled={isAddingExtra}
+                accessibilityRole="button"
+                accessibilityLabel="Add a set"
+                className={cn(
+                  "h-12 flex-row items-center justify-center gap-1.5 rounded-sm border border-dashed border-border active:opacity-70",
+                  isAddingExtra && "opacity-50"
+                )}
+              >
+                <Icon name="plus" size={13} color="--muted-foreground" />
+                <Text className="text-[13px] font-semibold text-muted-foreground">Add set</Text>
+              </Pressable>
+            ) : null}
+
+            <Text className="px-1 text-[12px] text-muted-foreground">
+              Volume · {formatWeight(Math.round(exerciseVolume * 10) / 10)} {unit}
             </Text>
-          </Pressable>
+          </ScrollView>
+        </Animated.View>
+      </GestureDetector>
+
+      {/* Bottom dock */}
+      <View className="border-t border-border bg-card px-4 pt-3 pb-4 gap-y-2.5">
+        {saveError ? (
+          <View className="flex-row items-center gap-2 rounded-sm bg-destructive/10 px-3 py-2">
+            <Icon name="alert-triangle" size={13} color="--destructive" />
+            <Text className="flex-1 text-[12px] text-destructive">{saveError}</Text>
+          </View>
+        ) : null}
+
+        {!isLocked && rest.isResting ? (
+          <RestDock
+            remaining={rest.remaining}
+            total={rest.totalSeconds}
+            onExtend={() => rest.extend(30)}
+            onSkip={rest.skip}
+          />
+        ) : null}
+
+        {isLocked ? (
+          <>
+            <Pressable
+              onPress={() => router.back()}
+              accessibilityRole="button"
+              className="h-14 flex-row items-center justify-center gap-2 rounded-sm bg-primary active:opacity-90"
+            >
+              <Icon name="chevron-left" size={16} color="--primary-foreground" />
+              <Text className="text-[15px] font-bold text-primary-foreground">
+                Return to training plan
+              </Text>
+            </Pressable>
+            <View className="flex-row items-center gap-1.5">
+              <Icon name="clock" size={12} color="--muted-foreground" />
+              <Text className="flex-1 text-[12px] text-muted-foreground">
+                Logging locked · {logError ?? "this session is already finalized"}
+              </Text>
+            </View>
+          </>
         ) : (
-          <Pressable
-            onPress={() => setShowCompleteModal(true)}
-            className="flex-row items-center justify-center gap-2 rounded-2xl bg-primary py-4 active:opacity-90 shadow-soft"
-          >
-            <Icon name="check" size={18} color="#ffffff" />
-            <Text className="text-[16px] font-bold text-primary-foreground">
-              Finish & Log Workout
-            </Text>
-          </Pressable>
+          <>
+            <View className="flex-row items-center gap-2">
+              <GlassButton
+                onPress={() => goToExercise(clampedIndex - 1)}
+                disabled={clampedIndex === 0}
+                accessibilityLabel="Previous exercise"
+                className="h-14 w-14 rounded-sm border border-border"
+              >
+                <Icon name="chevron-left" size={16} color="--foreground" />
+              </GlassButton>
+              <Pressable
+                onPress={handlePrimaryAction}
+                accessibilityRole="button"
+                className="h-14 flex-1 items-center justify-center rounded-sm bg-primary active:opacity-90"
+              >
+                <Text className="text-[15px] font-bold text-primary-foreground">
+                  {primaryLabel}
+                </Text>
+              </Pressable>
+            </View>
+
+            <View className="flex-row items-center gap-2">
+              <Text className="flex-1 text-[12px] text-muted-foreground">
+                {loggedCount} of {totalSets} sets logged · swipe to change exercise
+              </Text>
+              <Pressable
+                onPress={handleSkipWorkout}
+                disabled={isSkipping}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Skip this training day"
+              >
+                <Text className="text-[12px] font-semibold text-muted-foreground">
+                  {isSkipping ? "Skipping…" : "Skip day"}
+                </Text>
+              </Pressable>
+            </View>
+          </>
         )}
       </View>
 
-      {/* Completion Modal */}
       <WorkoutCompleteModal
         visible={showCompleteModal}
         isLoading={isCompleting}
-        onClose={() => setShowCompleteModal(false)}
+        error={completeError}
+        defaultDurationMinutes={Math.max(1, Math.round(elapsed / 60))}
+        onClose={() => {
+          setShowCompleteModal(false);
+          setCompleteError(null);
+        }}
         onConfirm={handleCompleteWorkoutConfirm}
       />
     </View>

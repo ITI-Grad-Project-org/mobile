@@ -10,10 +10,15 @@ import {
 import { yogaExercises } from "@/lib/data";
 import { useActiveCoach, useRole } from "@/lib/role";
 import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
+import {
+  dayProgressKey,
+  exerciseNameKey,
+  readDayProgress,
+  writeDayProgress,
+} from "@/shared/utils/dayProgress";
 import { ScrollView, Text, View } from "@/tw";
-import { router } from "expo-router";
-import * as SecureStore from "expo-secure-store";
-import React, { useEffect, useMemo, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import React, { useCallback, useMemo, useState } from "react";
 import { ExerciseSheet } from "../components/ExerciseSheet";
 import { StreakHero } from "../components/StreakGrid";
 import { WorkoutCard } from "../components/WorkoutCard";
@@ -121,8 +126,17 @@ export function TodayScreen() {
           ? `${firstSet.weight} kg`
           : "Bodyweight";
 
+      // An exercise counts as done on the server once every one of its sets has
+      // an outcome — only visible when the payload embeds the workout log.
+      const outcomes = Array.isArray(setsArr)
+        ? setsArr.map((s: any) => s?.outcome).filter(Boolean)
+        : [];
+      const serverLogged =
+        Array.isArray(setsArr) && setsArr.length > 0 && outcomes.length === setsArr.length;
+
       return {
         id: exItem.id || String(idx),
+        serverLogged,
         name: exItem.exercise?.name || exItem.name || `Exercise ${idx + 1}`,
         sets: typeof setsArr === "number" ? setsArr : (Array.isArray(setsArr) && setsArr.length ? setsArr.length : (exItem.targetSets || 3)),
         reps: String(repsVal),
@@ -170,52 +184,60 @@ export function TodayScreen() {
   const [open, setOpen] = useState<any | null>(null);
 
   const storageKey = useMemo(
-    () => `today_done_${todayIso}_${tenantId || "default"}`,
+    () => dayProgressKey(todayIso, tenantId),
     [todayIso, tenantId]
   );
 
-  useEffect(() => {
-    let isMounted = true;
-    SecureStore.getItemAsync(storageKey)
-      .then((raw) => {
-        if (isMounted && raw) {
-          try {
-            const parsed = JSON.parse(raw);
-            if (parsed && typeof parsed === "object") {
-              setDone((prev) => ({ ...parsed, ...prev }));
-            }
-          } catch {
-            // ignore
-          }
-        }
-      })
-      .catch(() => { });
-    return () => {
-      isMounted = false;
-    };
-  }, [storageKey]);
+  // Re-read on focus, not just on mount: Today stays mounted as a tab while the
+  // workout logger writes ticks into the same store. The store is authoritative
+  // — every local toggle here writes to it too.
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+      readDayProgress(storageKey).then((stored) => {
+        if (isActive) setDone(stored);
+      });
+      return () => {
+        isActive = false;
+      };
+    }, [storageKey])
+  );
 
   const mergedDone = useMemo(() => {
-    const isServerCompleted = calendarItems[0]?.status === "completed";
-    if (isServerCompleted && exercises.length > 0) {
-      const serverDone: Record<string, boolean> = {};
-      exercises.forEach((ex: any) => {
-        serverDone[ex.id] = true;
-      });
-      return { ...serverDone, ...done };
-    }
-    return done;
+    const item = calendarItems[0];
+    // The API has spelled this several ways; match on any of them rather than
+    // one exact string, or a finished day never ticks its exercises.
+    const dayStatus = String(item?.status ?? item?.log?.status ?? "").toLowerCase();
+    const isServerCompleted =
+      dayStatus === "completed" ||
+      dayStatus === "done" ||
+      Boolean(item?.completedAt || item?.log?.completedAt);
+
+    // Resolve every exercise to a single value keyed by the id this screen uses.
+    // The stored map may key the same exercise by its logged id or its name, so
+    // it can't just be spread over the server map.
+    const resolved: Record<string, boolean> = {};
+    exercises.forEach((ex: any) => {
+      const local = done[ex.id] ?? done[exerciseNameKey(ex.name)];
+      // A hand-tick on this screen is authoritative — including un-ticking a day
+      // the server considers finished.
+      resolved[ex.id] = local ?? (isServerCompleted || ex.serverLogged);
+    });
+    return resolved;
   }, [calendarItems, exercises, done]);
 
-  const completed = Object.values(mergedDone).filter(Boolean).length;
+  // Count against today's exercises rather than every key in the map — the map
+  // also holds logged-exercise ids written by the workout logger.
+  const completed = exercises.filter((ex: any) => mergedDone[ex.id]).length;
   const pct = exercises.length > 0 ? Math.round((completed / exercises.length) * 100) : 0;
 
   const toggle = (id: string) => {
-    setDone((d) => {
-      const next = { ...d, [id]: !d[id] };
-      SecureStore.setItemAsync(storageKey, JSON.stringify(next)).catch(() => { });
-      return next;
-    });
+    // Toggle against the resolved value, not the raw map: an exercise can read
+    // as done via the server or the logger's name key without `done[id]` set,
+    // and toggling that would otherwise be a no-op on the first tap.
+    const next = { ...done, [id]: !mergedDone[id] };
+    setDone(next);
+    writeDayProgress(storageKey, next);
   };
 
   return (

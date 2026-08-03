@@ -9,6 +9,7 @@ import { Tone } from "@/tw/Tone";
 import { router } from "expo-router";
 import { Modal, Platform } from "react-native";
 import { TONE_ON, type DayPlan } from "../data";
+import { GlassButton } from "@/shared/ui/GlassButton";
 
 const isIOS = Platform.OS === "ios";
 
@@ -36,7 +37,7 @@ export function DaySheet({
     <View className="flex-1 bg-card overflow-hidden">
       {/* Tone header */}
       <Tone name={day.tone} className={cn("px-5 pb-5", isIOS ? "pt-5" : "pt-12")} glass>
-        <Pressable
+        <GlassButton
           onPress={onClose}
           className={cn(
             "absolute right-4 h-9 w-9 items-center justify-center rounded-full bg-black/30 active:bg-black/50",
@@ -45,7 +46,7 @@ export function DaySheet({
           accessibilityLabel="Close"
         >
           <Icon name="x" size={16} color="#ffffff" />
-        </Pressable>
+        </GlassButton>
         <Text
           className={cn(
             "text-[11px] font-semibold uppercase tracking-[0.16em] opacity-80",

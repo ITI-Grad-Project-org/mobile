@@ -171,50 +171,6 @@ export const exerciseLibrary = [
   },
 ];
 
-export type Meal = {
-  id: string;
-  time: string;
-  name: string;
-  kcal: number;
-  tag: string;
-  image: string;
-};
-
-export const meals: Meal[] = [
-  {
-    id: "m1",
-    time: "8:00",
-    name: "Protein oats",
-    kcal: 480,
-    tag: "Breakfast",
-    image: U("photo-1517673132405-a56a62b18caf"),
-  },
-  {
-    id: "m2",
-    time: "12:30",
-    name: "Chicken rice bowl",
-    kcal: 720,
-    tag: "Lunch",
-    image: U("photo-1546069901-ba9599a7e63c"),
-  },
-  {
-    id: "m3",
-    time: "16:00",
-    name: "Greek yogurt + berries",
-    kcal: 280,
-    tag: "Snack",
-    image: U("photo-1488477181946-6428a0291777"),
-  },
-  {
-    id: "m4",
-    time: "19:30",
-    name: "Salmon + sweet potato",
-    kcal: 660,
-    tag: "Dinner",
-    image: U("photo-1467003909585-2f8a72700288"),
-  },
-];
-
 // 18 weeks of streak intensity (0-4) for github-style grid
 export const streakGrid: number[] = [
   0, 1, 2, 1, 0, 0, 2, 1, 3, 2, 4, 3, 0, 1, 2, 4, 3, 2, 1, 0, 2, 3, 4, 3, 2, 1,

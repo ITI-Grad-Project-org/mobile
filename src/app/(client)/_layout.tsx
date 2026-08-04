@@ -14,6 +14,7 @@ export default function ClientLayout() {
             rather than covering the whole screen as a full-screen modal. */}
         <Stack.Screen name="workout/[programDayId]" />
         <Stack.Screen name="program/[programId]" />
+        <Stack.Screen name="nutrition/[dayId]" />
       </Stack>
     </View>
   );

@@ -14,7 +14,7 @@ import { router } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { DayCard } from "../components/DayCard";
 import { DaySheet } from "../components/DaySheet";
-import { NutritionTab } from "../components/NutritionTab";
+import { NutritionOverview } from "@/features/client/nutrition";
 import { PlanSegmented, type PlanSub } from "../components/PlanSegmented";
 import type { DayPlan } from "../data";
 
@@ -323,7 +323,7 @@ export function PlanScreen() {
           )}
         </View>
       ) : (
-        <NutritionTab />
+        <NutritionOverview />
       )}
 
       {/* Day detail sheet */}

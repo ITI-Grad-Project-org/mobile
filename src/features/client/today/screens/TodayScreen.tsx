@@ -1,4 +1,6 @@
 import { useGetDirectoryCoachQuery } from "@/api/endpoints/directory.endpoints";
+import { NutritionTodayCards } from "@/features/client/nutrition";
+import { CheckInCard } from "@/features/client/progress";
 import { useGetClientProfileQuery } from "@/api/endpoints/profile.endpoints";
 import {
   useGetCalendarQuery,
@@ -22,7 +24,6 @@ import React, { useCallback, useMemo, useState } from "react";
 import { ExerciseSheet } from "../components/ExerciseSheet";
 import { StreakHero } from "../components/StreakGrid";
 import { WorkoutCard } from "../components/WorkoutCard";
-import { Icon } from "@/shared/ui/Icon";
 
 export function TodayScreen() {
   const coach = useActiveCoach();
@@ -276,6 +277,12 @@ export function TodayScreen() {
             : undefined
         }
       />
+
+      {/* Nutrition row — renders only when a plan covers today */}
+      <NutritionTodayCards />
+
+      {/* Check-in */}
+      <CheckInCard />
 
       {/* Exercise Bottom Modal Drawer */}
       <ExerciseSheet

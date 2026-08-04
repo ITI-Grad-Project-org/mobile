@@ -1,3 +1,11 @@
-// Data-layer barrel (no screens). RTK Query endpoints (messagingApi) will be
-// added here via injectEndpoints when the backend lands; see docs/06.
-export type { Message, Thread } from "./types";
+export { canChat } from "./types";
+export type {
+  ConversationSummary,
+  Message,
+  MessageStatus,
+  SenderType,
+  SocketAck,
+} from "./types";
+export { useChatEvents } from "./useChatEvents";
+export { useChatRole } from "./useChatRole";
+export { useChatThread } from "./useChatThread";

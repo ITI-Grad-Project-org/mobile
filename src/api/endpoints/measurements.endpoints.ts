@@ -1,8 +1,9 @@
 import { baseApi } from '../baseApi';
+import { appendFields, appendFiles } from '../formData';
 import {
-  CreateMeasurementDto,
   ListMeasurementsResponse,
   Measurement,
+  MeasurementFields,
 } from '../types';
 
 export interface ListMeasurementsParams {
@@ -13,13 +14,31 @@ export interface ListMeasurementsParams {
   to?: string; // YYYY-MM-DD
 }
 
+/**
+ * Create/update take multipart/form-data with FLAT fields and binary `photos`
+ * parts. Pass local URIs — already-hosted photos are skipped, since there's
+ * nothing to re-upload.
+ */
+export interface MeasurementWriteArgs {
+  fields: MeasurementFields;
+  photoUris?: string[];
+  tenantId: string;
+}
+
+function measurementForm({ fields, photoUris }: MeasurementWriteArgs): FormData {
+  const form = new FormData();
+  appendFields(form, fields);
+  appendFiles(form, 'photos', photoUris, 'photo');
+  return form;
+}
+
 export const measurementsEndpoints = baseApi.injectEndpoints({
   endpoints: (builder) => ({
-    createMeasurement: builder.mutation<Measurement, { body: CreateMeasurementDto; tenantId: string }>({
-      query: ({ body }) => ({
+    createMeasurement: builder.mutation<Measurement, MeasurementWriteArgs>({
+      query: (args) => ({
         url: '/client/me/measurements',
         method: 'POST',
-        body,
+        body: measurementForm(args),
       }),
       invalidatesTags: (result, error, { tenantId }) => [
         { type: 'Measurements', id: `LIST-${tenantId}` },
@@ -44,11 +63,11 @@ export const measurementsEndpoints = baseApi.injectEndpoints({
       query: ({ id }) => `/client/me/measurements/${id}`,
       providesTags: (result, error, { id, tenantId }) => [{ type: 'Measurements', id: `${tenantId}:${id}` }],
     }),
-    updateMeasurement: builder.mutation<Measurement, { id: string; body: Partial<CreateMeasurementDto>; tenantId: string }>({
-      query: ({ id, body }) => ({
+    updateMeasurement: builder.mutation<Measurement, MeasurementWriteArgs & { id: string }>({
+      query: ({ id, ...args }) => ({
         url: `/client/me/measurements/${id}`,
         method: 'PATCH',
-        body,
+        body: measurementForm(args),
       }),
       invalidatesTags: (result, error, { id, tenantId }) => [
         { type: 'Measurements', id: `LIST-${tenantId}` },

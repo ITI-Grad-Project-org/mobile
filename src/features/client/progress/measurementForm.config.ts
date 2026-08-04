@@ -15,7 +15,7 @@ function cm(key: string, label: string): Field {
   };
 }
 
-// Body-measurement check-in. Fields map 1:1 onto `CreateMeasurementDto`
+// Body-measurement check-in. Fields map 1:1 onto `MeasurementFields`
 // (numeric fields carry a trailing unit; `photos` is the multi-image field).
 export const MEASUREMENT_STEPS: Step[] = [
   {

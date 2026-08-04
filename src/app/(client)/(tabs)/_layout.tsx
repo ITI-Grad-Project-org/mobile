@@ -1,3 +1,4 @@
+import { useUnreadCount } from "@/features/shared/messaging/useUnreadCount";
 import { NativeTabs } from "expo-router/unstable-native-tabs";
 import { useColorScheme } from "react-native";
 
@@ -21,6 +22,7 @@ const palette = {
 export default function ClientTabsLayout() {
   const colorScheme = useColorScheme();
   const c = palette[colorScheme === "dark" ? "dark" : "light"];
+  const unread = useUnreadCount();
 
   return (
     <NativeTabs
@@ -59,7 +61,11 @@ export default function ClientTabsLayout() {
       <NativeTabs.Trigger name="chat">
         <NativeTabs.Trigger.Label>Chat</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="message" md="chat" />
-        <NativeTabs.Trigger.Badge>3</NativeTabs.Trigger.Badge>
+        {unread > 0 && (
+          <NativeTabs.Trigger.Badge>
+            {unread > 99 ? "99+" : String(unread)}
+          </NativeTabs.Trigger.Badge>
+        )}
       </NativeTabs.Trigger>
     </NativeTabs>
   );

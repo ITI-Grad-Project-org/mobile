@@ -5,7 +5,7 @@ import { Pressable, Text, View } from "@/tw";
 import { Image } from "@/tw/image";
 import type { Field } from "../../types";
 import { FieldLabel } from "./FieldLabel";
-import { useImageUpload } from "./useImageUpload";
+import { useImagePicker } from "./useImagePicker";
 
 export function ImageField({
   field,
@@ -17,12 +17,12 @@ export function ImageField({
   onChange: (v: string) => void;
 }) {
   const uri = typeof value === "string" ? value : "";
-  const { uploading, error, pickAndUpload } = useImageUpload();
+  const { picking, error, pickOne } = useImagePicker();
 
   const pick = async () => {
-    if (uploading) return;
-    const url = await pickAndUpload();
-    if (url) onChange(url);
+    if (picking) return;
+    const local = await pickOne();
+    if (local) onChange(local);
   };
 
   return (
@@ -42,23 +42,23 @@ export function ImageField({
             className="absolute bottom-0 left-0 right-0 items-center bg-black/55 py-1.5 active:opacity-80"
           >
             <Text className="text-[11px] font-semibold text-white">
-              {uploading ? "Uploading…" : "Change"}
+              {picking ? "Opening…" : "Change"}
             </Text>
           </Pressable>
         </View>
       ) : (
         <Pressable
           onPress={pick}
-          disabled={uploading}
+          disabled={picking}
           className="h-36 w-36 items-center justify-center gap-1.5 rounded-3xl border-2 border-dashed border-border bg-secondary/60 active:opacity-80 disabled:opacity-60"
         >
-          {uploading ? (
+          {picking ? (
             <ActivityIndicator />
           ) : (
             <Icon name="camera" size={22} color="--muted-foreground" />
           )}
           <Text className="text-[11px] font-semibold text-muted-foreground">
-            {uploading ? "Uploading…" : "Upload photo"}
+            {picking ? "Opening…" : "Upload photo"}
           </Text>
         </Pressable>
       )}

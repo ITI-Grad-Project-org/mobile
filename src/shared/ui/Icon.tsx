@@ -17,6 +17,7 @@ export type IconName =
   | "flame"
   | "x"
   | "play"
+  | "pause"
   | "sun"
   | "moon"
   | "bell"
@@ -52,6 +53,7 @@ export type IconName =
   | "filter"
   | "clipboard-list"
   | "plus"
+  | "minus"
   | "mic"
   | "arrow-up"
   | "lightbulb"
@@ -82,6 +84,7 @@ const SYMBOLS: Record<IconName, { ios: string; android: string }> = {
   "flame": { ios: "flame.fill", android: "local_fire_department" },
   "x": { ios: "xmark", android: "close" },
   "play": { ios: "play.fill", android: "play_arrow" },
+  "pause": { ios: "pause.fill", android: "pause" },
   "sun": { ios: "sun.max.fill", android: "light_mode" },
   "moon": { ios: "moon.fill", android: "dark_mode" },
   "bell": { ios: "bell.fill", android: "notifications" },
@@ -117,6 +120,7 @@ const SYMBOLS: Record<IconName, { ios: string; android: string }> = {
   "filter": { ios: "line.3.horizontal.decrease.circle", android: "filter_list" },
   "clipboard-list": { ios: "clipboard.fill", android: "assignment" },
   "plus": { ios: "plus", android: "add" },
+  "minus": { ios: "minus", android: "remove" },
   "mic": { ios: "mic.fill", android: "mic" },
   "arrow-up": { ios: "arrow.up", android: "arrow_upward" },
   "lightbulb": { ios: "lightbulb.fill", android: "lightbulb" },

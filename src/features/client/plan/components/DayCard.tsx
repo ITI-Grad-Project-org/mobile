@@ -12,21 +12,41 @@ export function DayCard({
   day: DayPlan;
   onPress: () => void;
 }) {
+  const isToday = Boolean(day.isToday);
+
   return (
     <Card
       interactive
       glass
       onPress={onPress}
-      className="flex-row items-center gap-4 px-4 py-6"
+      className={cn(
+        "flex-row items-center gap-4 px-4 py-6",
+        // Today's card carries a ring and a tinted fill so it reads as the one
+        // to act on — the "TODAY" label below repeats it without relying on color.
+        isToday && "border-2 border-primary bg-primary/5 shadow-pop"
+      )}
     >
       {/* Date column */}
-      <View className="shrink-0 items-center border-r border-border/60 pr-3.5">
-        <Text className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+      <View
+        className={cn(
+          "shrink-0 items-center pr-3.5",
+          isToday ? "border-r border-primary/40" : "border-r border-border/60"
+        )}
+      >
+        <Text
+          className={cn(
+            "text-[10px] font-bold uppercase tracking-wider",
+            isToday ? "text-primary" : "text-muted-foreground"
+          )}
+        >
           {day.d}
         </Text>
         <Text
           numberOfLines={1}
-          className="mt-0.5 text-[26px] font-black leading-none text-foreground"
+          className={cn(
+            "mt-0.5 text-[26px] font-black leading-none",
+            isToday ? "text-primary" : "text-foreground"
+          )}
         >
           {day.date}
         </Text>
@@ -43,14 +63,24 @@ export function DayCard({
 
       {/* Main content */}
       <View className="min-w-0 flex-1">
-        <Text
-          className={cn(
-            "text-[10.5px] font-bold uppercase tracking-[0.14em]",
-            TONE_INK[day.tone],
-          )}
-        >
-          {day.type}
-        </Text>
+        <View className="flex-row items-center gap-1.5">
+          {isToday ? (
+            <View className="rounded-full bg-primary px-2 py-0.5">
+              <Text className="text-[9px] font-bold uppercase tracking-[0.14em] text-primary-foreground">
+                Today
+              </Text>
+            </View>
+          ) : null}
+          <Text
+            numberOfLines={1}
+            className={cn(
+              "shrink text-[10.5px] font-bold uppercase tracking-[0.14em]",
+              TONE_INK[day.tone],
+            )}
+          >
+            {day.type}
+          </Text>
+        </View>
         <Text
           numberOfLines={1}
           className="mt-0.5 text-[16px] font-bold leading-tight text-foreground"

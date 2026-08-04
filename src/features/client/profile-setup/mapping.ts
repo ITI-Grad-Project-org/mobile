@@ -1,15 +1,6 @@
 import type { ProfileData } from "@/features/shared/setup";
-import { resolveImage } from "@/features/shared/setup/uploadImages";
-import type { Gender, UpdateClientDto } from "@/api/types";
-
-async function safeImage(v: unknown): Promise<string | undefined> {
-  try {
-    return await resolveImage(v, "client");
-  } catch (e) {
-    console.warn("Client image upload failed — saving profile without it:", e);
-    return undefined;
-  }
-}
+import type { UpdateClientProfileArgs } from "@/api/endpoints/profile.endpoints";
+import type { Gender } from "@/api/types";
 
 const GENDER_TO_ENUM: Record<string, Gender> = {
   Female: "female",
@@ -39,10 +30,15 @@ function str(v: unknown): string | undefined {
   return typeof v === "string" && v.trim() !== "" ? v : undefined;
 }
 
-export async function clientDataToDto(data: ProfileData): Promise<UpdateClientDto> {
+/**
+ * Build the multipart payload for PATCH /clients/me — FLAT fields plus an
+ * `avatar` file part. The avatar is no longer pre-uploaded to /upload/image;
+ * the endpoint takes the file itself.
+ */
+export async function clientDataToDto(data: ProfileData): Promise<UpdateClientProfileArgs> {
   const genderLabel = firstChip(data.gender);
 
-  const dto: UpdateClientDto = {
+  const dto: UpdateClientProfileArgs = {
     firstName: str(data.fname),
     lastName: str(data.lname),
     phone: str(data.phone),
@@ -50,10 +46,10 @@ export async function clientDataToDto(data: ProfileData): Promise<UpdateClientDt
     gender: genderLabel ? GENDER_TO_ENUM[genderLabel] : undefined,
     heightCm: num(data.height),
     weightKg: num(data.weight),
-    avatarUrl: await safeImage(data.avatar),
+    avatarUri: str(data.avatar),
   };
 
-  (Object.keys(dto) as (keyof UpdateClientDto)[]).forEach((k) => {
+  (Object.keys(dto) as (keyof UpdateClientProfileArgs)[]).forEach((k) => {
     if (dto[k] === undefined) delete dto[k];
   });
 

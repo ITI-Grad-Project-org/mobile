@@ -80,6 +80,14 @@ export const programsEndpoints = baseApi.injectEndpoints({
         'Programs',
       ],
     }),
+    // Restore an archived program to the coach's normal lists.
+    unarchiveProgram: builder.mutation<any, string>({
+      query: (programId) => ({ url: `${P}/${programId}/unarchive`, method: 'POST' }),
+      invalidatesTags: (result, error, programId) => [
+        { type: 'Program', id: programId },
+        'Programs',
+      ],
+    }),
 
     // ----- Days (generated from startDate + durationWeeks; you update, not create)
     updateProgramDay: builder.mutation<
@@ -176,6 +184,7 @@ export const {
   usePublishProgramMutation,
   useRescheduleProgramMutation,
   useCancelProgramMutation,
+  useUnarchiveProgramMutation,
   useUpdateProgramDayMutation,
   useGetProgramDayLogQuery,
   useLazyGetProgramDayLogQuery,

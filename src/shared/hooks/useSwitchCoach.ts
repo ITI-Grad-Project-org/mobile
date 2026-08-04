@@ -2,20 +2,12 @@ import { useCallback, useState } from "react";
 import * as SecureStore from "expo-secure-store";
 
 import { baseApi } from "@/api/baseApi";
+import { reconnectChatSocket } from "@/lib/chatSocket";
 import { useSwitchTenantMutation } from "@/api/endpoints/auth.endpoints";
 import { useAppDispatch, useAppSelector } from "@/store";
 import { setActiveTenant } from "@/store/activeTenantSlice";
 import { saveTokens } from "@/store/authSlice";
 
-/**
- * Switches the active tenant (= active coach) for a client.
- *
- * switch-tenant is an auth endpoint: it returns a NEW token whose JWT encodes
- * the newly-active tenant. We MUST persist those tokens, otherwise every later
- * request still carries the old tenant and the switch only "takes" after a
- * re-login. Resolves once the switch is complete, so callers can await it
- * before firing a tenant-scoped request.
- */
 export function useSwitchCoach() {
   const dispatch = useAppDispatch();
   const activeTenantId = useAppSelector((s) => s.activeTenant.tenantId);
@@ -31,6 +23,10 @@ export function useSwitchCoach() {
         if (res?.accessToken && res?.refreshToken) {
           await saveTokens(res.accessToken, res.refreshToken, "customer");
         }
+        // The tenant is encoded in the JWT, so the live chat socket is still
+        // scoped to the OLD coach. Reopen it with the new token before anything
+        // re-subscribes.
+        await reconnectChatSocket();
         dispatch(setActiveTenant(tenantId));
         await SecureStore.setItemAsync("activeTenantId", tenantId);
         // New creds are in place; wipe the cache so every mounted query refetches

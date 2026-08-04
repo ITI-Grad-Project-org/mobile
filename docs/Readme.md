@@ -19,6 +19,7 @@ This is the engineering documentation for the CoachHub React Native app — a mu
 | [`docs/07-team-workflow.md`](docs/07-team-workflow.md) | Working with one teammate: git, branching, code ownership, conventions, PRs |
 | [`docs/08-agents-and-ai-tooling.md`](docs/08-agents-and-ai-tooling.md) | **`AGENTS.md` / `CLAUDE.md` strategy to save tokens and get the most from AI** |
 | [`docs/09-getting-started.md`](docs/09-getting-started.md) | First-run setup, dev build creation, environment, common commands |
+| [`docs/10-chat-messaging.md`](10-chat-messaging.md) | **Chat in full**: data model, REST + socket contract, the socket singleton and its auth/reconnect rules, cache design, hooks, screens, invariants |
 
 ## The one-paragraph summary
 

@@ -1,9 +1,12 @@
 import type { Exercise } from "@/lib/data";
+import { cn } from "@/lib/utils";
+import { GlassButton } from "@/shared/ui/GlassButton";
 import { Icon } from "@/shared/ui/Icon";
 import { Pressable, ScrollView, Text, TextInput, View } from "@/tw";
 import { Tone } from "@/tw/Tone";
 import { Image } from "@/tw/image";
 import { LinearGradient } from "expo-linear-gradient";
+import { useState } from "react";
 import {
   KeyboardAvoidingView,
   Modal,
@@ -13,6 +16,7 @@ import {
 
 interface ExerciseSheetProps {
   exercise: Exercise | null;
+  isDone?: boolean;
   onClose: () => void;
   onDone: (id: string) => void;
 }
@@ -21,10 +25,25 @@ const isIOS = Platform.OS === "ios";
 
 export function ExerciseSheet({
   exercise,
+  isDone = false,
   onClose,
   onDone,
 }: ExerciseSheetProps) {
+  const [isPlaying, setIsPlaying] = useState(false);
+
   if (!exercise) return null;
+
+  // Resolve animated GIF / video URL (supports demoGifUrl, gifUrl, videoUrl, or a fallback workout GIF)
+  const animatedSource =
+    exercise.gifUrl ||
+    exercise.demoGifUrl ||
+    exercise.videoUrl ||
+    exercise.demoVideoUrl ||
+    (typeof exercise.image === "string" && exercise.image.endsWith(".gif")
+      ? exercise.image
+      : "https://media.giphy.com/media/3o7TKR108j2JtPiy0E/giphy.gif");
+
+  const displaySource = isPlaying ? animatedSource : exercise.image;
 
   const content = (
     <View className="flex-1 bg-card overflow-hidden">
@@ -38,36 +57,59 @@ export function ExerciseSheet({
           showsVerticalScrollIndicator={false}
         >
           {/* Hero image with video play overlays */}
-          <View className="relative w-full aspect-16/11 bg-secondary">
-            <Image source={exercise.image} className="w-full h-full" />
+          <View className="relative w-full aspect-16/11 bg-secondary overflow-hidden">
+            <Pressable
+              onPress={() => setIsPlaying((prev) => !prev)}
+              className="w-full h-full"
+            >
+              <Image
+                source={displaySource}
+                className="w-full h-full"
+                contentFit="cover"
+              />
+            </Pressable>
 
             {/* Fade gradient overlay from bottom to top */}
             <LinearGradient
               colors={[
                 "rgba(0,0,0,0.85)",
-                "rgba(0,0,0,0.25)",
+                "rgba(0,0,0,0.15)",
                 "rgba(0,0,0,0.4)",
               ]}
               locations={[0, 0.5, 1]}
               style={StyleSheet.absoluteFill}
+              pointerEvents="none"
             />
 
+
+
             {/* Close Button — sits closer to the top on iOS since the native sheet has no status-bar inset */}
-            <Pressable
+            <GlassButton
               onPress={onClose}
-              className={`absolute right-4 ${isIOS ? "top-4" : "top-10"} h-9 w-9 bg-black/50 rounded-full items-center justify-center active:bg-black/75`}
+              className={`absolute right-4 ${isIOS ? "top-4" : "top-10"} h-9 w-9 bg-black/50 rounded-full items-center justify-center active:bg-black/75 z-10`}
               accessibilityLabel="Close"
             >
               <Icon name="x" size={16} color="#ffffff" />
-            </Pressable>
+            </GlassButton>
 
-            {/* Play Video Overlay Button */}
-            <Pressable className="absolute top-1/2 left-1/2 -ml-8 -mt-8 h-16 w-16 bg-white/85 rounded-full items-center justify-center shadow-pop active:scale-95 active:opacity-90">
-              <Icon name="play" size={28} color="#000000" />
-            </Pressable>
+            {/* Play/Pause Video Overlay Button */}
+            <GlassButton
+              onPress={() => setIsPlaying((prev) => !prev)}
+              className={cn(
+                "absolute top-1/2 left-1/2 -ml-8 -mt-8 h-16 w-16 rounded-full shadow-pop z-10",
+                isPlaying ? "bg-black/50 border border-white/30" : "bg-white/70"
+              )}
+              accessibilityLabel={isPlaying ? "Pause demonstration" : "Play demonstration"}
+            >
+              <Icon
+                name={isPlaying ? "pause" : "play"}
+                size={28}
+                color={isPlaying ? "#ffffff" : "#000000"}
+              />
+            </GlassButton>
 
             {/* Workout muscle group and Title details */}
-            <View className="absolute bottom-4 left-5 right-5">
+            <View className="absolute bottom-4 left-5 right-5 pointer-events-none">
               <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/90">
                 {exercise.muscle}
               </Text>
@@ -165,11 +207,23 @@ export function ExerciseSheet({
               onDone(exercise.id);
               onClose();
             }}
-            className="flex-row items-center justify-center gap-2 rounded-2xl bg-success py-4 shadow-soft active:opacity-90"
+            className={`flex-row items-center justify-center gap-2 rounded-2xl py-4 shadow-soft active:opacity-90 ${
+              isDone ? "bg-success" : "bg-primary"
+            }`}
           >
-            <Icon name="check" size={20} color="#ffffff" />
-            <Text className="text-[15px] font-semibold text-white">
-              Mark as completed
+            <Icon
+              name="check"
+              size={20}
+              color={isDone ? "#ffffff" : "--primary-foreground"}
+            />
+            <Text
+              className={`text-[15px] ${
+                isDone
+                  ? "font-bold text-white"
+                  : "font-semibold text-primary-foreground"
+              }`}
+            >
+              {isDone ? "Completed ✓ (Tap to undo)" : "Mark as completed"}
             </Text>
           </Pressable>
         </View>

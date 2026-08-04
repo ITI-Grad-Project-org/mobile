@@ -21,6 +21,28 @@ import { FieldRenderer } from "./FieldRenderer";
 const AnimatedView = Reanimated.createAnimatedComponent(View);
 
 /** Fills the progress track to `pct` (0..1) as the step changes. */
+/**
+ * Unwrap an RTK Query error. A transport failure surfaces as
+ * `{ status: 'FETCH_ERROR', error }` with nothing under `data`, so the old
+ * `e?.data?.message || e?.message` chain fell through to the generic string and
+ * hid the real cause — worth keeping distinguishable, since a mangled multipart
+ * body fails exactly this way.
+ */
+function saveErrorMessage(e: any): string {
+  const body = e?.data;
+  if (typeof body === "string" && body.trim()) return body;
+  const msg = body?.message;
+  if (Array.isArray(msg) && msg.length) return msg.join("\n"); // Nest validation
+  if (typeof msg === "string" && msg.trim()) return msg;
+  if (e?.status === "FETCH_ERROR" || e?.status === "PARSING_ERROR") {
+    return `Couldn't reach the server${e?.error ? ` — ${e.error}` : ""}. Check your connection and try again.`;
+  }
+  if (typeof e?.status === "number") {
+    return `Request failed (${e.status}). Please try again.`;
+  }
+  return e?.message || "Something went wrong. Please try again.";
+}
+
 function ProgressBar({ pct }: { pct: number }) {
   const p = useSharedValue(pct);
   useEffect(() => {
@@ -80,9 +102,7 @@ export function SignupFlow({
     try {
       await onSubmit?.(data);
     } catch (e: any) {
-      setSaveError(
-        e?.data?.message || e?.message || "Something went wrong. Please try again."
-      );
+      setSaveError(saveErrorMessage(e));
       return;
     } finally {
       setSaving(false);

@@ -1,11 +1,11 @@
 import type { ProfileData, Certificate } from "@/features/shared/setup";
-import { resolveImage, resolveImages } from "@/features/shared/setup/uploadImages";
+import type { UpdateCoachProfileArgs } from "@/api/endpoints/profile.endpoints";
 import type {
   Certification,
+  CoachProfileData,
   Gender,
   OfflineAvailability,
   Specialty,
-  UpdateCoachDto,
 } from "@/api/types";
 
 const GENDER_TO_ENUM: Record<string, Gender> = {
@@ -68,25 +68,16 @@ function makeId(): string {
   return Math.random().toString(36).slice(2, 9);
 }
 
-async function safeImage(v: unknown): Promise<string | undefined> {
-  try {
-    return await resolveImage(v, "coach");
-  } catch (e) {
-    console.warn("Coach image upload failed — saving profile without it:", e);
-    return undefined;
-  }
+function uriList(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((u): u is string => typeof u === "string" && Boolean(u.trim())) : [];
 }
 
-async function safeImages(v: unknown): Promise<string[]> {
-  try {
-    return await resolveImages(v, "coach");
-  } catch (e) {
-    console.warn("Coach image upload failed — saving profile without it:", e);
-    return [];
-  }
-}
-
-export async function coachDataToDto(data: ProfileData): Promise<UpdateCoachDto> {
+/**
+ * Build the multipart payload for PATCH /coaches/me. Images are no longer
+ * pre-uploaded to /upload/* — the endpoint takes the files directly, so this
+ * just splits ProfileData into the JSON `data` part and the file URIs.
+ */
+export async function coachDataToDto(data: ProfileData): Promise<UpdateCoachProfileArgs> {
   const genderLabel = firstChip(data.gender);
   const offlineLabel = firstChip(data.offline);
 
@@ -100,22 +91,23 @@ export async function coachDataToDto(data: ProfileData): Promise<UpdateCoachDto>
     ? (data.certificates as Certificate[])
     : [];
   const certifications: Certification[] = [];
+  // Index-aligned with `certifications` — the i-th file fills the i-th entry.
+  const certificateUris: (string | undefined)[] = [];
   for (const c of rawCerts) {
     const name = str(c.name);
-    const fileUrl = await safeImage(c.image);
-    if (!name && !fileUrl) continue; // skip empty rows
+    const image = str(c.image);
+    if (!name && !image) continue; // skip empty rows
     certifications.push({
       name: name ?? "",
       ...(c.issued ? { issueDate: c.issued } : {}),
       ...(c.expires ? { expiryDate: c.expires } : {}),
-      ...(fileUrl ? { fileUrl } : {}),
     });
+    certificateUris.push(image);
   }
 
-  const dto: UpdateCoachDto = {
+  const dto: CoachProfileData = {
     firstName: str(data.fname),
     lastName: str(data.lname),
-    avatarUrl: await safeImage(data.avatar),
     phone: str(data.phone),
     age: num(data.age),
     gender: genderLabel ? GENDER_TO_ENUM[genderLabel] : undefined,
@@ -125,7 +117,6 @@ export async function coachDataToDto(data: ProfileData): Promise<UpdateCoachDto>
     careerExperience: str(data.experience),
     certifications: certifications.length ? certifications : undefined,
     portfolioUrl: str(data.portfolio),
-    transformationPhotos: await safeImages(data.transformations),
     featuredReviews: str(data.reviews),
     bio: str(data.bio),
     offlineAvailability: offlineLabel ? OFFLINE_TO_ENUM[offlineLabel] : undefined,
@@ -135,14 +126,19 @@ export async function coachDataToDto(data: ProfileData): Promise<UpdateCoachDto>
   };
 
   // Drop undefined / empty-array keys so we only PATCH what was actually set.
-  (Object.keys(dto) as (keyof UpdateCoachDto)[]).forEach((k) => {
+  (Object.keys(dto) as (keyof CoachProfileData)[]).forEach((k) => {
     const val = dto[k];
     if (val === undefined || (Array.isArray(val) && val.length === 0)) {
       delete dto[k];
     }
   });
 
-  return dto;
+  return {
+    data: dto,
+    avatarUri: str(data.avatar),
+    transformationUris: uriList(data.transformations),
+    certificateUris,
+  };
 }
 
 /** Reverse mapping — hydrate the SignupFlow from an existing coach profile. */

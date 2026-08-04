@@ -6,7 +6,7 @@ import { Image } from "@/tw/image";
 import type { Certificate, Field } from "../../types";
 import { DateField } from "./DateField";
 import { FieldLabel } from "./FieldLabel";
-import { useImageUpload } from "./useImageUpload";
+import { useImagePicker } from "./useImagePicker";
 
 const ISSUED_FIELD: Field = { key: "issued", label: "Issued", type: "date", placeholder: "Date" };
 const EXPIRES_FIELD: Field = { key: "expires", label: "Expires", type: "date", placeholder: "Date" };
@@ -26,11 +26,11 @@ export function CertsField({
 }) {
   const arr: Certificate[] = Array.isArray(value) ? (value as Certificate[]) : [];
   const placeholderColor = useCSSVariable("--muted-foreground") as string;
-  const { uploading, error, pickAndUpload } = useImageUpload();
+  const { picking, error, pickOne } = useImagePicker();
 
   const add = async () => {
-    if (uploading) return;
-    const image = await pickAndUpload();
+    if (picking) return;
+    const image = await pickOne();
     if (!image) return;
     onChange([...arr, { id: makeId(), image, name: "", issued: "", expires: "" }]);
   };
@@ -93,16 +93,16 @@ export function CertsField({
 
         <Pressable
           onPress={add}
-          disabled={uploading}
+          disabled={picking}
           className="flex-row items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border bg-secondary/40 py-4 active:opacity-80 disabled:opacity-60"
         >
-          {uploading ? (
+          {picking ? (
             <ActivityIndicator />
           ) : (
             <Icon name="trophy" size={16} color="--muted-foreground" />
           )}
           <Text className="text-[13px] font-semibold text-muted-foreground">
-            {uploading ? "Uploading…" : "Add certificate"}
+            {picking ? "Opening…" : "Add certificate"}
           </Text>
         </Pressable>
 

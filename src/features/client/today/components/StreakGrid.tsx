@@ -1,8 +1,11 @@
+import { useGetActivityGraphQuery } from "@/api/endpoints/activity.endpoints";
+import { ActivityGraphLevel } from "@/api/types";
 import { useRole } from "@/lib/role";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/shared/ui/Icon";
 import { Text, View } from "@/tw";
 import { Tone } from "@/tw/Tone";
+import React, { useMemo } from "react";
 
 // GitHub-style intensity scale (light → dark) for green & orange
 const palettes = {
@@ -22,18 +25,6 @@ const palettes = {
   ],
 };
 
-// Generate 18 weeks of pseudo-random data
-const seedGrid = (): number[] => {
-  const arr: number[] = [];
-  for (let i = 0; i < 18 * 7; i++) {
-    // simple deterministic pattern
-    const v = (Math.sin(i * 1.37) + Math.cos(i * 0.7)) * 1.4 + 1.6;
-    arr.push(Math.max(0, Math.min(4, Math.round(v))));
-  }
-  return arr;
-};
-const fullGrid = seedGrid();
-
 export function StreakHero({
   todayCompleted,
   todayTotal,
@@ -43,24 +34,58 @@ export function StreakHero({
 }) {
   const { accent } = useRole();
   const colors = palettes[accent];
-  const todayIntensity = Math.max(
-    0,
-    Math.min(4, Math.round((todayCompleted / Math.max(todayTotal, 1)) * 4))
-  );
-  const cells = [...fullGrid.slice(0, -1), todayIntensity];
+
+  const { data: activityData, isLoading } = useGetActivityGraphQuery();
+
+  const todayIntensity = useMemo(() => {
+    if (todayTotal <= 0) return 0;
+    return Math.max(
+      0,
+      Math.min(4, Math.round((todayCompleted / Math.max(todayTotal, 1)) * 4))
+    );
+  }, [todayCompleted, todayTotal]);
+
+  const cells = useMemo(() => {
+    const daysData = activityData?.days;
+    if (!daysData || daysData.length === 0) {
+      const empty = Array(126).fill(0);
+      if (todayIntensity > 0) {
+        empty[125] = todayIntensity;
+      }
+      return empty;
+    }
+
+    const recent = daysData.slice(-126).map((d) => d.level);
+    if (recent.length < 126) {
+      const pad = Array(126 - recent.length).fill(0);
+      recent.unshift(...pad);
+    }
+    if (todayIntensity > 0) {
+      recent[recent.length - 1] = Math.max(
+        recent[recent.length - 1],
+        todayIntensity
+      ) as ActivityGraphLevel;
+    }
+    return recent;
+  }, [activityData, todayIntensity]);
+
+  const currentStreak = activityData?.summary?.currentStreakDays ?? 0;
   const weeks = Math.ceil(cells.length / 7);
   const accentDot = accent === "green" ? "bg-[#30a14e]" : "bg-[#f0883e]";
 
   // Transform flat array into column-first weeks arrays (18 columns, 7 rows each)
-  const weeksArray: number[][] = [];
-  for (let w = 0; w < weeks; w++) {
-    const weekCells: number[] = [];
-    for (let d = 0; d < 7; d++) {
-      const idx = w * 7 + d;
-      weekCells.push(cells[idx] ?? 0);
+  const weeksArray: number[][] = useMemo(() => {
+    const result: number[][] = [];
+    for (let w = 0; w < weeks; w++) {
+      const weekCells: number[] = [];
+      for (let d = 0; d < 7; d++) {
+        const idx = w * 7 + d;
+        weekCells.push(cells[idx] ?? 0);
+      }
+      result.push(weekCells);
     }
-    weeksArray.push(weekCells);
-  }
+    return result;
+  }, [weeks, cells]);
 
   return (
     <Tone name="ink" className="rounded-2xl p-5 shadow-ink" glass>
@@ -70,9 +95,11 @@ export function StreakHero({
             Activity streak
           </Text>
           <View className="mt-1 flex-row items-baseline gap-2">
-            <Text className="text-5xl font-black text-ink-foreground">12</Text>
+            <Text className="text-5xl font-black text-ink-foreground">
+              {isLoading ? "-" : currentStreak}
+            </Text>
             <Text className="text-base font-medium text-ink-foreground/70">
-              day streak
+              {currentStreak === 1 ? "day streak" : "days streak"}
             </Text>
           </View>
           <Text className="mt-1 text-[12.5px] text-ink-foreground/70">
@@ -96,7 +123,7 @@ export function StreakHero({
             {week.map((v, dIdx) => (
               <View
                 key={dIdx}
-                className={cn("aspect-square rounded-[3px]", colors[v])}
+                className={cn("aspect-square rounded-[3px]", colors[v] || colors[0])}
               />
             ))}
           </View>
@@ -116,3 +143,6 @@ export function StreakHero({
     </Tone>
   );
 }
+
+
+

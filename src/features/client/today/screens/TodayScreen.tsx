@@ -23,7 +23,7 @@ import { ScrollView, Text, View } from "@/tw";
 import { router, useFocusEffect } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import { ExerciseSheet } from "../components/ExerciseSheet";
-import { StreakHero } from "../components/StreakGrid";
+import { StreakHero } from "../components/StreakHero";
 import { WorkoutCard } from "../components/WorkoutCard";
 
 export function TodayScreen() {

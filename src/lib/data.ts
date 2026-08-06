@@ -4,6 +4,8 @@ const U = (id: string, w = 600) =>
 
 export type Exercise = {
   id: string;
+  /** Library exercise id — lets a screen fetch the real instructions/demo on demand. */
+  exerciseId?: string;
   name: string;
   sets: number;
   reps: string;
@@ -15,6 +17,8 @@ export type Exercise = {
   videoUrl?: string;
   demoGifUrl?: string;
   demoVideoUrl?: string;
+  /** Coach's note on this prescribed exercise, when they left one. */
+  coachNotes?: string;
 };
 
 

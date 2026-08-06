@@ -10,6 +10,7 @@ import {
   useGetTrainingDayQuery,
 } from "@/api/endpoints/training.endpoints";
 import { yogaExercises } from "@/lib/data";
+import { plannedExerciseInfo } from "@/lib/plannedExercise";
 import { useActiveCoach, useRole } from "@/lib/role";
 import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import {
@@ -135,23 +136,17 @@ export function TodayScreen() {
       const serverLogged =
         Array.isArray(setsArr) && setsArr.length > 0 && outcomes.length === setsArr.length;
 
+      // Name, muscle, media, instructions and the coach note all come off the
+      // prescribed exercise — see lib/plannedExercise for the field names.
+      const info = plannedExerciseInfo(exItem, idx);
+
       return {
+        ...info,
         id: exItem.id || String(idx),
         serverLogged,
-        name: exItem.exercise?.name || exItem.name || `Exercise ${idx + 1}`,
         sets: typeof setsArr === "number" ? setsArr : (Array.isArray(setsArr) && setsArr.length ? setsArr.length : (exItem.targetSets || 3)),
         reps: String(repsVal),
         weight: weightVal,
-        muscle: exItem.exercise?.primaryMuscle || exItem.primaryMuscle || exItem.muscle || "Full Body",
-        image: exItem.exercise?.thumbnailUrl || exItem.thumbnailUrl || exItem.image || "",
-        instructions: exItem.exercise?.instructionSteps || exItem.instructions || [
-          "Begin in starting stance with core braced.",
-          "Execute movement with controlled form.",
-          "Squeeze target muscles at full extension.",
-          "Return safely to baseline."
-        ],
-        gifUrl: exItem.exercise?.demoGifUrl || exItem.demoGifUrl || exItem.gifUrl || "",
-        videoUrl: exItem.exercise?.demoVideoUrl || exItem.demoVideoUrl || exItem.videoUrl || "",
       };
     });
   }, [realDay, activeProgram, fullProgram, calendarItems]);

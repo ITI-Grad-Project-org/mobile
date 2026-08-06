@@ -1,68 +1,98 @@
-import React, { useState, useMemo } from "react";
-import { ActivityIndicator } from "react-native";
-import { router } from "expo-router";
-import { View, Text, ScrollView } from "@/tw";
-import { Icon } from "@/shared/ui/Icon";
-import { Tone } from "@/tw/Tone";
+import {
+  useGetCalendarQuery,
+  useGetMyProgramQuery,
+} from "@/api/endpoints/training.endpoints";
 import { Card } from "@/shared/ui/Card";
-import { useGetMyProgramQuery } from "@/api/endpoints/training.endpoints";
 import { GlassButton } from "@/shared/ui/GlassButton";
+import { Icon } from "@/shared/ui/Icon";
+import { todayIso } from "@/shared/utils/dayProgress";
+import { ScrollView, Text, View } from "@/tw";
+import { router } from "expo-router";
+import { useMemo, useState } from "react";
+import { ActivityIndicator } from "react-native";
+import { ProgramHeader } from "../components/ProgramHeader";
+import { TodayWorkoutCard } from "../components/TodayWorkoutCard";
+import { WeekProgress } from "../components/WeekProgress";
+import { WeekStepper } from "../components/WeekStepper";
+import {
+  CompletedWorkoutRow,
+  SectionHeader,
+  UpcomingWorkoutRow,
+} from "../components/WorkoutRows";
+import { buildWeek, findTodayWeekIndex, weekCountOf } from "../lib/programWeek";
 
 interface ProgramDetailsScreenProps {
   programId: string;
 }
 
 export function ProgramDetailsScreen({ programId }: ProgramDetailsScreenProps) {
-  const { data: programData, isLoading, isError } = useGetMyProgramQuery(programId, {
-    skip: !programId,
-  });
+  const {
+    data: programData,
+    isLoading,
+    isError,
+  } = useGetMyProgramQuery(programId, { skip: !programId });
 
   const program = programData?.data || programData;
-  const [selectedWeekIndex, setSelectedWeekIndex] = useState(0);
 
-  const weeksList = useMemo(() => {
-    return Array.isArray(program?.weeks) ? program.weeks : [];
-  }, [program]);
+  // Today's scheduled day id, straight from the calendar — the program payload
+  // doesn't always carry dates, and this is what Today already keys off.
+  const iso = todayIso();
+  const { data: calendarData } = useGetCalendarQuery({ from: iso, to: iso });
+  const todayDayId = useMemo(() => {
+    const items = (calendarData as any)?.data || calendarData || [];
+    const item = Array.isArray(items) ? items[0] : null;
+    return item?.id || item?.dayId || item?.programDayId || item?.programDay?.id || null;
+  }, [calendarData]);
 
-  const totalWeeks = useMemo(() => {
-    if (weeksList.length > 0) return weeksList.length;
-    if (typeof program?.durationWeeks === "number" && program.durationWeeks > 1) return program.durationWeeks;
-    return 1;
-  }, [weeksList, program]);
+  const options = useMemo(() => ({ todayIso: iso, todayDayId }), [iso, todayDayId]);
 
-  const days = useMemo(() => {
-    if (weeksList.length > 0) {
-      const targetWeek = weeksList[selectedWeekIndex] || weeksList[0];
-      return targetWeek?.days || [];
-    }
-    const flatDays = program?.days || program?.programDays || [];
-    if (Array.isArray(flatDays) && flatDays.length > 0) {
-      const matchingDays = flatDays.filter((d: any) => (d.weekNumber || 1) === selectedWeekIndex + 1);
-      if (matchingDays.length > 0) return matchingDays;
-      if (flatDays.length > 7) return flatDays.slice(selectedWeekIndex * 7, (selectedWeekIndex + 1) * 7);
-      return flatDays;
-    }
-    return [];
-  }, [program, weeksList, selectedWeekIndex]);
+  const totalWeeks = weekCountOf(program);
+  const currentWeekIndex = useMemo(
+    () => (program ? findTodayWeekIndex(program, options) : null),
+    [program, options]
+  );
+
+  // Default to the week today falls in; an arrow tap pins the choice from then
+  // on, so browsing ahead isn't yanked back when the program data refreshes.
+  const [weekOverride, setWeekOverride] = useState<number | null>(null);
+  const weekIndex = Math.min(
+    Math.max(0, weekOverride ?? currentWeekIndex ?? 0),
+    Math.max(0, totalWeeks - 1)
+  );
+
+  const week = useMemo(
+    () => (program ? buildWeek(program, weekIndex, options) : null),
+    [program, weekIndex, options]
+  );
+
+  const today = week?.workouts.find((w) => w.state === "today") ?? null;
+  const upcoming = week?.workouts.filter((w) => w.state === "upcoming") ?? [];
+  const completed = week?.workouts.filter((w) => w.state === "done") ?? [];
+  const totalWorkouts = week?.workouts.length ?? 0;
+
+  const openDay = (id: string) => router.push(`/workout/${id}` as any);
 
   if (isLoading) {
     return (
       <View className="flex-1 items-center justify-center bg-background p-6">
         <ActivityIndicator size="large" color="--primary" />
-        <Text className="mt-4 text-[14px] text-muted-foreground">Loading program details...</Text>
+        <Text className="mt-4 text-[13px] text-muted-foreground">Loading program…</Text>
       </View>
     );
   }
 
-  if (isError || !program) {
+  if (isError || !program || !week) {
     return (
       <View className="flex-1 items-center justify-center bg-background p-6">
-        <Icon name="alert-triangle" size={32} color="--destructive" />
-        <Text className="mt-3 text-[16px] font-bold text-foreground">Program not found</Text>
+        <Icon name="alert-triangle" size={28} color="--destructive" />
+        <Text className="mt-3 text-[15px] font-bold text-foreground">Program not found</Text>
+        <Text className="mt-1 text-[12px] text-muted-foreground">
+          It may have been unpublished by your coach.
+        </Text>
         <GlassButton
           onPress={() => router.back()}
-          className="mt-4 rounded-full px-4 py-2.5"
           accessibilityLabel="Go back"
+          className="mt-4 rounded-full px-4 py-2.5"
         >
           <Text className="text-[13px] font-semibold text-foreground">Go Back</Text>
         </GlassButton>
@@ -70,172 +100,82 @@ export function ProgramDetailsScreen({ programId }: ProgramDetailsScreenProps) {
     );
   }
 
+  const tags = [
+    program.difficulty ? String(program.difficulty) : "All levels",
+    totalWeeks > 1 ? `${totalWeeks} weeks` : "1 week",
+    program.goal ? String(program.goal).replace(/_/g, " ") : null,
+  ].filter(Boolean) as string[];
+
   return (
-    <View className="flex-1 bg-background">
-      {/* Header — sits under the AppHeader, so no extra top inset here. */}
-      <Tone name="lilac" className="px-5 pt-4 pb-5" glass>
-        <View className="flex-row items-center gap-3">
-          <GlassButton
-            onPress={() => router.back()}
-            accessibilityLabel="Back"
-            className="h-9 w-9 rounded-full"
-          >
-            <Icon name="chevron-left" size={16} color="--foreground" />
-          </GlassButton>
-          <Text
-            className="flex-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-lilac-ink opacity-80"
-            numberOfLines={1}
-          >
-            Published Program
-          </Text>
-        </View>
+    <ScrollView
+      className="flex-1 bg-background"
+      contentContainerClassName="pb-20"
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Sits under the client layout's AppHeader, so no top inset here. */}
+      <ProgramHeader
+        title={program.name || "Training program"}
+        subtitle={program.description || null}
+        tags={tags}
+      />
 
-        <Text className="mt-3 text-[24px] font-bold leading-tight text-lilac-ink">
-          {program.name}
-        </Text>
-        {program.description ? (
-          <Text className="mt-1.5 text-[13px] leading-relaxed text-lilac-ink/80" numberOfLines={3}>
-            {program.description}
-          </Text>
+      <View className="gap-y-4 p-4">
+        <WeekProgress done={completed.length} total={totalWorkouts} />
+
+        <WeekStepper
+          index={weekIndex}
+          total={totalWeeks}
+          dateRange={week.dateRange}
+          isCurrent={currentWeekIndex === weekIndex}
+          onChange={setWeekOverride}
+        />
+
+        {today ? (
+          <TodayWorkoutCard
+            workout={today}
+            onStart={() => openDay(today.id)}
+            onOpen={() => openDay(today.id)}
+          />
         ) : null}
 
-        <View className="mt-3.5 flex-row flex-wrap items-center gap-2">
-          <View className="rounded-full bg-lilac-ink/15 px-3 py-1">
-            <Text className="text-[11px] font-bold uppercase text-lilac-ink">
-              {program.difficulty || "All Levels"}
-            </Text>
-          </View>
-          <View className="rounded-full bg-lilac-ink/15 px-3 py-1">
-            <Text className="text-[11px] font-bold uppercase text-lilac-ink">
-              {program.durationWeeks ? `${program.durationWeeks} Weeks` : "Ongoing"}
-            </Text>
-          </View>
-          {program.goal ? (
-            <View className="rounded-full bg-lilac-ink/15 px-3 py-1">
-              <Text className="text-[11px] font-bold uppercase text-lilac-ink">
-                {String(program.goal).replace(/_/g, " ")}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-      </Tone>
-
-      {/* Program Days List */}
-      <ScrollView contentContainerClassName="p-4 gap-y-4 pb-20" showsVerticalScrollIndicator={false}>
-        {/* Week Switcher Card */}
-        {totalWeeks > 1 ? (
-          <Card glass className="flex-row items-center justify-between p-2.5">
-            <GlassButton
-              onPress={() => setSelectedWeekIndex((w) => Math.max(0, w - 1))}
-              disabled={selectedWeekIndex === 0}
-              className="h-11 w-11 rounded-full"
-              accessibilityLabel="Previous week"
-            >
-              <Icon name="chevron-left" size={16} color="--foreground" />
-            </GlassButton>
-
-            <View className="items-center">
-              <Text className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                {program?.schedulePhase ? program.schedulePhase.replace("_", " ") : "BLOCK A"}
-              </Text>
-              <Text className="text-[16px] font-bold text-foreground">
-                Week {selectedWeekIndex + 1} of {totalWeeks}
-              </Text>
-            </View>
-
-            <GlassButton
-              onPress={() => setSelectedWeekIndex((w) => Math.min(totalWeeks - 1, w + 1))}
-              disabled={selectedWeekIndex >= totalWeeks - 1}
-              className="h-11 w-11 rounded-full"
-              accessibilityLabel="Next week"
-            >
-              <Icon name="chevron-right" size={16} color="--foreground" />
-            </GlassButton>
-          </Card>
-        ) : null}
-
-        <Text className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-          Prescribed Workouts ({days.length})
-        </Text>
-
-        {days.length === 0 ? (
+        {totalWorkouts === 0 ? (
           <Card glass className="items-center py-8">
             <Icon name="clipboard-list" size={28} color="--muted-foreground" />
             <Text className="mt-2 text-[14px] font-semibold text-foreground">
-              No days in this week
+              Nothing scheduled this week
             </Text>
             <Text className="mt-1 text-[12px] text-muted-foreground">
-              Your coach hasn&apos;t prescribed anything here yet.
+              Your coach hasn&apos;t prescribed any workouts here yet.
             </Text>
           </Card>
-        ) : (
-          days.map((day: any, idx: number) => {
-            const exerciseCount = Array.isArray(day.exercises)
-              ? day.exercises.length
-              : Array.isArray(day.prescribedExercises)
-                ? day.prescribedExercises.length
-                : null;
+        ) : null}
 
-            const body = (
-              <>
-                <View className="min-w-0 flex-1 pr-3">
-                  <Text className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Day {idx + 1}
-                    {exerciseCount !== null && !day.isRestDay
-                      ? ` · ${exerciseCount} exercise${exerciseCount === 1 ? "" : "s"}`
-                      : ""}
-                  </Text>
-                  <Text className="mt-0.5 text-[16px] font-bold text-foreground" numberOfLines={1}>
-                    {day.name || `Workout Day ${idx + 1}`}
-                  </Text>
-                  {day.notes ? (
-                    <Text className="mt-1 text-[12px] text-muted-foreground" numberOfLines={1}>
-                      {day.notes}
-                    </Text>
-                  ) : null}
-                </View>
+        {upcoming.length > 0 ? (
+          <View className="gap-y-2.5">
+            <SectionHeader label="Rest of week" hint={`${upcoming.length} remaining`} />
+            {upcoming.map((workout) => (
+              <UpcomingWorkoutRow
+                key={workout.id}
+                workout={workout}
+                onPress={() => openDay(workout.id)}
+              />
+            ))}
+          </View>
+        ) : null}
 
-                {day.isRestDay ? (
-                  <View className="shrink-0 rounded-full bg-secondary px-3 py-1.5">
-                    <Text className="text-[11px] font-bold uppercase text-muted-foreground">
-                      Rest
-                    </Text>
-                  </View>
-                ) : (
-                  <View className="h-11 shrink-0 flex-row items-center gap-1 rounded-sm bg-primary px-4">
-                    <Text className="text-[13px] font-bold text-primary-foreground">Start</Text>
-                    <Icon name="chevron-right" size={13} color="--primary-foreground" />
-                  </View>
-                )}
-              </>
-            );
-
-            // Rest days have nowhere to go, so only workout days are pressable —
-            // and the whole card is the target, not just the pill.
-            return day.isRestDay ? (
-              <Card
-                key={day.id || idx}
-                glass
-                className="flex-row items-center justify-between p-4"
-              >
-                {body}
-              </Card>
-            ) : (
-              <Card
-                key={day.id || idx}
-                glass
-                interactive
-                onPress={() => router.push(`/workout/${day.id}` as any)}
-                accessibilityRole="button"
-                accessibilityLabel={`Start ${day.name || `workout day ${idx + 1}`}`}
-                className="flex-row items-center justify-between p-4"
-              >
-                {body}
-              </Card>
-            );
-          })
-        )}
-      </ScrollView>
-    </View>
+        {completed.length > 0 ? (
+          <View className="gap-y-2.5">
+            <SectionHeader label="Completed" hint={`${completed.length} done`} />
+            {completed.map((workout) => (
+              <CompletedWorkoutRow
+                key={workout.id}
+                workout={workout}
+                onPress={() => openDay(workout.id)}
+              />
+            ))}
+          </View>
+        ) : null}
+      </View>
+    </ScrollView>
   );
 }

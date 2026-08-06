@@ -95,20 +95,18 @@ export function DaySheet({
           {day.exercises.map((ex, i) => {
             const fullExercise: Exercise = {
               id: (ex as any).id || `ex-${i}`,
+              exerciseId: (ex as any).exerciseId,
               name: ex.name,
               sets: typeof ex.sets === "number" ? ex.sets : parseInt(String(ex.sets)) || 3,
               reps: (ex as any).reps || "10",
               weight: (ex as any).weight || "Bodyweight",
               muscle: (ex as any).muscle || "Full Body",
               image: ex.image,
-              instructions: (ex as any).instructions || [
-                "Position yourself with proper stance and core tight.",
-                "Perform movement with controlled tempo.",
-                "Squeeze target muscle at peak contraction.",
-                "Return to starting position smoothly.",
-              ],
+              instructions: (ex as any).instructions || [],
               gifUrl: (ex as any).gifUrl,
               videoUrl: (ex as any).videoUrl,
+              // Not day.notes — the day-level note already has its own card above.
+              coachNotes: (ex as any).coachNotes || "",
             };
 
             return (

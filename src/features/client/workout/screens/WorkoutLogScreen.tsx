@@ -8,6 +8,7 @@ import {
   useSkipTrainingDayMutation,
   useStartOrResumeLogMutation,
 } from "@/api/endpoints/training.endpoints";
+import { plannedExerciseInfo } from "@/lib/plannedExercise";
 import { cn } from "@/lib/utils";
 import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import { Card } from "@/shared/ui/Card";
@@ -23,13 +24,16 @@ import { Pressable, ScrollView, Text, View } from "@/tw";
 import { Animated } from "@/tw/animated";
 import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator } from "react-native";
+import { ActivityIndicator, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
+  Easing,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withTiming,
 } from "react-native-reanimated";
 import { ExerciseRail } from "../components/ExerciseRail";
 import { RestDock } from "../components/RestDock";
@@ -129,6 +133,7 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
   const [loggedOverrides, setLoggedOverrides] = useState<Record<string, boolean>>({});
 
   const { tenantId } = useActiveTenant();
+  const insets = useSafeAreaInsets();
   const unit = useWeightUnit();
   const rest = useRestTimer();
   const [sessionStartedAt] = useState(() => Date.now());
@@ -195,7 +200,10 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
   const exercises: NormalizedExercise[] = useMemo(() => {
     return rawExercises.map((item: any, index: number) => {
       const sets: any[] = item?.sets || item?.loggedSets || [];
-      const details = [item?.exercise?.equipment, item?.exercise?.primaryMuscle]
+      // The prescribed exercise is flat (exerciseName, primaryMuscle, equipment[]);
+      // see lib/plannedExercise.
+      const info = plannedExerciseInfo(item, index);
+      const details = [info.equipment.join(", "), info.muscle]
         .filter(Boolean)
         .join(" · ");
       const firstWorking = sets.find((s) => !s?.isExtra) ?? sets[0];
@@ -211,13 +219,13 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
           item?.prescribedExerciseId,
           item?.exerciseId,
           item?.exercise?.id,
-          exerciseNameKey(item?.exercise?.name || item?.name || ""),
+          exerciseNameKey(info.name),
         ].filter(Boolean) as string[],
-        name: item?.exercise?.name || item?.name || `Exercise ${index + 1}`,
+        name: info.name,
         detailChip: details || null,
         targetChip: firstWorking ? setTarget(firstWorking, unit) : null,
         lastTime: lastTimeLine(item, unit),
-        coachNotes: item?.coachNotes || null,
+        coachNotes: info.coachNotes || null,
         restSeconds: item?.restSeconds ?? DEFAULT_REST_SECONDS,
         sets: sets.map((set: any, setIndex: number) => {
           // Prefill order: what was logged -> what the coach prescribed. A value
@@ -256,8 +264,8 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
 
   const railSegments = useMemo(
     () =>
-      exercises.map((exercise, index) => ({
-        label: `Ex ${index + 1}`,
+      exercises.map((exercise) => ({
+        label: exercise.name,
         progress: exercise.sets.length
           ? exercise.sets.filter(isSetLogged).length / exercise.sets.length
           : 0,
@@ -305,41 +313,85 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
   }, [activeExercise, draftFor, isSetLogged]);
 
   // ----- Swipe between exercises
+  const { width: screenWidth } = useWindowDimensions();
   const translateX = useSharedValue(0);
+  const settle = useCallback(() => {
+    translateX.set(withSpring(0, { damping: 22, stiffness: 190, mass: 0.7 }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Swap the content while it is off-screen, then bring it in from the far side. */
+  const applyIndex = useCallback(
+    (index: number, enterFrom: number) => {
+      setActiveIndex(index);
+      translateX.set(enterFrom * screenWidth * 0.4);
+      settle();
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [screenWidth, settle]
+  );
 
   const goToExercise = useCallback(
     (index: number) => {
-      if (index < 0 || index > exercises.length - 1) return;
-      setActiveIndex(index);
+      // Out of range (or already there): rubber-band back instead of sticking.
+      if (index < 0 || index > exercises.length - 1 || index === clampedIndex) {
+        settle();
+        return;
+      }
+      const exitTo = index > clampedIndex ? -1 : 1;
+      translateX.set(
+        withTiming(
+          exitTo * screenWidth * 0.4,
+          { duration: 140, easing: Easing.out(Easing.quad) },
+          (finished?: boolean) => {
+            "worklet";
+            if (finished) runOnJS(applyIndex)(index, -exitTo);
+          }
+        )
+      );
     },
-    [exercises.length]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [applyIndex, clampedIndex, exercises.length, screenWidth, settle]
   );
 
-  // The card tracks the drag and snaps back under the threshold.
+  // The card tracks the drag, resists at the ends, and hands off to goToExercise.
   const panGesture = useMemo(
-    () =>
-      Gesture.Pan()
+    () => {
+      const isFirst = clampedIndex === 0;
+      const isLast = clampedIndex >= exercises.length - 1;
+      return Gesture.Pan()
         .activeOffsetX([-12, 12])
         .failOffsetY([-14, 14])
         .onUpdate((event) => {
-          translateX.set(event.translationX);
+          const dx = event.translationX;
+          const atEdge = (dx > 0 && isFirst) || (dx < 0 && isLast);
+          translateX.set(atEdge ? dx * 0.3 : dx);
         })
         .onEnd((event) => {
-          if (event.translationX < -SWIPE_THRESHOLD) {
-            runOnJS(goToExercise)(clampedIndex + 1);
-          } else if (event.translationX > SWIPE_THRESHOLD) {
-            runOnJS(goToExercise)(clampedIndex - 1);
+          // A quick flick counts even when it never travels the full threshold.
+          const flick = Math.abs(event.velocityX) > 550;
+          const past = Math.abs(event.translationX) > SWIPE_THRESHOLD;
+          if (!flick && !past) {
+            translateX.set(withSpring(0, { damping: 22, stiffness: 190, mass: 0.7 }));
+            return;
           }
-          translateX.set(withSpring(0, { damping: 20, stiffness: 200 }));
-        }),
+          const forward = event.translationX < 0;
+          runOnJS(goToExercise)(clampedIndex + (forward ? 1 : -1));
+        });
+    },
     // translateX is a shared value — a stable identity, so it stays out of deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [clampedIndex, goToExercise]
+    [clampedIndex, exercises.length, goToExercise]
   );
 
-  const cardStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.get() }],
-  }));
+  const cardStyle = useAnimatedStyle(() => {
+    const x = translateX.get();
+    const travel = Math.min(1, Math.abs(x) / (screenWidth * 0.4));
+    return {
+      transform: [{ translateX: x }, { scale: 1 - travel * 0.04 }],
+      opacity: 1 - travel * 0.7,
+    };
+  });
 
   // ----- Actions
   const handleToggleSet = async (set: NormalizedSet) => {
@@ -547,7 +599,7 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
       </View>
 
       {/* Whole-workout overview */}
-      <View className="px-4 pb-3">
+      <View className="pb-3">
         <ExerciseRail
           segments={railSegments}
           activeIndex={clampedIndex}
@@ -638,8 +690,16 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
         </Animated.View>
       </GestureDetector>
 
-      {/* Bottom dock */}
-      <View className="border-t border-border bg-card px-4 pt-3 pb-4 gap-y-2.5">
+      {/* Bottom dock — padded past the home indicator and the rounded screen
+          corners, which otherwise clip the status line and "Skip day". */}
+      <View
+        className="border-t border-border bg-card pt-3 gap-y-2.5"
+        style={{
+          paddingBottom: Math.max(insets.bottom, 12),
+          paddingLeft: Math.max(insets.left, 16),
+          paddingRight: Math.max(insets.right, 16),
+        }}
+      >
         {saveError ? (
           <View className="flex-row items-center gap-2 rounded-sm bg-destructive/10 px-3 py-2">
             <Icon name="alert-triangle" size={13} color="--destructive" />

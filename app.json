@@ -44,7 +44,8 @@
         {
           "photosPermission": "UPLY needs access to your photos so you can add a profile picture, progress photos, and certificates."
         }
-      ]
+      ],
+      "@react-native-google-signin/google-signin"
     ],
     "experiments": {
       "typedRoutes": true,

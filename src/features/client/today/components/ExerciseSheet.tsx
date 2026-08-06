@@ -5,8 +5,9 @@ import { Icon } from "@/shared/ui/Icon";
 import { Pressable, ScrollView, Text, TextInput, View } from "@/tw";
 import { Tone } from "@/tw/Tone";
 import { Image } from "@/tw/image";
+import { Image as ExpoImage } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   KeyboardAvoidingView,
   Modal,
@@ -31,19 +32,34 @@ export function ExerciseSheet({
 }: ExerciseSheetProps) {
   const [isPlaying, setIsPlaying] = useState(false);
 
+  // The prescription copies the library fields onto itself (instructionSteps,
+  // demoGifUrl, …), so everything shown here is already in the day payload —
+  // no lookup against /exercises, which is coach-scoped anyway.
+  const instructions: string[] = exercise?.instructions ?? [];
+
+  // Animated demo: whatever the coach uploaded, in order of preference. A still
+  // that is itself a GIF counts; there is no stock fallback clip.
+  const animatedSource =
+    exercise?.gifUrl ||
+    exercise?.demoGifUrl ||
+    exercise?.videoUrl ||
+    exercise?.demoVideoUrl ||
+    (typeof exercise?.image === "string" && exercise.image.endsWith(".gif")
+      ? exercise.image
+      : "");
+
+  const stillSource = exercise?.image || "";
+
+  // Warm the disk/memory cache as soon as the sheet opens so the first tap on
+  // play swaps frames instantly instead of downloading the GIF right then.
+  useEffect(() => {
+    if (!animatedSource) return;
+    ExpoImage.prefetch(animatedSource, { cachePolicy: "memory-disk" });
+  }, [animatedSource]);
+
   if (!exercise) return null;
 
-  // Resolve animated GIF / video URL (supports demoGifUrl, gifUrl, videoUrl, or a fallback workout GIF)
-  const animatedSource =
-    exercise.gifUrl ||
-    exercise.demoGifUrl ||
-    exercise.videoUrl ||
-    exercise.demoVideoUrl ||
-    (typeof exercise.image === "string" && exercise.image.endsWith(".gif")
-      ? exercise.image
-      : "https://media.giphy.com/media/3o7TKR108j2JtPiy0E/giphy.gif");
-
-  const displaySource = isPlaying ? animatedSource : exercise.image;
+  const displaySource = isPlaying && animatedSource ? animatedSource : stillSource;
 
   const content = (
     <View className="flex-1 bg-card overflow-hidden">
@@ -59,13 +75,21 @@ export function ExerciseSheet({
           {/* Hero image with video play overlays */}
           <View className="relative w-full aspect-16/11 bg-secondary overflow-hidden">
             <Pressable
-              onPress={() => setIsPlaying((prev) => !prev)}
+              onPress={() => animatedSource && setIsPlaying((prev) => !prev)}
+              disabled={!animatedSource}
               className="w-full h-full"
             >
               <Image
                 source={displaySource}
                 className="w-full h-full"
                 contentFit="cover"
+                // The still stays on screen while the GIF decodes, so the swap
+                // reads as playback starting rather than a flash of empty box.
+                placeholder={stillSource ? { uri: stillSource } : undefined}
+                placeholderContentFit="cover"
+                cachePolicy="memory-disk"
+                priority="high"
+                transition={0}
               />
             </Pressable>
 
@@ -92,21 +116,24 @@ export function ExerciseSheet({
               <Icon name="x" size={16} color="#ffffff" />
             </GlassButton>
 
-            {/* Play/Pause Video Overlay Button */}
-            <GlassButton
-              onPress={() => setIsPlaying((prev) => !prev)}
-              className={cn(
-                "absolute top-1/2 left-1/2 -ml-8 -mt-8 h-16 w-16 rounded-full shadow-pop z-10",
-                isPlaying ? "bg-black/50 border border-white/30" : "bg-white/70"
-              )}
-              accessibilityLabel={isPlaying ? "Pause demonstration" : "Play demonstration"}
-            >
-              <Icon
-                name={isPlaying ? "pause" : "play"}
-                size={28}
-                color={isPlaying ? "#ffffff" : "#000000"}
-              />
-            </GlassButton>
+            {/* Play/Pause Video Overlay Button — only when the coach actually
+                uploaded a demo for this exercise. */}
+            {animatedSource ? (
+              <GlassButton
+                onPress={() => setIsPlaying((prev) => !prev)}
+                className={cn(
+                  "absolute top-1/2 left-1/2 -ml-8 -mt-8 h-16 w-16 rounded-full shadow-pop z-10",
+                  isPlaying ? "bg-black/50 border border-white/30" : "bg-white/70"
+                )}
+                accessibilityLabel={isPlaying ? "Pause demonstration" : "Play demonstration"}
+              >
+                <Icon
+                  name={isPlaying ? "pause" : "play"}
+                  size={28}
+                  color={isPlaying ? "#ffffff" : "#000000"}
+                />
+              </GlassButton>
+            ) : null}
 
             {/* Workout muscle group and Title details */}
             <View className="absolute bottom-4 left-5 right-5 pointer-events-none">
@@ -147,20 +174,26 @@ export function ExerciseSheet({
               <Text className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground mb-3">
                 Instructions
               </Text>
-              <View className="gap-3">
-                {exercise.instructions.map((step, i) => (
-                  <View key={i} className="flex-row gap-3 items-start">
-                    <View className="h-6 w-6 rounded-full bg-primary items-center justify-center mt-0.5">
-                      <Text className="text-[12px] font-bold text-primary-foreground">
-                        {i + 1}
+              {instructions.length > 0 ? (
+                <View className="gap-3">
+                  {instructions.map((step, i) => (
+                    <View key={i} className="flex-row gap-3 items-start">
+                      <View className="h-6 w-6 rounded-full bg-primary items-center justify-center mt-0.5">
+                        <Text className="text-[12px] font-bold text-primary-foreground">
+                          {i + 1}
+                        </Text>
+                      </View>
+                      <Text className="flex-1 text-[13.5px] leading-relaxed text-foreground/80">
+                        {step}
                       </Text>
                     </View>
-                    <Text className="flex-1 text-[13.5px] leading-relaxed text-foreground/80">
-                      {step}
-                    </Text>
-                  </View>
-                ))}
-              </View>
+                  ))}
+                </View>
+              ) : (
+                <Text className="text-[13px] leading-relaxed text-muted-foreground">
+                  Your coach hasn&apos;t added instructions for this exercise yet.
+                </Text>
+              )}
             </View>
 
             {/* Log performance inputs */}
@@ -191,12 +224,14 @@ export function ExerciseSheet({
 
             {/* Coach note card — Tone gradient (dark-aware: its `useCSSVariable`
               falls through to the global, color-scheme-aware root variables). */}
-            <Tone name="sky" className="rounded-2xl p-3.5" glass>
-              <Text className="text-[12.5px] text-sky-ink leading-relaxed">
-                <Text className="font-semibold">Coach note: </Text>
-                Keep your chest tall through the descent — film set 3 for me.
-              </Text>
-            </Tone>
+            {exercise.coachNotes ? (
+              <Tone name="sky" className="rounded-2xl p-3.5" glass>
+                <Text className="text-[12.5px] text-sky-ink leading-relaxed">
+                  <Text className="font-semibold">Coach note: </Text>
+                  {exercise.coachNotes}
+                </Text>
+              </Tone>
+            ) : null}
           </View>
         </ScrollView>
 

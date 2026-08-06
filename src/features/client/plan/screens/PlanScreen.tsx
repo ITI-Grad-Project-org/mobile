@@ -4,6 +4,7 @@ import {
   useGetMyProgramQuery,
   useGetMyProgramsQuery,
 } from "@/api/endpoints/training.endpoints";
+import { plannedExerciseInfo } from "@/lib/plannedExercise";
 import { useActiveCoach } from "@/lib/role";
 import { cn } from "@/lib/utils";
 import { Card } from "@/shared/ui/Card";
@@ -173,37 +174,13 @@ export function PlanScreen() {
             : exItem.weight || exItem.targetWeight || "Bodyweight";
 
           return {
+            // Name, muscle, media, instructions and the coach note all come off
+            // the prescribed exercise — see lib/plannedExercise for the shape.
+            ...plannedExerciseInfo(exItem, idx),
             id: exItem.id || `ex-${idx}`,
-            name: exItem.exercise?.name || exItem.name || `Exercise ${idx + 1}`,
             sets: `${setsCount} sets`,
             reps: String(repsVal),
             weight: weightVal,
-            muscle:
-              exItem.exercise?.primaryMuscle ||
-              exItem.primaryMuscle ||
-              "Full Body",
-            image:
-              exItem.exercise?.thumbnailUrl ||
-              exItem.thumbnailUrl ||
-              exItem.image ||
-              "",
-            instructions: exItem.exercise?.instructionSteps ||
-              exItem.instructions || [
-                "Position yourself with proper stance and core tight.",
-                "Perform movement with controlled tempo.",
-                "Squeeze target muscle at peak contraction.",
-                "Return to starting position smoothly.",
-              ],
-            gifUrl:
-              exItem.exercise?.demoGifUrl ||
-              exItem.demoGifUrl ||
-              exItem.gifUrl ||
-              "",
-            videoUrl:
-              exItem.exercise?.demoVideoUrl ||
-              exItem.demoVideoUrl ||
-              exItem.videoUrl ||
-              "",
           };
         }),
         notes: day.notes,

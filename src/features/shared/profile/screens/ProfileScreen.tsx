@@ -9,13 +9,18 @@ import {
   useLogoutCoachMutation,
   useLogoutCustomerMutation,
 } from "@/api/endpoints/auth.endpoints";
+import { useGetActivityGraphQuery } from "@/api/endpoints/activity.endpoints";
+import { useGetClientsQuery } from "@/api/endpoints/clients.endpoints";
 import { useGetDirectoryCoachQuery } from "@/api/endpoints/directory.endpoints";
+import { useGetIntakeQuery } from "@/api/endpoints/intake.endpoints";
+import { useGetPublicReviewsSummaryQuery } from "@/api/endpoints/reviews.endpoints";
+import { useGetTenantMeQuery } from "@/api/endpoints/tenant.endpoints";
 import { MeasurementsSummaryCard } from "@/features/client/progress";
 import type { ReduxMembership } from "@/store/membershipsSlice";
 import { disconnectChatSocket } from "@/lib/chatSocket";
 import { resolveCoachFields } from "@/lib/coach";
-import { useActiveCoach } from "@/lib/role";
 import { cn } from "@/lib/utils";
+import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import { resetProfile } from "@/shared/hooks/useProfileSetup";
 import { useSwitchCoach } from "@/shared/hooks/useSwitchCoach";
 import { fullName } from "@/shared/utils/name";
@@ -29,11 +34,17 @@ import { clearChatUi } from "@/store/chatUiSlice";
 import { clearMemberships, membershipsSelectors } from "@/store/membershipsSlice";
 import { Pressable, SafeAreaView, ScrollView, Text, View } from "@/tw";
 import { Image } from "@/tw/image";
-import { useRouter, useSegments } from "expo-router";
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator } from "react-native";
 
 import { DeleteAccountSheet } from "../components/DeleteAccountSheet";
+import {
+  deriveRosterStats,
+  formatRating,
+  humanizeEnum,
+  publicProfileHandle,
+} from "../lib/profileStats";
 
 type StreakAccent = "green" | "orange";
 
@@ -42,40 +53,45 @@ const swatches: { key: StreakAccent; label: string; color: string }[] = [
   { key: "orange", label: "Sunset", color: "#f0883e" },
 ];
 
-const rows: { icon: IconName; label: string; hint?: string }[] = [
-  { icon: "bell", label: "Notifications", hint: "On" },
-  { icon: "credit-card", label: "Subscription", hint: "Pro · monthly" },
-  { icon: "shield", label: "Privacy" },
-  { icon: "help-circle", label: "Help & support" },
-];
-
-const coachRows: { icon: IconName; label: string; hint?: string }[] = [
-  { icon: "sparkles", label: "AI knowledge base", hint: "12 docs uploaded" },
-  { icon: "palette", label: "Branding", hint: "Logo, colors" },
-  { icon: "credit-card", label: "Billing & payouts", hint: "Stripe connected" },
-  { icon: "bell", label: "Notifications" },
-  { icon: "person", label: "Public profile", hint: "marco.uply.app" },
-];
+type SettingsRow = {
+  icon: IconName;
+  label: string;
+  hint?: string | null;
+  onPress?: () => void;
+};
 
 export function ProfileScreen() {
-  const segments = useSegments() as string[];
-  const isCoach = segments.includes("(coach)");
+  // This screen lives at the root, outside both route groups, so the mounted
+  // group can't be read off the segments — the signed-in persona decides.
+  const persona = useAppSelector((s) => s.auth.persona);
+  const { role } = useActiveTenant();
+  const isCoach = persona === "coach" || role === "owner";
   return isCoach ? <CoachProfile /> : <ClientProfile />;
 }
 
 function CoachProfile() {
   const router = useRouter();
   const dispatch = useAppDispatch();
+  const { tenantId } = useActiveTenant();
   const { data: profile, isLoading } = useGetCoachProfileQuery();
   const [logoutCoach] = useLogoutCoachMutation();
   const [deleteCoach] = useDeleteCoachProfileMutation();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  // Header stats. All three are cached elsewhere in the app, so this screen
+  // usually paints them without a round trip.
+  const { data: clients } = useGetClientsQuery(
+    { tenantId: tenantId ?? "" },
+    { skip: !tenantId }
+  );
+  const { data: reviewSummary } = useGetPublicReviewsSummaryQuery(
+    { tenantId: tenantId ?? "" },
+    { skip: !tenantId }
+  );
+  const { data: tenant } = useGetTenantMeQuery();
+
   const openEdit = () => {
-    // Dismiss this profile modal first, otherwise the pushed edit screen renders
-    // behind it (it's a root-stack route under the modal).
-    if (router.canDismiss()) router.dismiss();
     router.push({
       pathname: "/(setup)/coach-profile",
       params: { edit: "1" },
@@ -131,19 +147,44 @@ function CoachProfile() {
   const coachAvatar = profile?.avatarUrl || profile?.avatar || null;
   const certs = profile?.certifications || [];
 
+  const roster = deriveRosterStats(clients);
+  const rating = formatRating(
+    reviewSummary?.averageRating ?? reviewSummary?.average ?? null
+  );
+  const reviewCount: number =
+    reviewSummary?.totalReviews ?? reviewSummary?.count ?? 0;
+  const specialty = humanizeEnum(profile?.specialties?.[0]);
+  const yearsExperience: number | undefined = profile?.yearsExperience;
+  const handle = publicProfileHandle(tenant?.slug);
+
+  const coachRows: SettingsRow[] = [
+    { icon: "sparkles", label: "AI knowledge base" },
+    { icon: "palette", label: "Branding", hint: tenant?.name || "Logo, colors" },
+    { icon: "credit-card", label: "Billing & payouts", hint: "Not available yet" },
+    {
+      icon: "bell",
+      label: "Notifications",
+      onPress: () => router.push("/(coach)/notifications"),
+    },
+    { icon: "person", label: "Public profile", hint: handle },
+  ];
+
   return (
     <View className="flex-1 bg-background">
-      {/* Modal header with close control */}
-      <View className="px-4 pt-3 pb-3 flex-row items-center justify-between border-b border-border">
-        <Text className="text-foreground text-xl font-bold">Profile</Text>
-        <GlassButton
-          onPress={() => router.back()}
-          className="h-9 w-9 rounded-full bg-secondary items-center justify-center active:opacity-70"
-          accessibilityLabel="Close profile"
-        >
-          <Icon name="x" size={18} color="--muted-foreground" />
-        </GlassButton>
-      </View>
+      {/* Full-screen push: this route sits above the app header, so this header
+          owns the top safe area. */}
+      <SafeAreaView edges={["top"]} className="bg-background">
+        <View className="px-3 pt-1 pb-3 flex-row items-center gap-2 border-b border-border">
+          <GlassButton
+            onPress={() => router.back()}
+            className="h-9 w-9 rounded-full items-center justify-center active:opacity-70"
+            accessibilityLabel="Go back"
+          >
+            <Icon name="chevron-left" size={18} color="--foreground" />
+          </GlassButton>
+          <Text className="text-foreground text-xl font-bold">Profile</Text>
+        </View>
+      </SafeAreaView>
 
       <ScrollView
         className="flex-1"
@@ -168,17 +209,30 @@ function CoachProfile() {
             <Text className="text-ink-foreground/70 text-sm">
               {coachEmail}
             </Text>
+            {/* Chips are dropped entirely when the data behind them is absent —
+                a new coach shows none rather than a zeroed-out badge. */}
             <View className="mt-2 flex-row flex-wrap gap-1.5">
-              <View className="rounded-full bg-primary/20 px-2.5 py-1">
-                <Text className="text-primary text-xs font-semibold">
-                  $8.4k MRR
-                </Text>
-              </View>
-              <View className="rounded-full bg-white/10 px-2.5 py-1">
-                <Text className="text-ink-foreground text-xs font-semibold">
-                  4.9 ★
-                </Text>
-              </View>
+              {specialty ? (
+                <View className="rounded-full bg-primary/20 px-2.5 py-1">
+                  <Text className="text-primary text-xs font-semibold">
+                    {specialty}
+                  </Text>
+                </View>
+              ) : null}
+              {rating ? (
+                <View className="rounded-full bg-white/10 px-2.5 py-1">
+                  <Text className="text-ink-foreground text-xs font-semibold">
+                    {rating} ★
+                  </Text>
+                </View>
+              ) : null}
+              {typeof yearsExperience === "number" ? (
+                <View className="rounded-full bg-white/10 px-2.5 py-1">
+                  <Text className="text-ink-foreground text-xs font-semibold">
+                    {yearsExperience} yr{yearsExperience === 1 ? "" : "s"} exp
+                  </Text>
+                </View>
+              ) : null}
             </View>
           </View>
           <Pressable
@@ -194,17 +248,27 @@ function CoachProfile() {
         <View className="flex-row gap-3">
           <Card tone="mint" className="flex-1" glass>
             <Text className="text-mint-ink/70 text-[11px] font-semibold uppercase tracking-wider">
-              Retention
+              Active clients
             </Text>
-            <Text className="text-mint-ink text-2xl font-black mt-1">87%</Text>
-            <Text className="text-mint-ink/80 text-[11px]">90-day</Text>
+            <Text className="text-mint-ink text-2xl font-black mt-1">
+              {roster.active}
+            </Text>
+            <Text className="text-mint-ink/80 text-[11px]">
+              of {roster.total} on roster
+            </Text>
           </Card>
           <Card tone="lilac" className="flex-1" glass>
             <Text className="text-lilac-ink/70 text-[11px] font-semibold uppercase tracking-wider">
-              Avg adherence
+              Rating
             </Text>
-            <Text className="text-lilac-ink text-2xl font-black mt-1">82%</Text>
-            <Text className="text-lilac-ink/80 text-[11px]">across active</Text>
+            <Text className="text-lilac-ink text-2xl font-black mt-1">
+              {rating ?? "—"}
+            </Text>
+            <Text className="text-lilac-ink/80 text-[11px]">
+              {reviewCount === 0
+                ? "No reviews yet"
+                : `${reviewCount} review${reviewCount === 1 ? "" : "s"}`}
+            </Text>
           </Card>
         </View>
 
@@ -280,6 +344,7 @@ function CoachProfile() {
           {coachRows.map((r) => (
             <Pressable
               key={r.label}
+              onPress={r.onPress}
               className="flex-row items-center gap-3 rounded-2xl p-3 active:opacity-70"
             >
               <View className="h-9 w-9 rounded-xl bg-secondary items-center justify-center">
@@ -418,7 +483,6 @@ function CoachSwitchRow({
 function ClientProfile() {
   const router = useRouter();
   const dispatch = useAppDispatch();
-  const active = useActiveCoach();
 
   const { data: profile, isLoading } = useGetClientProfileQuery();
   const [logoutCustomer] = useLogoutCustomerMutation();
@@ -438,6 +502,14 @@ function ClientProfile() {
     (m) => m.role === "client" && m.status === "active"
   );
   const { switchCoach, switchingId } = useSwitchCoach();
+
+  // Header stats: the streak comes from the same graph the Today screen draws,
+  // the goal from the intake filled in for the active coach.
+  const { data: activity } = useGetActivityGraphQuery();
+  const { data: intake } = useGetIntakeQuery(
+    { tenantId: activeTenantId ?? "" },
+    { skip: !activeTenantId }
+  );
 
   const handleSwitch = (tenantId: string) => {
     switchCoach(tenantId).catch((e) => console.warn("Switch tenant failed:", e));
@@ -505,6 +577,20 @@ function ClientProfile() {
   const clientEmail = profile?.email || "";
   const clientAvatar = profile?.avatarUrl || profile?.avatar || null;
 
+  const streakDays = activity?.summary?.currentStreakDays ?? 0;
+  const goal = humanizeEnum(intake?.goal);
+
+  const rows: SettingsRow[] = [
+    {
+      icon: "bell",
+      label: "Notifications",
+      onPress: () => router.push("/(client)/notifications"),
+    },
+    { icon: "credit-card", label: "Subscription", hint: "Not available yet" },
+    { icon: "shield", label: "Privacy" },
+    { icon: "help-circle", label: "Help & support" },
+  ];
+
   return (
     <View className="flex-1 bg-background">
       {/* Full-screen push: the app header is hidden for this route, so this
@@ -548,14 +634,18 @@ function ClientProfile() {
             <View className="mt-2 flex-row flex-wrap gap-1.5">
               <View className="rounded-full bg-primary/20 px-2.5 py-1">
                 <Text className="text-primary text-xs font-semibold">
-                  12-day streak
+                  {streakDays > 0
+                    ? `${streakDays}-day streak`
+                    : "No streak yet"}
                 </Text>
               </View>
-              <View className="rounded-full bg-white/10 px-2.5 py-1">
-                <Text className="text-ink-foreground text-xs font-semibold">
-                  {active.specialty}
-                </Text>
-              </View>
+              {goal ? (
+                <View className="rounded-full bg-white/10 px-2.5 py-1">
+                  <Text className="text-ink-foreground text-xs font-semibold">
+                    {goal}
+                  </Text>
+                </View>
+              ) : null}
             </View>
           </View>
           <Pressable
@@ -670,6 +760,7 @@ function ClientProfile() {
           {rows.map((r) => (
             <Pressable
               key={r.label}
+              onPress={r.onPress}
               className={cn(
                 "flex-row items-center gap-3 rounded-2xl p-3 active:opacity-70"
               )}

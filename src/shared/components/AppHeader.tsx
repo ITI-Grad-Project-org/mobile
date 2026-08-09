@@ -59,8 +59,10 @@ export function AppHeader() {
     setColorScheme(isDark ? "light" : "dark");
   };
 
+  // One route for both personas — it renders the coach or client profile from
+  // the signed-in persona, and pushes full-screen over this header either way.
   const handleProfilePress = () => {
-    router.navigate(isCoach ? "/(coach)/profile" : "/my-profile");
+    router.navigate("/my-profile");
   };
 
   const handleNotificationPress = () => {

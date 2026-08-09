@@ -11,8 +11,9 @@ import {
 } from "@/api/endpoints/training.endpoints";
 import { yogaExercises } from "@/lib/data";
 import { plannedExerciseInfo } from "@/lib/plannedExercise";
-import { useActiveCoach, useRole } from "@/lib/role";
+import { resolveCoachFields } from "@/lib/coach";
 import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
+import {secondNameOf } from "@/shared/utils/name";
 import {
   dayProgressKey,
   exerciseNameKey,
@@ -27,9 +28,6 @@ import { StreakHero } from "../components/StreakHero";
 import { WorkoutCard } from "../components/WorkoutCard";
 
 export function TodayScreen() {
-  const coach = useActiveCoach();
-  const { clientProfile } = useRole();
-
   const { tenantId } = useActiveTenant();
   const { data: clientProfileData } = useGetClientProfileQuery();
   const { data: coachDir } = useGetDirectoryCoachQuery(tenantId ?? "", {
@@ -37,10 +35,11 @@ export function TodayScreen() {
   });
 
   const clientFirstName =
-    clientProfileData?.lastName || clientProfile.lname || "there";
-  const coachObj = coachDir?.coach || coachDir;
-  const coachFirstName =
-    coachObj?.firstName + " " + coachObj?.lastName || coachDir?.firstName + " " + coachDir?.lastName || coach.name.split(" ")[0];
+    secondNameOf(clientProfileData?.firstName, clientProfileData?.lastName) ||
+    "there";
+  // Empty when the client hasn't joined a coach yet — the greeting then drops
+  // the "with …" clause rather than printing "undefined undefined".
+  const coachName = resolveCoachFields(coachDir).name ?? "";
 
   const today = useMemo(
     () =>
@@ -246,7 +245,8 @@ export function TodayScreen() {
       <View className="flex-row items-center justify-between px-1">
         <View className="flex-1 pr-4">
           <Text className="text-[13px] text-muted-foreground">
-            {today} · with {coachFirstName}
+            {today}
+            {coachName ? ` · with ${coachName}` : ""}
           </Text>
           <Text className="text-[26px] font-bold tracking-tight text-foreground mt-0.5">
             Hey {clientFirstName} 

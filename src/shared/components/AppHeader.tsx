@@ -4,7 +4,10 @@ import {
   useListMyInvitationsQuery,
 } from "@/api/endpoints/invitations.endpoints";
 import { useListTenantJoinRequestsQuery } from "@/api/endpoints/joinRequests.endpoints";
-import { useRole } from "@/lib/role";
+import {
+  useGetClientProfileQuery,
+  useGetCoachProfileQuery,
+} from "@/api/endpoints/profile.endpoints";
 import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import { GlassButton } from "@/shared/ui/GlassButton";
 import { Icon } from "@/shared/ui/Icon";
@@ -18,11 +21,16 @@ export function AppHeader() {
   const { top } = useSafeAreaInsets();
   const router = useRouter();
   const { colorScheme, setColorScheme } = useColorScheme();
-  const { clientProfile, coachProfile } = useRole();
-  // Role state isn't wired yet (useRole is a stub), so key off the active route
-  // group to decide which profile to open and which avatar to show.
+  // Key off the active route group to decide which profile to open and which
+  // avatar to show — the mounted group already reflects the active membership.
   const segments = useSegments() as string[];
   const isCoach = segments.includes("(coach)");
+
+  // The signed-in user's own avatar. Only the persona's endpoint is hit.
+  const { data: coachMe } = useGetCoachProfileQuery(undefined, { skip: !isCoach });
+  const { data: clientMe } = useGetClientProfileQuery(undefined, { skip: isCoach });
+  const me = isCoach ? coachMe : clientMe;
+  const avatarUrl: string | undefined = me?.avatarUrl || me?.avatar || undefined;
 
   // Show the badge only when there's something new for the active persona:
   // a coach's pending join requests or pending sent invitations, or a client's
@@ -54,8 +62,6 @@ export function AppHeader() {
   const handleProfilePress = () => {
     router.navigate(isCoach ? "/(coach)/profile" : "/my-profile");
   };
-
-  const avatar = isCoach ? coachProfile.avatar : clientProfile.avatar;
 
   const handleNotificationPress = () => {
     router.navigate(isCoach ? "/(coach)/notifications" : "/(client)/notifications");
@@ -113,8 +119,8 @@ export function AppHeader() {
             className="h-9 w-9 rounded-full overflow-hidden border border-border active:opacity-70"
             accessibilityLabel="View profile"
           >
-            {avatar ? (
-              <Image source={avatar} className="h-full w-full" />
+            {avatarUrl ? (
+              <Image source={{ uri: avatarUrl }} className="h-full w-full" />
             ) : (
               <View className="h-full w-full bg-muted items-center justify-center">
                 <Icon name="person" size={20} color="--muted-foreground" />

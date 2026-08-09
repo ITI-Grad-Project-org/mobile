@@ -5,15 +5,8 @@ import { ClientProfileFields, CoachProfileData } from '../types';
 export interface UpdateCoachProfileArgs {
   /** Profile fields — sent as one JSON-encoded `data` part. */
   data: CoachProfileData;
-  /** Local URI. Remote URLs are ignored (nothing to re-upload). */
   avatarUri?: string;
   transformationUris?: string[];
-  /**
-   * Certificate scans, matched to `data.certifications` BY ARRAY INDEX.
-   * Only local URIs become parts, so alignment holds when the files are
-   * contiguous from index 0 — a certification with no new file shifts every
-   * later one. Keep already-hosted scans out of `certifications` reordering.
-   */
   certificateUris?: (string | undefined)[];
 }
 

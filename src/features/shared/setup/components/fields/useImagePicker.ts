@@ -37,9 +37,12 @@ export function useImagePicker() {
     }
   }, [picking]);
 
-  /** Pick one photo; resolves to its local URI, or null if cancelled/denied. */
-  const pickOne = useCallback(async (): Promise<string | null> => {
-    const uris = await run(pickSingleImage);
+  /**
+   * Pick one photo; resolves to its local URI, or null if cancelled/denied.
+   * `maxEdge` raises the downscale cap for scans that need to stay readable.
+   */
+  const pickOne = useCallback(async (maxEdge?: number): Promise<string | null> => {
+    const uris = await run(() => pickSingleImage(maxEdge));
     return uris[0] ?? null;
   }, [run]);
 

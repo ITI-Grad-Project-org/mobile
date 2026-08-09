@@ -1,5 +1,5 @@
 import { clearActiveTenant } from '@/store/activeTenantSlice';
-import { clearAuth, clearTokens, saveTokens } from '@/store/authSlice';
+import { clearAuth, clearTokens } from '@/store/authSlice';
 import { clearChatUi } from '@/store/chatUiSlice';
 import { clearMemberships } from '@/store/membershipsSlice';
 import { disconnectChatSocket } from '@/lib/chatSocket';
@@ -7,7 +7,8 @@ import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolk
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import * as SecureStore from 'expo-secure-store';
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://api.74.162.148.3.nip.io';
+import { BASE_URL } from './config';
+import { refreshAccessToken } from './tokenRefresh';
 
 const rawBaseQuery = fetchBaseQuery({
   baseUrl: BASE_URL,
@@ -24,40 +25,6 @@ const rawBaseQuery = fetchBaseQuery({
     return headers;
   },
 });
-
-let refreshInFlight: Promise<boolean> | null = null;
-
-async function refreshTokens(
-  api: Parameters<BaseQueryFn>[1]
-): Promise<boolean> {
-  const state = api.getState() as any;
-  const persona = state.auth.persona as 'coach' | 'customer' | null;
-  const refreshToken = await SecureStore.getItemAsync('refreshToken');
-  if (!persona || !refreshToken) return false;
-
-  const refreshPath = persona === 'coach' ? '/auth/refresh' : '/auth/customer/refresh';
-  try {
-    const refreshResult = await rawBaseQuery(
-      {
-        url: refreshPath,
-        method: 'POST',
-        headers: { authorization: `Bearer ${refreshToken}` },
-      },
-      api,
-      {}
-    );
-    const data = refreshResult.data as
-      | { accessToken?: string; refreshToken?: string }
-      | undefined;
-    if (data?.accessToken && data?.refreshToken) {
-      await saveTokens(data.accessToken, data.refreshToken, persona);
-      return true;
-    }
-    return false;
-  } catch {
-    return false;
-  }
-}
 
 function forceLogout(api: Parameters<BaseQueryFn>[1]) {
   clearTokens();
@@ -84,13 +51,9 @@ const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQue
       url.includes('/auth/customer/refresh');
 
     if (result.error?.status === 401 && !isAuthRequest) {
-      // Coalesce concurrent 401s onto one refresh attempt.
-      if (!refreshInFlight) {
-        refreshInFlight = refreshTokens(api).finally(() => {
-          refreshInFlight = null;
-        });
-      }
-      const refreshed = await refreshInFlight;
+      // Shared with the native file uploader so concurrent 401s from a request
+      // and an in-flight upload can't each spend the single-use refresh token.
+      const refreshed = await refreshAccessToken();
 
       if (refreshed) {
         // Retry the original request with the new token.

@@ -166,14 +166,25 @@ export interface ResetPasswordDto {
 // ---------------------------------------------------------------------------
 // Coach
 // ---------------------------------------------------------------------------
-export interface Certification {
+/** Certificate metadata as SENT (no id yet — the server assigns one). */
+export interface CertificationInput {
   name: string;
   issuer?: string;
   issueDate?: string; // YYYY-MM-DD (replaced `year`)
   expiryDate?: string; // YYYY-MM-DD
   credentialUrl?: string; // public verification link
   // No `fileUrl` — the scan rides as a `certificateFiles` part on PATCH
-  // /coaches/me, matched to this entry BY ARRAY INDEX.
+  // /coaches/me (matched BY ARRAY INDEX), or as the `file` part on
+  // POST /coaches/me/certifications.
+}
+
+export interface Certification extends CertificationInput {
+  /**
+   * Present on certifications READ BACK from the profile. Keep it — it is the
+   * only way to remove one individually via
+   * DELETE /coaches/me/certifications/{certificationId}.
+   */
+  id?: string;
 }
 
 /**

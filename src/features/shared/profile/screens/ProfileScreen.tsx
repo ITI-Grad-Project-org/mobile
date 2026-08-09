@@ -18,6 +18,7 @@ import { useActiveCoach } from "@/lib/role";
 import { cn } from "@/lib/utils";
 import { resetProfile } from "@/shared/hooks/useProfileSetup";
 import { useSwitchCoach } from "@/shared/hooks/useSwitchCoach";
+import { fullName } from "@/shared/utils/name";
 import { Card } from "@/shared/ui/Card";
 import { GlassButton } from "@/shared/ui/GlassButton";
 import { Icon, type IconName } from "@/shared/ui/Icon";
@@ -125,9 +126,9 @@ function CoachProfile() {
     );
   }
 
-  const coachName = profile ? `${profile.firstName} ${profile.lastName}` : "Coach";
+  const coachName = fullName(profile?.firstName, profile?.lastName) || "Coach";
   const coachEmail = profile?.email || "";
-  const coachAvatar = profile?.avatarUrl || profile?.avatar || "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=200&q=80";
+  const coachAvatar = profile?.avatarUrl || profile?.avatar || null;
   const certs = profile?.certifications || [];
 
   return (
@@ -152,7 +153,13 @@ function CoachProfile() {
         {/* Identity */}
         <Card tone="ink" className="flex-row items-center gap-4" glass>
           <View className="h-16 w-16 rounded-full overflow-hidden border border-white/20">
-            <Image source={coachAvatar} className="h-full w-full" />
+            {coachAvatar ? (
+              <Image source={coachAvatar} className="h-full w-full" />
+            ) : (
+              <View className="h-full w-full bg-white/10 items-center justify-center">
+                <Icon name="person" size={28} color="--ink-foreground" />
+              </View>
+            )}
           </View>
           <View className="flex-1 min-w-0">
             <Text className="text-ink-foreground text-lg font-bold">
@@ -494,7 +501,7 @@ function ClientProfile() {
     );
   }
 
-  const clientName = profile ? `${profile.firstName} ${profile.lastName}` : "Client";
+  const clientName = fullName(profile?.firstName, profile?.lastName) || "Client";
   const clientEmail = profile?.email || "";
   const clientAvatar = profile?.avatarUrl || profile?.avatar || null;
 

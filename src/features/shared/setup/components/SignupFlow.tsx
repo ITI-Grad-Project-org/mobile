@@ -20,14 +20,6 @@ import { FieldRenderer } from "./FieldRenderer";
 
 const AnimatedView = Reanimated.createAnimatedComponent(View);
 
-/** Fills the progress track to `pct` (0..1) as the step changes. */
-/**
- * Unwrap an RTK Query error. A transport failure surfaces as
- * `{ status: 'FETCH_ERROR', error }` with nothing under `data`, so the old
- * `e?.data?.message || e?.message` chain fell through to the generic string and
- * hid the real cause — worth keeping distinguishable, since a mangled multipart
- * body fails exactly this way.
- */
 function saveErrorMessage(e: any): string {
   const body = e?.data;
   if (typeof body === "string" && body.trim()) return body;
@@ -61,6 +53,7 @@ export type SignupFlowProps = {
   steps: Step[];
   onClose: () => void;
   onSubmit?: (data: ProfileData) => void | Promise<void>;
+  savingLabel?: string;
   onDone: (data: ProfileData) => void;
   showWelcome?: boolean;
   initialData?: ProfileData;
@@ -75,6 +68,7 @@ export function SignupFlow({
   steps,
   onClose,
   onSubmit,
+  savingLabel,
   onDone,
   showWelcome = true,
   initialData,
@@ -246,7 +240,7 @@ export function SignupFlow({
             >
               {saving ? <ActivityIndicator color="white" /> : null}
               <Text className="text-[14px] font-semibold text-primary-foreground">
-                {isLast ? "Finish" : "Continue"}
+                {saving && savingLabel ? savingLabel : isLast ? "Finish" : "Continue"}
               </Text>
             </Pressable>
           </View>

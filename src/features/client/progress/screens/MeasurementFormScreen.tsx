@@ -119,6 +119,9 @@ export function MeasurementFormScreen() {
       title={isEdit ? "Edit measurement" : "New measurement"}
       steps={MEASUREMENT_STEPS}
       uploadPersona="client"
+      // This route lives inside the `(client)` group, under the AppHeader — the
+      // top inset is already spoken for, so only the bottom edge is padded.
+      edges={["bottom"]}
       showWelcome={false}
       initialData={initialData}
       onClose={() => router.back()}

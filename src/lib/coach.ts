@@ -1,9 +1,3 @@
-/**
- * The coach directory endpoints return the coach either flat or nested under
- * `coach`, and field names drift between the directory list and the detail
- * payload. Everything here is a read-side normalizer — it never invents data,
- * so callers decide their own display fallbacks.
- */
 export interface CoachFields {
   firstName?: string;
   lastName?: string;
@@ -17,8 +11,24 @@ export interface CoachFields {
   careerExperience?: string;
   bio?: string;
   specialties: string[];
+  /** Before/after photo URLs. Empty when the payload carries none. */
+  transformationPhotos: string[];
   priceFrom?: number;
   priceTo?: number;
+}
+
+/**
+ * Transformation photos are plain URL strings on `GET /coaches/me`, but the
+ * public payloads have been seen wrapping them in an object. Accept both, and
+ * drop anything that isn't a usable URL.
+ */
+export function resolveTransformationPhotos(coach: any): string[] {
+  const c = coach?.coach || coach;
+  const raw = c?.transformationPhotos ?? coach?.transformationPhotos ?? [];
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((p: any) => (typeof p === "string" ? p : p?.url || p?.fileUrl || p?.photoUrl))
+    .filter((url: unknown): url is string => typeof url === "string" && url.length > 0);
 }
 
 export function resolveCoachFields(coach: any): CoachFields {
@@ -46,6 +56,7 @@ export function resolveCoachFields(coach: any): CoachFields {
     careerExperience: c?.careerExperience || coach?.careerExperience,
     bio: c?.bio || coach?.bio,
     specialties,
+    transformationPhotos: resolveTransformationPhotos(coach),
     priceFrom: c?.priceFrom ?? coach?.priceFrom,
     priceTo: c?.priceTo ?? coach?.priceTo,
   };

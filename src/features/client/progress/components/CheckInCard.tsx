@@ -47,7 +47,7 @@ export function CheckInCard() {
   if (isLoading || !tenantId) return null;
 
   const stats = deriveMeasurementStats(data);
-  const open = () => router.push("/measurement" as any);
+  const open = () => router.push("/(client)/measurement");
 
   let label: string;
   let headline: string;

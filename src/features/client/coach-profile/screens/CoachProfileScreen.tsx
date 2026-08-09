@@ -18,8 +18,9 @@ import {
   useLazyGetClientCurrentReviewQuery,
   useUpdateClientReviewMutation,
 } from "@/api/endpoints/reviews.endpoints";
+import { useGetPublicCoachProfileQuery } from "@/api/endpoints/profile.endpoints";
 import type { Review } from "@/api/types";
-import { resolveCoachFields } from "@/lib/coach";
+import { resolveCoachFields, resolveTransformationPhotos } from "@/lib/coach";
 import { cn } from "@/lib/utils";
 import { useSwitchCoach } from "@/shared/hooks/useSwitchCoach";
 import { Card } from "@/shared/ui/Card";
@@ -37,6 +38,7 @@ import { ConfirmSheet } from "../components/ConfirmSheet";
 import { MyReviewCard, ReviewCard } from "../components/ReviewCard";
 import { ReviewFormSheet } from "../components/ReviewFormSheet";
 import { StarRating } from "../components/StarRating";
+import { TransformationGallery } from "../components/TransformationGallery";
 import { resolveSummary } from "../lib/reviews";
 import { GlassButton } from "@/shared/ui/GlassButton";
 
@@ -105,6 +107,17 @@ export function CoachProfileScreen({ tenantId }: { tenantId: string }) {
   const [errorScope, setErrorScope] = useState<ActionScope>("intake");
 
   const f = resolveCoachFields(coach);
+
+  // The directory payload is a card summary and doesn't always carry the
+  // photos; `/coaches/{tenantId}/profile` is the full public profile. Only
+  // fetched when the directory response came back without them.
+  const { data: publicProfile } = useGetPublicCoachProfileQuery(tenantId, {
+    skip: !tenantId || isLoading || f.transformationPhotos.length > 0,
+  });
+  const transformationPhotos = f.transformationPhotos.length
+    ? f.transformationPhotos
+    : resolveTransformationPhotos(publicProfile);
+
   const name = f.name || membership?.tenantName || "Coach";
   const businessName = f.businessName && f.businessName !== name ? f.businessName : null;
 
@@ -335,6 +348,9 @@ export function CoachProfileScreen({ tenantId }: { tenantId: string }) {
               </Tone>
             ) : null}
           </Card>
+
+          {/* Transformations */}
+          <TransformationGallery photos={transformationPhotos} />
 
           {/* Reviews */}
           <Card glass className="gap-3">

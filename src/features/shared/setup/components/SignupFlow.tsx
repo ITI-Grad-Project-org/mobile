@@ -61,6 +61,13 @@ export type SignupFlowProps = {
   welcomeBody?: string;
   /** Which upload bucket the flow's image fields write to. */
   uploadPersona?: UploadPersona;
+  /**
+   * Safe-area edges the flow pads for. The default suits a root-level route
+   * that owns the whole window; pass `["bottom"]` when the flow renders under
+   * a header that already claimed the top inset, otherwise it's applied twice
+   * and leaves an empty strip above the flow's own header.
+   */
+  edges?: React.ComponentProps<typeof SafeAreaView>["edges"];
 };
 
 export function SignupFlow({
@@ -75,6 +82,7 @@ export function SignupFlow({
   welcomeTitle = "You're in.",
   welcomeBody = "Profile saved. Let's get you matched with the right coach.",
   uploadPersona = "client",
+  edges = ["top", "bottom"],
 }: SignupFlowProps) {
   const [idx, setIdx] = useState(0);
   const [done, setDone] = useState(false);
@@ -107,7 +115,10 @@ export function SignupFlow({
 
   if (done && showWelcome) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-background px-6">
+      <SafeAreaView
+        className="flex-1 items-center justify-center bg-background px-6"
+        edges={edges}
+      >
         <View className="items-center">
           <View className="h-20 w-20 items-center justify-center rounded-full bg-success shadow-soft">
             <Icon name="check" size={40} color="#ffffff" />
@@ -147,7 +158,7 @@ export function SignupFlow({
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
+    <SafeAreaView className="flex-1 bg-background" edges={edges}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}

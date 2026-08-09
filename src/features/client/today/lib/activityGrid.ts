@@ -56,20 +56,27 @@ function addDays(date: Date, days: number): Date {
 }
 
 export function todayInZone(timeZone?: string): string {
-  if (timeZone) {
-    try {
-      // en-CA formats as YYYY-MM-DD.
-      return new Intl.DateTimeFormat("en-CA", {
-        timeZone,
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      }).format(new Date());
-    } catch {
-      // An unrecognised zone must not blank the grid — fall through to local.
-    }
+  const local = toIso(new Date());
+  if (!timeZone) return local;
+  let zoned: string;
+  try {
+    // en-CA formats as YYYY-MM-DD.
+    zoned = new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+  } catch {
+    // An unrecognised zone must not blank the grid — fall back to local.
+    return local;
   }
-  return toIso(new Date());
+  // Never let the graph's day lag the device's. A server zone behind the device
+  // (it reports UTC while the phone is UTC+3) would otherwise mark yesterday as
+  // "today" and pad out the square the user is actually filling in — and the
+  // `todayLevelFloor` from the Today checklist is keyed to the LOCAL day, so it
+  // would land on the wrong cell. A zone AHEAD of the device still wins.
+  return zoned > local ? zoned : local;
 }
 
 /** "Mon 4 Mar" — the tapped-day caption leads with this. */

@@ -90,6 +90,7 @@ export const baseApi = createApi({
     'NutritionPlans',
     'NutritionPlan',
     'NutritionCalendar',
+    'NutritionDay',
     'NutritionLog',
     'Activity',
     'Conversations',

@@ -2,6 +2,7 @@ import {
   useGetCurrentNutritionPlanQuery,
   useGetMyNutritionPlanQuery,
   useGetMyNutritionPlansQuery,
+  useGetNutritionCalendarQuery,
 } from "@/api/endpoints/nutrition.endpoints";
 import { cn } from "@/lib/utils";
 import { Card } from "@/shared/ui/Card";
@@ -14,8 +15,11 @@ import { ActivityIndicator } from "react-native";
 import { NutritionDayCard } from "../components/NutritionDayCard";
 import { TargetsCard } from "../components/TargetsCard";
 import {
+  calendarDayId,
   isConflict,
   normalizeDay,
+  pickActivePlan,
+  planDayList,
   resolveTargets,
   unwrap,
   unwrapList,
@@ -43,14 +47,22 @@ export function NutritionOverview() {
     refetch: refetchPlans,
   } = useGetMyNutritionPlansQuery();
 
+  // Plan days are relative to the plan's start and often carry no date, so the
+  // calendar names today's day when it can. It is a hint, not the only source —
+  // `normalizeDay` also derives dates from the plan's start.
+  const { data: calendarData } = useGetNutritionCalendarQuery({ from: iso, to: iso });
+  const todayDayId = useMemo(
+    () => calendarDayId(unwrapList(calendarData)[0]),
+    [calendarData]
+  );
+
   const planConflict = isCurrentError && isConflict(currentError);
 
   const summaryPlan = useMemo(() => {
     const current = unwrap(currentData);
     if (current?.id) return current;
-    const plans = unwrapList(plansData);
-    return plans.length > 0 ? plans[0] : null;
-  }, [currentData, plansData]);
+    return pickActivePlan(unwrapList(plansData), iso);
+  }, [currentData, plansData, iso]);
 
   // The summary payload often omits weeks/days, so refetch the plan in full.
   // A failure here is not fatal — the summary payload is still a usable fallback.
@@ -72,20 +84,13 @@ export function NutritionOverview() {
 
   const allDays: NutritionDay[] = useMemo(() => {
     if (!plan) return [];
-    const raw: any[] = weeks.length
-      ? weeks.flatMap((week: any) =>
-          (week?.days || []).map((day: any) => ({
-            ...day,
-            weekNumber: day?.weekNumber ?? week?.weekNumber ?? week?.position,
-          }))
-        )
-      : plan?.days || plan?.nutritionDays || plan?.planDays || [];
-
-    if (!Array.isArray(raw)) return [];
-    return raw
-      .map((day) => normalizeDay(day, plan, iso))
-      .filter((day): day is NutritionDay => day !== null);
-  }, [plan, weeks, iso]);
+    // `normalizeDay` derives each day's date from the plan's start when the day
+    // carries none, so today stays identifiable even when the calendar row that
+    // named it is gone — which is what keeps today's targets on screen all day.
+    return planDayList(plan)
+      .map((day: any) => normalizeDay(day, plan, iso, todayDayId))
+      .filter((day: NutritionDay | null): day is NutritionDay => day !== null);
+  }, [plan, iso, todayDayId]);
 
   const totalWeeks = useMemo(() => {
     if (weeks.length > 0) return weeks.length;

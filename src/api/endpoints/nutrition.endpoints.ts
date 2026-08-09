@@ -33,6 +33,9 @@ export const nutritionEndpoints = baseApi.injectEndpoints({
     }),
     getNutritionDay: builder.query<any, string>({
       query: (dayId) => `${N}/days/${dayId}`,
+      // Tagged so finishing or skipping refreshes the day's log state — the day
+      // payload is what a finished day's history is read back from.
+      providesTags: (result, error, dayId) => [{ type: 'NutritionDay', id: dayId }],
     }),
     // Read-only browse of the coach's Food library — active Foods only, so no
     // `includeInactive`. Separate cache namespace from the coach's own list.
@@ -54,7 +57,10 @@ export const nutritionEndpoints = baseApi.injectEndpoints({
     }),
     skipNutritionDay: builder.mutation<any, string>({
       query: (dayId) => ({ url: `${N}/days/${dayId}/skip`, method: 'POST' }),
-      invalidatesTags: ['NutritionCalendar'],
+      invalidatesTags: (result, error, dayId) => [
+        { type: 'NutritionDay', id: dayId },
+        'NutritionCalendar',
+      ],
     }),
     getNutritionLog: builder.query<any, string>({
       query: (logId) => `${N}/logs/${logId}`,
@@ -122,6 +128,9 @@ export const nutritionEndpoints = baseApi.injectEndpoints({
       invalidatesTags: (result, error, logId) => [
         { type: 'NutritionLog', id: logId },
         'NutritionCalendar',
+        // The mutation only knows the log id, so the day is invalidated by type.
+        // Only the day currently on screen is mounted, so this is one refetch.
+        'NutritionDay',
         // A finished nutrition day is a new mark on the activity heatmap.
         'Activity',
       ],

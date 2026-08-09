@@ -15,9 +15,7 @@ export function dayProgressKey(dayIso: string, tenantId?: string | null): string
   return `today_done_${dayIso}_${tenantId || "default"}`;
 }
 
-export function todayIso(): string {
-  return new Date().toISOString().split("T")[0];
-}
+export { todayIso } from "./date";
 
 export async function readDayProgress(key: string): Promise<DayProgress> {
   try {

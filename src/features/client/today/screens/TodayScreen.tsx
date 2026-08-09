@@ -13,6 +13,7 @@ import { yogaExercises } from "@/lib/data";
 import { plannedExerciseInfo } from "@/lib/plannedExercise";
 import { resolveCoachFields } from "@/lib/coach";
 import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
+import { todayIso as localTodayIso } from "@/shared/utils/date";
 import {secondNameOf } from "@/shared/utils/name";
 import {
   dayProgressKey,
@@ -64,7 +65,7 @@ export function TodayScreen() {
   });
   const fullProgram = (fullProgramData as any)?.data || fullProgramData || publishedProgram;
 
-  const todayIso = useMemo(() => new Date().toISOString().split("T")[0], []);
+  const todayIso = useMemo(() => localTodayIso(), []);
   const { data: calendarData } = useGetCalendarQuery(
     { from: todayIso, to: todayIso },
     { skip: !todayIso }

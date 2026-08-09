@@ -2,6 +2,7 @@ import {
   useAddActualFoodMutation,
   useCompleteNutritionLogMutation,
   useDeleteActualFoodMutation,
+  useGetNutritionCalendarQuery,
   useGetNutritionDayQuery,
   useGetNutritionLogQuery,
   useSetLoggedMealOutcomeMutation,
@@ -23,24 +24,33 @@ import { Pressable, ScrollView, Text, View } from "@/tw";
 import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AddFoodSheet } from "../components/AddFoodSheet";
 import { CompleteDayModal } from "../components/CompleteDayModal";
 import { LoggedFoodRow } from "../components/LoggedFoodRow";
+import { LogPrescribedModal } from "../components/LogPrescribedModal";
 import { MealCard } from "../components/MealCard";
+import { MealDetailSheet } from "../components/MealDetailSheet";
 import { TargetsCard } from "../components/TargetsCard";
 import { WaterCard } from "../components/WaterCard";
 import {
+  calendarDayId,
   consumedMacros,
   errorMessage,
   formatDayTitle,
   isConflict,
+  isDayClosed,
   MEAL_SLOTS,
+  mergeMeals,
   normalizeDay,
   normalizeLog,
   pendingMeals,
+  readLogId,
   SLOT_LABEL,
   unwrap,
+  unwrapList,
   type LoggedFood,
+  type MealItem,
   type PlannedMeal,
 } from "../data";
 
@@ -51,6 +61,7 @@ interface NutritionLogScreenProps {
 }
 
 export function NutritionLogScreen({ dayId }: NutritionLogScreenProps) {
+  const insets = useSafeAreaInsets();
   const [logId, setLogId] = useState<string | null>(null);
   const [logError, setLogError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -64,6 +75,14 @@ export function NutritionLogScreen({ dayId }: NutritionLogScreenProps) {
   const [savingMealId, setSavingMealId] = useState<string | null>(null);
   const [removingFoodId, setRemovingFoodId] = useState<string | null>(null);
 
+  // Held by id, not by value, so the open sheet follows the refetched meal.
+  const [detailMealId, setDetailMealId] = useState<string | null>(null);
+
+  // Offered after "Ate it" — an outcome alone never moves the day's calories.
+  const [prescribedMealId, setPrescribedMealId] = useState<string | null>(null);
+  const [prescribedError, setPrescribedError] = useState<string | null>(null);
+  const [isLoggingPrescribed, setIsLoggingPrescribed] = useState(false);
+
   const [sheet, setSheet] = useState<{ slot: MealSlot } | null>(null);
   const [editingFood, setEditingFood] = useState<LoggedFood | null>(null);
   const [sheetError, setSheetError] = useState<string | null>(null);
@@ -74,9 +93,37 @@ export function NutritionLogScreen({ dayId }: NutritionLogScreenProps) {
 
   const [startOrResume, { isLoading: isStarting }] = useStartOrResumeNutritionLogMutation();
 
+  const iso = todayIso();
+  const day = useMemo(
+    () => normalizeDay(dayQueryData, unwrap(dayQueryData)?.plan ?? null, iso),
+    [dayQueryData, iso]
+  );
+
+  // A finished day is READ-ONLY, not empty. `startOrResume` refuses it, so its
+  // log has to be found in payloads that are loaded anyway — the day itself
+  // first, then the calendar row for the day's date.
+  const dayLogId = useMemo(() => readLogId(dayQueryData), [dayQueryData]);
+  const isClosed = isDayClosed(day?.status);
+
+  // Skipped unless the day is closed AND nothing cheaper carried the log id.
+  // For today this hits the same cache entry the Today tab already holds.
+  const needsCalendarLookup = Boolean(day?.date) && isClosed && !logId && !dayLogId;
+  const { data: calendarData, isLoading: isCalendarLoading } = useGetNutritionCalendarQuery(
+    { from: day?.date ?? "", to: day?.date ?? "" },
+    { skip: !needsCalendarLookup }
+  );
+  const calendarLogIdForDay = useMemo(() => {
+    if (!needsCalendarLookup) return null;
+    const row = unwrapList(calendarData).find((r) => calendarDayId(r) === dayId) ?? null;
+    return readLogId(row);
+  }, [needsCalendarLookup, calendarData, dayId]);
+
+  /** The log this screen reads and writes, from whichever source found it. */
+  const activeLogId = logId ?? dayLogId ?? calendarLogIdForDay;
+
   const { data: logQueryData, isLoading: isLogLoading } = useGetNutritionLogQuery(
-    logId ?? "",
-    { skip: !logId }
+    activeLogId ?? "",
+    { skip: !activeLogId }
   );
 
   const [setMealOutcome] = useSetLoggedMealOutcomeMutation();
@@ -87,10 +134,17 @@ export function NutritionLogScreen({ dayId }: NutritionLogScreenProps) {
   const [skipDay, { isLoading: isSkipping }] = useSkipNutritionDayMutation();
   const [completeLog, { isLoading: isCompleting }] = useCompleteNutritionLogMutation();
 
-  // Start or resume the log on mount. The endpoint is idempotent, so re-entering
-  // the screen picks the existing log back up rather than creating a second one.
+  // Start or resume the log. The endpoint is idempotent, so re-entering the
+  // screen picks the existing log back up rather than creating a second one —
+  // but it is a WRITE, so it is never sent for a day that's already finished or
+  // skipped (it would 409 and leave the screen with no log to show). Waits for
+  // the day so that check can be made, and stays out of the way once some other
+  // source has already produced a log id.
   useEffect(() => {
-    if (!dayId) return;
+    if (!dayId || isDayLoading) return;
+    if (logId || dayLogId || calendarLogIdForDay) return;
+    // `isClosed` already locks the screen — no error state needed for it.
+    if (isClosed) return;
     startOrResume(dayId)
       .unwrap()
       .then((res: any) => {
@@ -108,22 +162,22 @@ export function NutritionLogScreen({ dayId }: NutritionLogScreenProps) {
           )
         );
       });
-  }, [dayId, startOrResume]);
+  }, [dayId, isDayLoading, logId, dayLogId, calendarLogIdForDay, isClosed, startOrResume]);
 
-  const iso = todayIso();
-  const day = useMemo(
-    () => normalizeDay(dayQueryData, unwrap(dayQueryData)?.plan ?? null, iso),
-    [dayQueryData, iso]
-  );
   const log = useMemo(() => normalizeLog(logQueryData), [logQueryData]);
 
-  const isLocked = Boolean(logError) || Boolean(log?.isFinalized);
+  // Locked, but still fully rendered: a finished day keeps its meals, foods,
+  // water and totals on screen — only the write affordances go away.
+  const isLocked = Boolean(log?.isFinalized) || isClosed || Boolean(logError);
 
-  /** The log's meals carry outcomes; the day's are the fallback before one exists. */
-  const meals: PlannedMeal[] = useMemo(() => {
-    if (log && log.meals.length > 0) return log.meals;
-    return day?.meals ?? [];
-  }, [log, day]);
+  /**
+   * The log's meals carry the outcomes, the day's carry the full prescription
+   * (photo, suggested time, coach note) — so show both, not one or the other.
+   */
+  const meals: PlannedMeal[] = useMemo(
+    () => mergeMeals(day?.meals ?? [], log?.meals ?? []),
+    [day, log]
+  );
 
   const foods: LoggedFood[] = log?.foods ?? [];
 
@@ -133,13 +187,27 @@ export function NutritionLogScreen({ dayId }: NutritionLogScreenProps) {
     [outcomeOverrides]
   );
 
+  const detailMeal = useMemo(
+    () => meals.find((meal) => meal.id === detailMealId) ?? null,
+    [meals, detailMealId]
+  );
+
+  const prescribedMeal = useMemo(
+    () => meals.find((meal) => meal.id === prescribedMealId) ?? null,
+    [meals, prescribedMealId]
+  );
+
   const consumed = useMemo(() => consumedMacros(log, logQueryData), [log, logQueryData]);
   const targets = day?.targets ?? {};
 
-  // ----- Water. Local value is authoritative while the debounce is in flight,
-  // so a burst of taps reads smoothly and lands as one PATCH.
+  // ----- Water. The local value stays authoritative from the first tap on.
+  // Clearing it when the PATCH resolves would fall back to the not-yet-refetched
+  // server number for the length of the refetch, which reads as the counter
+  // bouncing back to where it was before landing on the new value.
   const [waterDraft, setWaterDraft] = useState<number | null>(null);
   const waterTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** The value the last write is aiming at, so a stale response can't win. */
+  const waterTarget = useRef<number | null>(null);
 
   useEffect(() => {
     return () => {
@@ -147,21 +215,34 @@ export function NutritionLogScreen({ dayId }: NutritionLogScreenProps) {
     };
   }, []);
 
+  // Once the client has set a value this session it stays on screen: it's the
+  // last value the server acknowledged, and this screen is water's only writer.
   const waterMl = waterDraft ?? log?.waterMlConsumed ?? 0;
 
   const handleWaterChange = (ml: number) => {
     setWaterDraft(ml);
+    waterTarget.current = ml;
     if (waterTimer.current) clearTimeout(waterTimer.current);
     waterTimer.current = setTimeout(() => {
-      if (!logId) return;
-      updateLog({ logId, body: { waterMlConsumed: ml } })
+      if (!activeLogId) return;
+      updateLog({ logId: activeLogId, body: { waterMlConsumed: ml } })
         .unwrap()
-        .then(() => {
+        .then((res: any) => {
           setSaveError(null);
-          setWaterDraft(null);
+          // A later tap already superseded this write — leave its value alone.
+          if (waterTarget.current !== ml) return;
+          // Snap to what the server actually stored, in case it clamped it.
+          const saved = unwrap(res)?.waterMlConsumed;
+          if (typeof saved === "number" && saved !== ml) {
+            waterTarget.current = saved;
+            setWaterDraft(saved);
+          }
         })
         .catch((err) => {
-          setWaterDraft(null);
+          if (waterTarget.current === ml) {
+            waterTarget.current = null;
+            setWaterDraft(null);
+          }
           setSaveError(errorMessage(err, "Couldn't save your water intake."));
         });
     }, WATER_DEBOUNCE_MS);
@@ -169,7 +250,7 @@ export function NutritionLogScreen({ dayId }: NutritionLogScreenProps) {
 
   // ----- Meal outcomes
   const handleSetOutcome = async (meal: PlannedMeal, outcome: MealOutcome) => {
-    if (!logId || !meal.loggedMealId) {
+    if (!activeLogId || !meal.loggedMealId) {
       setSaveError("This meal isn't part of an open log yet.");
       return;
     }
@@ -180,10 +261,19 @@ export function NutritionLogScreen({ dayId }: NutritionLogScreenProps) {
 
     try {
       await setMealOutcome({
-        logId,
+        logId: activeLogId,
         loggedMealId: meal.loggedMealId,
         body: { outcome },
       }).unwrap();
+
+      // The outcome is adherence only, so offer to put the prescription in the
+      // diary — unless there's nothing to add, or this meal already has entries.
+      // "Skipped" is the one outcome with nothing to log.
+      const alreadyLogged = foods.some((food) => food.loggedMealId === meal.loggedMealId);
+      if (outcome !== "skipped" && meal.items.length > 0 && !alreadyLogged) {
+        setPrescribedError(null);
+        setPrescribedMealId(meal.id);
+      }
     } catch (err) {
       setOutcomeOverrides((prev) => {
         const next = { ...prev };
@@ -197,12 +287,63 @@ export function NutritionLogScreen({ dayId }: NutritionLogScreenProps) {
     }
   };
 
+  /**
+   * Copy the chosen lines of a prescribed meal into the Food diary, one entry
+   * each. Library lines log by id so the server derives their macros; a line
+   * with no library Food behind it falls back to a manual entry carrying the
+   * prescribed totals.
+   */
+  const handleLogPrescribed = async (meal: PlannedMeal, items: MealItem[]) => {
+    if (!activeLogId || items.length === 0) return;
+    setPrescribedError(null);
+    setIsLoggingPrescribed(true);
+
+    try {
+      for (const item of items) {
+        const body: CreateActualFoodLogDto =
+          item.foodId && item.quantity
+            ? {
+                foodId: item.foodId,
+                loggedMealId: meal.loggedMealId,
+                mealSlot: meal.slot,
+                amount: item.quantity,
+              }
+            : {
+                loggedMealId: meal.loggedMealId,
+                mealSlot: meal.slot,
+                foodName: item.name,
+                amount: item.quantity ?? undefined,
+                calories: item.macros.calories,
+                proteinG: item.macros.proteinG,
+                carbsG: item.macros.carbsG,
+                fatG: item.macros.fatG,
+                fiberG: item.macros.fiberG,
+              };
+        // Sequential: a partial failure should leave the earlier lines logged
+        // rather than racing several writes against the same log.
+        await addFood({ logId: activeLogId, body }).unwrap();
+      }
+      setPrescribedMealId(null);
+    } catch (err) {
+      setPrescribedError(
+        errorMessage(
+          err,
+          isConflict(err)
+            ? "This day is closed for editing."
+            : "Couldn't add all of it. Check the diary before retrying."
+        )
+      );
+    } finally {
+      setIsLoggingPrescribed(false);
+    }
+  };
+
   // ----- Foods
   const handleAddFood = async (body: CreateActualFoodLogDto) => {
-    if (!logId) return;
+    if (!activeLogId) return;
     setSheetError(null);
     try {
-      await addFood({ logId, body }).unwrap();
+      await addFood({ logId: activeLogId, body }).unwrap();
       setSheet(null);
       setEditingFood(null);
     } catch (err) {
@@ -216,10 +357,10 @@ export function NutritionLogScreen({ dayId }: NutritionLogScreenProps) {
   };
 
   const handleUpdateFood = async (foodLogId: string, body: UpdateActualFoodLogDto) => {
-    if (!logId) return;
+    if (!activeLogId) return;
     setSheetError(null);
     try {
-      await updateFood({ logId, foodLogId, body }).unwrap();
+      await updateFood({ logId: activeLogId, foodLogId, body }).unwrap();
       setSheet(null);
       setEditingFood(null);
     } catch (err) {
@@ -228,11 +369,11 @@ export function NutritionLogScreen({ dayId }: NutritionLogScreenProps) {
   };
 
   const handleRemoveFood = async (foodLogId: string) => {
-    if (!logId) return;
+    if (!activeLogId) return;
     setRemovingFoodId(foodLogId);
     setSaveError(null);
     try {
-      await deleteFood({ logId, foodLogId }).unwrap();
+      await deleteFood({ logId: activeLogId, foodLogId }).unwrap();
     } catch (err) {
       setSaveError(errorMessage(err, "Couldn't remove that food."));
     } finally {
@@ -254,7 +395,7 @@ export function NutritionLogScreen({ dayId }: NutritionLogScreenProps) {
    * so re-resolve it rather than silently no-op when finishing.
    */
   const ensureLogId = async (): Promise<string | null> => {
-    if (logId) return logId;
+    if (activeLogId) return activeLogId;
     try {
       const res: any = await startOrResume(dayId).unwrap();
       const id = res?.id ?? res?.data?.id ?? null;
@@ -302,7 +443,7 @@ export function NutritionLogScreen({ dayId }: NutritionLogScreenProps) {
   );
 
   // ----- Render
-  if (isStarting || isDayLoading || (logId && isLogLoading)) {
+  if (isStarting || isDayLoading || isCalendarLoading || (activeLogId && isLogLoading)) {
     return (
       <View className="flex-1 items-center justify-center bg-background p-6">
         <ActivityIndicator size="large" color="--primary" />
@@ -405,6 +546,7 @@ export function NutritionLogScreen({ dayId }: NutritionLogScreenProps) {
                   disabled={isLocked}
                   isSaving={savingMealId === meal.loggedMealId}
                   onSetOutcome={(outcome) => handleSetOutcome(meal, outcome)}
+                  onOpenDetails={() => setDetailMealId(meal.id)}
                 />
               ))}
 
@@ -433,8 +575,16 @@ export function NutritionLogScreen({ dayId }: NutritionLogScreenProps) {
         })}
       </ScrollView>
 
-      {/* Bottom dock */}
-      <View className="gap-y-2.5 border-t border-border bg-card px-4 pb-4 pt-3">
+      {/* Bottom dock — padded past the home indicator and the rounded screen
+          corners, which otherwise clip "Finish day" and the status line. */}
+      <View
+        className="gap-y-2.5 border-t border-border bg-card pt-3"
+        style={{
+          paddingBottom: Math.max(insets.bottom, 12),
+          paddingLeft: Math.max(insets.left, 16),
+          paddingRight: Math.max(insets.right, 16),
+        }}
+      >
         {saveError ? (
           <View className="flex-row items-center gap-2 rounded-sm bg-destructive/10 px-3 py-2">
             <Icon name="alert-triangle" size={13} color="--destructive" />
@@ -495,6 +645,31 @@ export function NutritionLogScreen({ dayId }: NutritionLogScreenProps) {
           </>
         )}
       </View>
+
+      {prescribedMeal ? (
+        <LogPrescribedModal
+          meal={prescribedMeal}
+          outcome={outcomeFor(prescribedMeal) ?? "completed"}
+          isLoading={isLoggingPrescribed}
+          error={prescribedError}
+          onClose={() => {
+            setPrescribedMealId(null);
+            setPrescribedError(null);
+          }}
+          onConfirm={(items) => handleLogPrescribed(prescribedMeal, items)}
+        />
+      ) : null}
+
+      {detailMeal ? (
+        <MealDetailSheet
+          meal={detailMeal}
+          outcome={outcomeFor(detailMeal)}
+          disabled={isLocked}
+          isSaving={savingMealId === detailMeal.loggedMealId}
+          onSetOutcome={(outcome) => handleSetOutcome(detailMeal, outcome)}
+          onClose={() => setDetailMealId(null)}
+        />
+      ) : null}
 
       {/* Both are mounted only while open, so each starts from a clean form. */}
       {sheet ? (

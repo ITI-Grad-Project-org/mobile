@@ -1,5 +1,6 @@
 import {
   useGetCurrentNutritionPlanQuery,
+  useGetMyNutritionPlanQuery,
   useGetNutritionCalendarQuery,
   useGetNutritionDayQuery,
   useGetNutritionLogQuery,
@@ -8,11 +9,17 @@ import type { NutritionTargets } from "@/api/types";
 import { todayIso } from "@/shared/utils/dayProgress";
 import { useMemo } from "react";
 import {
+  calendarDayId,
+  calendarLogId,
   consumedMacros,
   EMPTY_MACROS,
   isConflict,
+  isoDate,
   normalizeDay,
   normalizeLog,
+  planDayDate,
+  planDayList,
+  readLogId,
   unwrap,
   unwrapList,
   type Macros,
@@ -39,27 +46,6 @@ export function useTodayNutrition(): TodayNutrition {
 
   const row = useMemo(() => unwrapList(calendarData)[0] ?? null, [calendarData]);
 
-  const dayId: string | null = useMemo(() => {
-    if (!row) return null;
-    return (
-      row.id ?? row.dayId ?? row.nutritionDayId ?? row.nutritionDay?.id ?? row.day?.id ?? null
-    );
-  }, [row]);
-
-  // The calendar row carries the log only once the client has started one.
-  const logId: string | null = useMemo(() => {
-    if (!row) return null;
-    return row.log?.id ?? row.logId ?? row.nutritionDayLog?.id ?? row.dayLog?.id ?? null;
-  }, [row]);
-
-  const { data: dayData, isLoading: isDayLoading } = useGetNutritionDayQuery(dayId ?? "", {
-    skip: !dayId,
-  });
-
-  const { data: logData, isLoading: isLogLoading } = useGetNutritionLogQuery(logId ?? "", {
-    skip: !logId,
-  });
-
   // A 409 here means two published plans overlap today. Today's cards degrade to
   // "no plan" rather than surfacing the conflict — the Plan tab explains it.
   const plan = useMemo(
@@ -67,9 +53,55 @@ export function useTodayNutrition(): TodayNutrition {
     [planData, planError]
   );
 
+  // The calendar is the cheap way to find today's day, but it can stop listing
+  // it (a finished day drops out of some ranges), which would blank today's
+  // targets and totals for the rest of the day. The plan always covers today, so
+  // fall back to it — fetched in full only when the calendar came up empty, and
+  // usually already cached by the Nutrition tab.
+  const { data: fullPlanData, isLoading: isFullPlanLoading } = useGetMyNutritionPlanQuery(
+    plan?.id ?? "",
+    { skip: Boolean(row) || !plan?.id }
+  );
+
+  const fullPlan = useMemo(() => unwrap(fullPlanData) ?? plan, [fullPlanData, plan]);
+
+  const planFallbackDay = useMemo(() => {
+    if (row || !fullPlan) return null;
+    return (
+      planDayList(fullPlan).find((day: any) => {
+        const date = isoDate(day?.date ?? day?.scheduledDate) ?? planDayDate(fullPlan, day);
+        return date === iso;
+      }) ?? null
+    );
+  }, [row, fullPlan, iso]);
+
+  const dayId: string | null = useMemo(
+    () => calendarDayId(row) ?? calendarDayId(planFallbackDay),
+    [row, planFallbackDay]
+  );
+
+  // The calendar row carries the log only once the client has started one.
+  const rowLogId: string | null = useMemo(() => calendarLogId(row), [row]);
+
+  const { data: dayData, isLoading: isDayLoading } = useGetNutritionDayQuery(dayId ?? "", {
+    skip: !dayId,
+  });
+
+  // Once the day is finished the calendar row can stop carrying the log, which
+  // would read as today's calories and water resetting to zero. The day payload
+  // is already loaded, so falling back to it costs no extra request.
+  const logId: string | null = useMemo(
+    () => rowLogId ?? readLogId(dayData),
+    [rowLogId, dayData]
+  );
+
+  const { data: logData, isLoading: isLogLoading } = useGetNutritionLogQuery(logId ?? "", {
+    skip: !logId,
+  });
+
   const day = useMemo(
-    () => (dayId ? normalizeDay(dayData ?? row, plan, iso) : null),
-    [dayId, dayData, row, plan, iso]
+    () => (dayId ? normalizeDay(dayData ?? row ?? planFallbackDay, fullPlan, iso, dayId) : null),
+    [dayId, dayData, row, planFallbackDay, fullPlan, iso]
   );
 
   const log = useMemo(() => normalizeLog(logData), [logData]);
@@ -86,7 +118,7 @@ export function useTodayNutrition(): TodayNutrition {
     waterMl: log?.waterMlConsumed ?? 0,
     hasPlan: Boolean(day),
     isLoading:
-      isPlanLoading || isCalendarLoading || (Boolean(dayId) && isDayLoading) ||
-      (Boolean(logId) && isLogLoading),
+      isPlanLoading || isCalendarLoading || isFullPlanLoading ||
+      (Boolean(dayId) && isDayLoading) || (Boolean(logId) && isLogLoading),
   };
 }

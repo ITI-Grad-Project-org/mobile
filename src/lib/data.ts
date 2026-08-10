@@ -21,6 +21,20 @@ export type Exercise = {
   coachNotes?: string;
 };
 
+/**
+ * The demo media to animate for an exercise, in priority order, or "" when the
+ * coach never attached one. A `.gif` still image counts as its own demo.
+ */
+export function animatedSourceOf(ex: Exercise | null | undefined): string {
+  return (
+    ex?.gifUrl ||
+    ex?.demoGifUrl ||
+    ex?.videoUrl ||
+    ex?.demoVideoUrl ||
+    (typeof ex?.image === "string" && ex.image.endsWith(".gif") ? ex.image : "")
+  );
+}
+
 
 
 export const yogaExercises: Exercise[] = [

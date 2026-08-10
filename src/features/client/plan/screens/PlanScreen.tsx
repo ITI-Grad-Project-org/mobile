@@ -4,6 +4,7 @@ import {
   useGetMyProgramQuery,
   useGetMyProgramsQuery,
 } from "@/api/endpoints/training.endpoints";
+import { dayLogState, isDayCompleted, isDaySkipped } from "@/lib/logState";
 import { plannedExerciseInfo } from "@/lib/plannedExercise";
 import { useActiveCoach } from "@/lib/role";
 import { cn } from "@/lib/utils";
@@ -15,7 +16,7 @@ import { router } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { DayCard } from "../components/DayCard";
 import { DaySheet } from "../components/DaySheet";
-import { NutritionOverview } from "@/features/client/nutrition";
+import { NutritionOverview, useActiveNutritionPlan } from "@/features/client/nutrition";
 import { PlanSegmented, type PlanSub } from "../components/PlanSegmented";
 import type { DayPlan } from "../data";
 
@@ -144,6 +145,9 @@ export function PlanScreen() {
       return {
         id: day.id,
         isToday: isTodayDay(day),
+        logState: dayLogState(day) || undefined,
+        isCompleted: isDayCompleted(day),
+        isSkipped: isDaySkipped(day),
         d: shortWeekday,
         date: dayOfMonth,
         title: day.name || `Day ${day.dayNumber || day.position || i + 1}`,
@@ -191,9 +195,26 @@ export function PlanScreen() {
   const [sub, setSub] = useState<PlanSub>("training");
   const [openDay, setOpenDay] = useState<DayPlan | null>(null);
 
-  const displayTitle = publishedProgram?.name || "Training Plan";
+  // The nutrition segment renders its own list, but the header and its Details
+  // button live up here — so this tab needs to know which plan is showing.
+  const { plan: nutritionPlan } = useActiveNutritionPlan();
+
+  const isNutrition = sub === "nutrition";
+  const displayTitle = isNutrition
+    ? nutritionPlan?.name || "Nutrition Plan"
+    : publishedProgram?.name || "Training Plan";
   const displaySubtitle =
-    publishedProgram?.description || `Coached by ${coach.name.split(" ")[0]}`;
+    (isNutrition ? nutritionPlan?.description : publishedProgram?.description) ||
+    `Coached by ${coach.name.split(" ")[0]}`;
+
+  // Details opens whichever plan the visible segment belongs to.
+  const detailsHref = isNutrition
+    ? nutritionPlan?.id
+      ? `/nutrition/plan/${nutritionPlan.id}`
+      : null
+    : publishedProgram?.id
+      ? `/program/${publishedProgram.id}`
+      : null;
 
   return (
     <ScrollView
@@ -214,10 +235,12 @@ export function PlanScreen() {
             {displaySubtitle}
           </Text>
         </View>
-        {publishedProgram?.id ? (
+        {detailsHref ? (
           <Pressable
-            onPress={() =>
-              router.push(`/program/${publishedProgram.id}` as any)
+            onPress={() => router.push(detailsHref as any)}
+            accessibilityRole="button"
+            accessibilityLabel={
+              isNutrition ? "Nutrition plan details" : "Training program details"
             }
             className="rounded-xl bg-secondary px-3.5 py-2 active:opacity-80 flex-row items-center gap-1 shrink-0"
           >

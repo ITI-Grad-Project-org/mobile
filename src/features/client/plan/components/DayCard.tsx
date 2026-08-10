@@ -13,6 +13,8 @@ export function DayCard({
   onPress: () => void;
 }) {
   const isToday = Boolean(day.isToday);
+  const isDone = Boolean(day.isCompleted);
+  const isSkipped = !isDone && Boolean(day.isSkipped);
 
   return (
     <Card
@@ -23,7 +25,10 @@ export function DayCard({
         "flex-row items-center gap-4 px-4 py-6",
         // Today's card carries a ring and a tinted fill so it reads as the one
         // to act on — the "TODAY" label below repeats it without relying on color.
-        isToday && "border-2 border-primary bg-primary/5 shadow-pop"
+        isToday && "border-2 border-primary bg-primary/5 shadow-pop",
+        // A finished day is settled, so it recedes rather than competing with
+        // whatever is still left to do this week.
+        isDone && !isToday && "opacity-70"
       )}
     >
       {/* Date column */}
@@ -110,9 +115,20 @@ export function DayCard({
         </View>
       </View>
 
-      {/* Chevron */}
-      <View className="h-9 w-9 shrink-0 items-center justify-center rounded-full bg-secondary">
-        <Icon name="chevron-right" size={16} color="--muted-foreground" />
+      {/* Trailing affordance — the day's state when it has one, otherwise "open me".
+          It replaces the chevron rather than adding to it, so the row stays calm. */}
+      <View
+        className={cn(
+          "h-9 w-9 shrink-0 items-center justify-center rounded-full",
+          isDone ? "bg-primary" : "bg-secondary"
+        )}
+        accessibilityLabel={isDone ? "Completed" : isSkipped ? "Skipped" : undefined}
+      >
+        <Icon
+          name={isDone ? "check" : isSkipped ? "x" : "chevron-right"}
+          size={16}
+          color={isDone ? "--primary-foreground" : "--muted-foreground"}
+        />
       </View>
     </Card>
   );

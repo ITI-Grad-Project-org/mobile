@@ -60,6 +60,9 @@ export const nutritionEndpoints = baseApi.injectEndpoints({
       invalidatesTags: (result, error, dayId) => [
         { type: 'NutritionDay', id: dayId },
         'NutritionCalendar',
+        // Skipping also changes the day's logState in the plan payload.
+        'NutritionPlan',
+        'NutritionPlans',
       ],
     }),
     getNutritionLog: builder.query<any, string>({
@@ -133,6 +136,11 @@ export const nutritionEndpoints = baseApi.injectEndpoints({
         'NutritionDay',
         // A finished nutrition day is a new mark on the activity heatmap.
         'Activity',
+        // The plan payload carries each day's logState, and that is what the
+        // overview list marks days completed from — without this the day stays
+        // unmarked until the cache expires.
+        'NutritionPlan',
+        'NutritionPlans',
       ],
     }),
   }),

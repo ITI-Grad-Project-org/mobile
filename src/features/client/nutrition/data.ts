@@ -1,3 +1,4 @@
+import { isDayCompleted } from "@/lib/logState";
 import { addIsoDays } from "@/shared/utils/date";
 import type {
   MealOutcome,
@@ -101,8 +102,14 @@ export interface NutritionDay {
   notes: string | null;
   targets: NutritionTargets;
   meals: PlannedMeal[];
-  /** "completed" | "skipped" | "in_progress" | "pending", as the API spells it. */
+  /**
+   * The day's `logState`. NOTE this reports ADHERENCE once a day is over —
+   * "completed" means the client hit the plan, "partial" means they didn't, and
+   * BOTH are finished. Use `isFinished` to ask whether the day is over.
+   */
   status: string | null;
+  /** The day's log is finalized — it is over, however well it went. */
+  isFinished: boolean;
 }
 
 export interface NutritionLog {
@@ -504,9 +511,12 @@ export function normalizeDay(
     notes: str(day?.notes, source?.notes),
     targets: resolveTargets(day, plan),
     meals: Array.isArray(rawMeals) ? rawMeals.map(normalizeMeal) : [],
-    // `logState` is how the API reports where the day stands ("completed",
-    // "skipped", "in_progress", "not_started").
+    // `logState` is the ADHERENCE outcome once the day is over, not its
+    // progress — see the field docs on NutritionDay.
     status: str(day?.logState, source?.logState, source?.status, source?.logStatus, day?.status),
+    // The nested log is what actually says "this day is over": a finalized log
+    // with a `partial` logState is still a finished day.
+    isFinished: isDayCompleted(day) || isDayCompleted(source),
   };
 }
 
@@ -612,6 +622,59 @@ export function formatDayTitle(day: NutritionDay): string {
     }
   }
   return `Day ${day.dayNumber || 1}`;
+}
+
+// ---------------------------------------------------------------------------
+// Day summaries
+//
+// Every day in a plan inherits the SAME calorie target unless the coach
+// overrode it, so the target is the one thing that can't tell two days apart.
+// What varies is the menu — these read that out for the list card.
+// ---------------------------------------------------------------------------
+
+/** What the day's planned meals add up to. All-zero when the plan carries no per-meal nutrients. */
+export function plannedMacros(day: NutritionDay): Macros {
+  return day.meals.reduce((acc, meal) => addMacros(acc, meal.macros), EMPTY_MACROS);
+}
+
+/** The slots the day covers, in eating order: "Breakfast · Lunch · Dinner". */
+export function describeDaySlots(day: NutritionDay, max = 4): string | null {
+  const slots = new Set(day.meals.map((meal) => meal.slot));
+  const ordered = MEAL_SLOTS.filter((slot) => slots.has(slot));
+  if (ordered.length === 0) return null;
+  const shown = ordered.slice(0, max).map((slot) => SLOT_LABEL[slot]);
+  return ordered.length > max
+    ? `${shown.join(" · ")} +${ordered.length - max}`
+    : shown.join(" · ");
+}
+
+/**
+ * True when the day's calorie target departs from the plan baseline — the only
+ * time the number is worth repeating on a row.
+ */
+export function hasCalorieOverride(
+  day: NutritionDay,
+  baseline: NutritionTargets | null | undefined
+): boolean {
+  const dayKcal = day.targets.targetCalories;
+  const base = baseline?.targetCalories;
+  if (typeof dayKcal !== "number" || typeof base !== "number") return false;
+  return Math.round(dayKcal) !== Math.round(base);
+}
+
+/** How a finished day went, from its adherence `logState`. Null while it's still open. */
+export function dayOutcomeLabel(day: NutritionDay): string | null {
+  if (!day.isFinished) return null;
+  switch (day.status) {
+    case "completed":
+      return "Target hit";
+    case "partial":
+      return "Partly hit";
+    case "skipped":
+      return "Skipped";
+    default:
+      return "Logged";
+  }
 }
 
 // ---------------------------------------------------------------------------

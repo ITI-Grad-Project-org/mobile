@@ -103,7 +103,9 @@ export function NutritionLogScreen({ dayId }: NutritionLogScreenProps) {
   // log has to be found in payloads that are loaded anyway — the day itself
   // first, then the calendar row for the day's date.
   const dayLogId = useMemo(() => readLogId(dayQueryData), [dayQueryData]);
-  const isClosed = isDayClosed(day?.status);
+  // `isFinished` first: a finalized log whose logState is "partial" is closed,
+  // but `status` alone would read it as still open and let the write below fire.
+  const isClosed = Boolean(day?.isFinished) || isDayClosed(day?.status);
 
   // Skipped unless the day is closed AND nothing cheaper carried the log id.
   // For today this hits the same cache entry the Today tab already holds.

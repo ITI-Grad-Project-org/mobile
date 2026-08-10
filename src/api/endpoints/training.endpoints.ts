@@ -50,7 +50,9 @@ export const trainingEndpoints = baseApi.injectEndpoints({
         url: `${T}/days/${programDayId}/skip`,
         method: 'POST',
       }),
-      invalidatesTags: ['Calendar', 'TrainingDay'],
+      // Skipping also moves a day out of "upcoming", so the program payload the
+      // plan-details screen counts from has to be refetched too.
+      invalidatesTags: ['Calendar', 'TrainingDay', 'Program', 'Programs'],
     }),
     getWorkoutLog: builder.query<any, string>({
       query: (logId) => `${T}/logs/${logId}`,
@@ -106,6 +108,12 @@ export const trainingEndpoints = baseApi.injectEndpoints({
         'Calendar',
         // A finished workout is a new mark on the activity heatmap.
         'Activity',
+        // The program payload carries each day's completion state, which is what
+        // the plan-details week progress counts. Without this the bar stays
+        // frozen until the cache expires. No id: the mutation only knows the
+        // logId, and an untagged type invalidates every entry of that type.
+        'Program',
+        'Programs',
       ],
     }),
   }),

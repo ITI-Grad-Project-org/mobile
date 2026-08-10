@@ -5,20 +5,17 @@ import {
 import { Card } from "@/shared/ui/Card";
 import { GlassButton } from "@/shared/ui/GlassButton";
 import { Icon } from "@/shared/ui/Icon";
+import { PlanDetailHeader } from "@/shared/ui/PlanDetailHeader";
+import { SectionHeader } from "@/shared/ui/SectionHeader";
+import { WeekProgress } from "@/shared/ui/WeekProgress";
+import { WeekStepper } from "@/shared/ui/WeekStepper";
 import { todayIso } from "@/shared/utils/dayProgress";
 import { ScrollView, Text, View } from "@/tw";
 import { router } from "expo-router";
 import { useMemo, useState } from "react";
 import { ActivityIndicator } from "react-native";
-import { ProgramHeader } from "../components/ProgramHeader";
 import { TodayWorkoutCard } from "../components/TodayWorkoutCard";
-import { WeekProgress } from "../components/WeekProgress";
-import { WeekStepper } from "../components/WeekStepper";
-import {
-  CompletedWorkoutRow,
-  SectionHeader,
-  UpcomingWorkoutRow,
-} from "../components/WorkoutRows";
+import { CompletedWorkoutRow, UpcomingWorkoutRow } from "../components/WorkoutRows";
 import { buildWeek, findTodayWeekIndex, weekCountOf } from "../lib/programWeek";
 
 interface ProgramDetailsScreenProps {
@@ -44,12 +41,12 @@ export function ProgramDetailsScreen({ programId }: ProgramDetailsScreenProps) {
     return item?.id || item?.dayId || item?.programDayId || item?.programDay?.id || null;
   }, [calendarData]);
 
-  const options = useMemo(() => ({ todayIso: iso, todayDayId }), [iso, todayDayId]);
+  const baseOptions = useMemo(() => ({ todayIso: iso, todayDayId }), [iso, todayDayId]);
 
   const totalWeeks = weekCountOf(program);
   const currentWeekIndex = useMemo(
-    () => (program ? findTodayWeekIndex(program, options) : null),
-    [program, options]
+    () => (program ? findTodayWeekIndex(program, baseOptions) : null),
+    [program, baseOptions]
   );
 
   // Default to the week today falls in; an arrow tap pins the choice from then
@@ -61,8 +58,8 @@ export function ProgramDetailsScreen({ programId }: ProgramDetailsScreenProps) {
   );
 
   const week = useMemo(
-    () => (program ? buildWeek(program, weekIndex, options) : null),
-    [program, weekIndex, options]
+    () => (program ? buildWeek(program, weekIndex, baseOptions) : null),
+    [program, weekIndex, baseOptions]
   );
 
   const today = week?.workouts.find((w) => w.state === "today") ?? null;
@@ -113,7 +110,8 @@ export function ProgramDetailsScreen({ programId }: ProgramDetailsScreenProps) {
       showsVerticalScrollIndicator={false}
     >
       {/* Sits under the client layout's AppHeader, so no top inset here. */}
-      <ProgramHeader
+      <PlanDetailHeader
+        eyebrow="Published Program"
         title={program.name || "Training program"}
         subtitle={program.description || null}
         tags={tags}

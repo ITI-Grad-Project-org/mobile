@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ExerciseSheet } from "@/features/client/today/components/ExerciseSheet";
-import type { Exercise } from "@/lib/data";
+import { animatedSourceOf, type Exercise } from "@/lib/data";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/shared/ui/Icon";
 import { Pressable, ScrollView, Text, View } from "@/tw";
@@ -21,6 +21,9 @@ export function DaySheet({
   onClose: () => void;
 }) {
   const [openExercise, setOpenExercise] = useState<Exercise | null>(null);
+  // Row key of the exercise whose demo is playing inline. Only one at a time so
+  // the sheet never has several GIFs decoding at once.
+  const [playingKey, setPlayingKey] = useState<string | null>(null);
 
   if (!day) return null;
 
@@ -36,11 +39,11 @@ export function DaySheet({
   const content = (
     <View className="flex-1 bg-card overflow-hidden">
       {/* Tone header */}
-      <Tone name={day.tone} className={cn("px-5 pb-5", isIOS ? "pt-5" : "pt-12")} glass>
+      <Tone name={day.tone} className={cn("pl-5 pr-14 pb-5", isIOS ? "pt-5" : "pt-12")} glass>
         <GlassButton
           onPress={onClose}
           className={cn(
-            "absolute right-4 h-9 w-9 items-center justify-center rounded-full bg-black/30 active:bg-black/50",
+            "absolute right-4 z-10 h-9 w-9 items-center justify-center rounded-full bg-black/30 active:bg-black/50",
             isIOS ? "top-4" : "top-11",
           )}
           accessibilityLabel="Close"
@@ -105,40 +108,79 @@ export function DaySheet({
               instructions: (ex as any).instructions || [],
               gifUrl: (ex as any).gifUrl,
               videoUrl: (ex as any).videoUrl,
+              demoGifUrl: (ex as any).demoGifUrl,
+              demoVideoUrl: (ex as any).demoVideoUrl,
               // Not day.notes — the day-level note already has its own card above.
               coachNotes: (ex as any).coachNotes || "",
             };
 
+            const rowKey = `${ex.name}-${i}`;
+            const animatedSource = animatedSourceOf(fullExercise);
+            const isPlaying = playingKey === rowKey;
+
             return (
               <Pressable
-                key={`${ex.name}-${i}`}
+                key={rowKey}
                 onPress={() => setOpenExercise(fullExercise)}
-                className="flex-row items-center gap-3 rounded-2xl bg-secondary/60 p-2.5 active:bg-secondary/90"
+                className="rounded-2xl bg-secondary/60 p-2.5 active:bg-secondary/90"
               >
-                {ex.image ? (
-                  <Image
-                    source={ex.image}
-                    className="h-14 w-14 shrink-0 rounded-2xl bg-secondary"
-                  />
-                ) : (
-                  <View className="h-14 w-14 shrink-0 rounded-2xl bg-secondary/80 items-center justify-center border border-border/40">
-                    <Icon name="dumbbell" size={24} color="--primary" />
+                <View className="flex-row items-center gap-3">
+                  {ex.image ? (
+                    <Image
+                      source={ex.image}
+                      className="h-14 w-14 shrink-0 rounded-2xl bg-secondary"
+                    />
+                  ) : (
+                    <View className="h-14 w-14 shrink-0 rounded-2xl bg-secondary/80 items-center justify-center border border-border/40">
+                      <Icon name="dumbbell" size={24} color="--primary" />
+                    </View>
+                  )}
+                  <View className="min-w-0 flex-1">
+                    <Text
+                      numberOfLines={1}
+                      className="text-[14.5px] font-semibold text-foreground"
+                    >
+                      {ex.name}
+                    </Text>
+                    <Text className="text-[12px] text-muted-foreground">
+                      {ex.sets}
+                    </Text>
                   </View>
-                )}
-                <View className="min-w-0 flex-1">
-                  <Text
-                    numberOfLines={1}
-                    className="text-[14.5px] font-semibold text-foreground"
-                  >
-                    {ex.name}
-                  </Text>
-                  <Text className="text-[12px] text-muted-foreground">
-                    {ex.sets}
-                  </Text>
+                  {/* With a demo, play expands it in place; without one the row
+                      press (opening the full sheet) stays the only action. */}
+                  {animatedSource ? (
+                    <Pressable
+                      onPress={() => setPlayingKey(isPlaying ? null : rowKey)}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        isPlaying
+                          ? `Hide ${ex.name} demonstration`
+                          : `Play ${ex.name} demonstration`
+                      }
+                      className="h-8 w-8 shrink-0 items-center justify-center rounded-full bg-card shadow-sm active:opacity-70"
+                    >
+                      <Icon
+                        name={isPlaying ? "pause" : "play"}
+                        size={14}
+                        color="--foreground"
+                      />
+                    </Pressable>
+                  ) : (
+                    <View className="h-8 w-8 shrink-0 items-center justify-center rounded-full bg-card/60 shadow-sm">
+                      <Icon name="chevron-right" size={14} color="--muted-foreground" />
+                    </View>
+                  )}
                 </View>
-                <View className="h-8 w-8 shrink-0 items-center justify-center rounded-full bg-card shadow-sm">
-                  <Icon name="play" size={14} color="--foreground" />
-                </View>
+
+                {isPlaying ? (
+                  <Image
+                    source={animatedSource}
+                    className="mt-2.5 w-full aspect-16/11 rounded-xl bg-secondary"
+                    contentFit="cover"
+                    transition={0}
+                  />
+                ) : null}
               </Pressable>
             );
           })}

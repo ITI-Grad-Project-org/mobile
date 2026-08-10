@@ -15,6 +15,7 @@ export default function ClientLayout() {
         <Stack.Screen name="workout/[programDayId]" />
         <Stack.Screen name="program/[programId]" />
         <Stack.Screen name="nutrition/[dayId]" />
+        <Stack.Screen name="nutrition/plan/[planId]" />
       </Stack>
     </View>
   );

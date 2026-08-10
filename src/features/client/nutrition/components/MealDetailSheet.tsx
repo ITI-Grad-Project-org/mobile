@@ -84,11 +84,11 @@ export function MealDetailSheet({
           </View>
         ) : (
           /* No photo — the brand gradient carries the header instead. */
-          <Tone name="mint" className={cn("px-5 pb-5", isIOS ? "pt-5" : "pt-12")} glass>
+          <Tone name="mint" className={cn("pl-5 pr-14 pb-5", isIOS ? "pt-5" : "pt-12")} glass>
             <GlassButton
               onPress={onClose}
               className={cn(
-                "absolute right-4 h-9 w-9 items-center justify-center rounded-full bg-black/30 active:bg-black/50",
+                "absolute right-4 z-10 h-9 w-9 items-center justify-center rounded-full bg-black/30 active:bg-black/50",
                 isIOS ? "top-4" : "top-11"
               )}
               accessibilityLabel="Close"

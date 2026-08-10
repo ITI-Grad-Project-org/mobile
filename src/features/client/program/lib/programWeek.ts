@@ -1,9 +1,4 @@
-/**
- * The program payload is loosely typed (`any` all the way down — see
- * api/endpoints/training.endpoints.ts) and the API has spelled several of these
- * fields more than one way. Everything here reads defensively and hands the
- * screen the one shape it renders: weeks of workouts, each in a single state.
- */
+import { isDayCompleted } from "@/lib/logState";
 
 export type WorkoutState = "done" | "today" | "upcoming";
 
@@ -70,12 +65,11 @@ function dateRangeOf(workouts: { date: string | null }[]): string {
     : `${first.getDate()} ${MONTHS[first.getMonth()]} – ${last.getDate()} ${MONTHS[last.getMonth()]}`;
 }
 
-/** The API has spelled "this day is finished" several ways; match on any of them. */
-function isDone(day: any): boolean {
-  const status = String(day?.status ?? day?.log?.status ?? "").toLowerCase();
-  if (status === "completed" || status === "done") return true;
-  return Boolean(day?.completedAt || day?.log?.completedAt || day?.log?.finishedAt);
-}
+/**
+ * Is this day finished? Shared with the plan list so the week counter and the
+ * per-day badge can never disagree — see lib/logState.
+ */
+const isDone = isDayCompleted;
 
 function isRest(day: any): boolean {
   return Boolean(day?.isRestDay || day?.isRest || day?.type === "rest");
@@ -171,7 +165,12 @@ export function buildWeek(
         // to start, so it belongs in Completed rather than the CTA card.
         state: done ? "done" : isToday ? "today" : "upcoming",
         actualDurationMin: done
-          ? minutesOf(day?.log?.durationMinutes ?? day?.durationMinutes ?? day?.actualMinutes)
+          ? minutesOf(
+              day?.workoutLog?.durationMinutes ??
+                day?.log?.durationMinutes ??
+                day?.durationMinutes ??
+                day?.actualMinutes
+            )
           : null,
       };
     })

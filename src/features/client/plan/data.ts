@@ -26,6 +26,7 @@ export type DayPlan = {
   notes?: string;
   logState?: string;
   isCompleted?: boolean;
+  isSkipped?: boolean;
   /** Today's scheduled day — highlighted in the plan list. */
   isToday?: boolean;
 };

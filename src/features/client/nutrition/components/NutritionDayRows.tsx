@@ -2,24 +2,34 @@ import { Card } from "@/shared/ui/Card";
 import { Icon } from "@/shared/ui/Icon";
 import { Text, View } from "@/tw";
 import { Tone } from "@/tw/Tone";
-import { formatLongDay, type ProgramWorkout } from "../lib/programWeek";
+import { dayOutcomeLabel, formatKcal } from "../data";
+import { formatLongDay, type NutritionPlanDay } from "../lib/nutritionWeek";
 
-/** The date column is a fixed width so every row's name starts on the same line. */
+/** The date column is a fixed width so every row's title starts on the same line. */
 const DATE_COLUMN_WIDTH = 38;
 
 interface RowProps {
-  workout: ProgramWorkout;
+  entry: NutritionPlanDay;
   onPress: () => void;
 }
 
-export function UpcomingWorkoutRow({ workout, onPress }: RowProps) {
+/** The row's second line: which meals, and what they add up to. */
+function metaOf(entry: NutritionPlanDay): string {
+  return [entry.slots, entry.plannedKcal > 0 ? `${formatKcal(entry.plannedKcal)} kcal` : null]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+export function UpcomingDayRow({ entry, onPress }: RowProps) {
+  const meta = metaOf(entry);
+
   return (
     <Card
       glass
       interactive
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${workout.title}, ${workout.exerciseCount} exercises, about ${workout.durationMin} minutes`}
+      accessibilityLabel={`${entry.title}${meta ? `, ${meta}` : ""}`}
       className="flex-row items-center gap-3.5 px-4 py-3.5"
     >
       <View
@@ -27,21 +37,22 @@ export function UpcomingWorkoutRow({ workout, onPress }: RowProps) {
         style={{ width: DATE_COLUMN_WIDTH + 14 }}
       >
         <Text className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-          {workout.dayOfWeek}
+          {entry.dayOfWeek}
         </Text>
         <Text className="mt-0.5 text-[20px] font-black leading-none text-foreground">
-          {workout.dayOfMonth}
+          {entry.dayOfMonth}
         </Text>
       </View>
 
       <View className="min-w-0 flex-1">
         <Text className="text-[15px] font-semibold leading-tight text-foreground" numberOfLines={1}>
-          {workout.title}
+          {entry.title}
         </Text>
-        <Text className="mt-1 text-[12px] text-muted-foreground" numberOfLines={1}>
-          {workout.exerciseCount} exercise{workout.exerciseCount === 1 ? "" : "s"} · ~
-          {workout.durationMin} min
-        </Text>
+        {meta ? (
+          <Text className="mt-1 text-[12px] text-muted-foreground" numberOfLines={1}>
+            {meta}
+          </Text>
+        ) : null}
       </View>
 
       <Icon name="chevron-right" size={16} color="--muted-foreground" />
@@ -50,14 +61,15 @@ export function UpcomingWorkoutRow({ workout, onPress }: RowProps) {
 }
 
 /**
- * A finished workout: the same card, recessed, with a mint check where the date
- * column was and the actual result on the meta line.
+ * A finished day: the same card, recessed, with a mint check where the date
+ * column was and how the day actually went on the meta line.
  */
-export function CompletedWorkoutRow({ workout, onPress }: RowProps) {
+export function CompletedDayRow({ entry, onPress }: RowProps) {
   const result = [
-    formatLongDay(workout.date),
-    `${workout.exerciseCount} exercise${workout.exerciseCount === 1 ? "" : "s"}`,
-    workout.actualDurationMin ? `${workout.actualDurationMin} min` : null,
+    formatLongDay(entry.day.date),
+    // Adherence, not progress — a "partial" day is finished too. See data.ts.
+    dayOutcomeLabel(entry.day),
+    entry.mealCount > 0 ? `${entry.mealCount} meal${entry.mealCount === 1 ? "" : "s"}` : null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -69,7 +81,7 @@ export function CompletedWorkoutRow({ workout, onPress }: RowProps) {
       onPress={onPress}
       accessibilityRole="button"
       accessibilityState={{ selected: true }}
-      accessibilityLabel={`Completed: ${workout.title}, ${result}`}
+      accessibilityLabel={`Logged: ${entry.title}, ${result}`}
       className="flex-row items-center gap-3.5 px-4 py-3.5 opacity-60"
     >
       <View
@@ -87,7 +99,7 @@ export function CompletedWorkoutRow({ workout, onPress }: RowProps) {
 
       <View className="min-w-0 flex-1">
         <Text className="text-[14px] font-medium leading-tight text-foreground" numberOfLines={1}>
-          {workout.title}
+          {entry.title}
         </Text>
         <Text className="mt-1 text-[12px] text-muted-foreground" numberOfLines={1}>
           {result}

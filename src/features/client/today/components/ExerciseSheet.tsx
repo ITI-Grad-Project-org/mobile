@@ -1,4 +1,4 @@
-import type { Exercise } from "@/lib/data";
+import { animatedSourceOf, type Exercise } from "@/lib/data";
 import { cn } from "@/lib/utils";
 import { GlassButton } from "@/shared/ui/GlassButton";
 import { Icon } from "@/shared/ui/Icon";
@@ -32,26 +32,12 @@ export function ExerciseSheet({
 }: ExerciseSheetProps) {
   const [isPlaying, setIsPlaying] = useState(false);
 
-  // The prescription copies the library fields onto itself (instructionSteps,
-  // demoGifUrl, …), so everything shown here is already in the day payload —
-  // no lookup against /exercises, which is coach-scoped anyway.
   const instructions: string[] = exercise?.instructions ?? [];
 
-  // Animated demo: whatever the coach uploaded, in order of preference. A still
-  // that is itself a GIF counts; there is no stock fallback clip.
-  const animatedSource =
-    exercise?.gifUrl ||
-    exercise?.demoGifUrl ||
-    exercise?.videoUrl ||
-    exercise?.demoVideoUrl ||
-    (typeof exercise?.image === "string" && exercise.image.endsWith(".gif")
-      ? exercise.image
-      : "");
+  const animatedSource = animatedSourceOf(exercise);
 
   const stillSource = exercise?.image || "";
 
-  // Warm the disk/memory cache as soon as the sheet opens so the first tap on
-  // play swaps frames instantly instead of downloading the GIF right then.
   useEffect(() => {
     if (!animatedSource) return;
     ExpoImage.prefetch(animatedSource, { cachePolicy: "memory-disk" });

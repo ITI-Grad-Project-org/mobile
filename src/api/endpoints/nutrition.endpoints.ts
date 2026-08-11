@@ -60,6 +60,9 @@ export const nutritionEndpoints = baseApi.injectEndpoints({
       invalidatesTags: (result, error, dayId) => [
         { type: 'NutritionDay', id: dayId },
         'NutritionCalendar',
+        // Skipping marks every planned Meal skipped, which removes their heatmap
+        // activity — possibly on an older action date than today.
+        'Activity',
         // Skipping also changes the day's logState in the plan payload.
         'NutritionPlan',
         'NutritionPlans',
@@ -89,6 +92,9 @@ export const nutritionEndpoints = baseApi.injectEndpoints({
       }),
       invalidatesTags: (result, error, { logId }) => [
         { type: 'NutritionLog', id: logId },
+        // The Meal outcome — not /complete — is the activity-producing request:
+        // completed/partial adds one activity, skipped removes it.
+        'Activity',
       ],
     }),
     // Library mode: { foodId, amount, mealSlot }.
@@ -101,6 +107,8 @@ export const nutritionEndpoints = baseApi.injectEndpoints({
       }),
       invalidatesTags: (result, error, { logId }) => [
         { type: 'NutritionLog', id: logId },
+        // On a fully flexible day the first Food in a Meal slot creates activity.
+        'Activity',
       ],
     }),
     updateActualFood: builder.mutation<
@@ -114,6 +122,8 @@ export const nutritionEndpoints = baseApi.injectEndpoints({
       }),
       invalidatesTags: (result, error, { logId }) => [
         { type: 'NutritionLog', id: logId },
+        // Moving a Food between Meal slots reconciles activity on both slots.
+        'Activity',
       ],
     }),
     deleteActualFood: builder.mutation<any, { logId: string; foodLogId: string }>({
@@ -123,6 +133,8 @@ export const nutritionEndpoints = baseApi.injectEndpoints({
       }),
       invalidatesTags: (result, error, { logId }) => [
         { type: 'NutritionLog', id: logId },
+        // Deleting the last Food in a Meal slot removes that slot's activity.
+        'Activity',
       ],
     }),
     // 409 if a planned Meal is still pending an outcome.
@@ -134,7 +146,8 @@ export const nutritionEndpoints = baseApi.injectEndpoints({
         // The mutation only knows the log id, so the day is invalidated by type.
         // Only the day currently on screen is mounted, so this is one refetch.
         'NutritionDay',
-        // A finished nutrition day is a new mark on the activity heatmap.
+        // Completion itself adds no activity — the Meal outcomes already did.
+        // Kept as a cheap safety net for activity recorded on another device.
         'Activity',
         // The plan payload carries each day's logState, and that is what the
         // overview list marks days completed from — without this the day stays

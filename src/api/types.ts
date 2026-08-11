@@ -239,6 +239,7 @@ export interface ClientProfileFields {
   gender?: Gender;
   heightCm?: number;
   weightKg?: number;
+  timezone?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -263,11 +264,6 @@ export type UpdateClientIntakeDto = Partial<CreateClientIntakeDto>;
 // ---------------------------------------------------------------------------
 // Measurements
 // ---------------------------------------------------------------------------
-/**
- * FLAT multipart fields on POST/PATCH `/client/me/measurements`. Progress
- * photos are binary `photos` parts, not URLs — `CreateMeasurementDto` /
- * `UpdateMeasurementDto` no longer exist as JSON schemas.
- */
 export interface MeasurementFields {
   measuredAt?: string; // YYYY-MM-DD (default today)
   weightKg?: number;

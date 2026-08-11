@@ -4,7 +4,8 @@ import { cn } from "@/lib/utils";
 import { Icon } from "@/shared/ui/Icon";
 import { Pressable, Text, View } from "@/tw";
 import { Tone } from "@/tw/Tone";
-import React, { useEffect, useMemo, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LayoutChangeEvent } from "react-native";
 import Reanimated, {
   useAnimatedStyle,
@@ -71,9 +72,27 @@ export function StreakHero({
   const colors = palettes[accent];
   const accentDot = accent === "green" ? "bg-[#30a14e]" : "bg-[#f0883e]";
 
-  const { data, isLoading, isError, refetch } = useGetActivityGraphQuery();
+  // `refetchOnFocus` covers reopening the app on this screen; the focus effect
+  // below covers navigating back to it. Both exist because activity can be
+  // recorded on another device, where no local mutation invalidates the cache.
+  const { data, isLoading, isError, refetch } = useGetActivityGraphQuery(undefined, {
+    refetchOnFocus: true,
+  });
   const [gridWidth, setGridWidth] = useState(0);
   const [selected, setSelected] = useState<DayCellData | null>(null);
+
+  // The initial query already covers the first focus, so skip it — otherwise
+  // every mount fires two requests for the same graph.
+  const focusedOnce = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (!focusedOnce.current) {
+        focusedOnce.current = true;
+        return;
+      }
+      refetch();
+    }, [refetch])
+  );
 
   // The graph's day boundaries resolve in its own zone, not the device's.
   const todayIso = useMemo(() => todayInZone(data?.timezone), [data?.timezone]);

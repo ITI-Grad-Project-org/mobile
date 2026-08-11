@@ -88,16 +88,68 @@ function repsTarget(set: any): string | null {
   return max && max !== min ? `${min}–${max}` : `${min}`;
 }
 
-function setTarget(set: any, unit: WeightUnit): string {
+function setTarget(prescribed: any, unit: WeightUnit): string {
   const parts: string[] = [];
-  const reps = repsTarget(set);
-  if (set?.weightKg !== undefined && set?.weightKg !== null) {
-    parts.push(`${formatWeight(fromKg(set.weightKg, unit))} ${unit}`);
+  const reps = repsTarget(prescribed);
+  if (prescribed?.weightKg !== undefined && prescribed?.weightKg !== null) {
+    parts.push(`${formatWeight(fromKg(prescribed.weightKg, unit))} ${unit}`);
   }
   if (reps) parts.push(`${reps} reps`);
-  if (set?.intensityValue) parts.push(`RPE ${set.intensityValue}`);
-  if (set?.durationSeconds) parts.push(`${set.durationSeconds}s`);
+  if (prescribed?.intensityValue) parts.push(`RPE ${prescribed.intensityValue}`);
+  if (prescribed?.durationSeconds) parts.push(`${prescribed.durationSeconds}s`);
   return parts.length ? parts.join(" · ") : "No target";
+}
+
+/** Does this look like a LOGGED set rather than a prescribed one? A logged set's
+ *  own `reps`/`weightKg` are what the client did, so they must never be read as
+ *  the coach's target — see UpdatePrescribedLoggedSetDto vs PrescribedSetDto. */
+function isLoggedSet(set: any): boolean {
+  return (
+    set?.outcome !== undefined ||
+    set?.actualReps !== undefined ||
+    set?.actualWeightKg !== undefined ||
+    set?.loggedReps !== undefined ||
+    set?.loggedWeightKg !== undefined
+  );
+}
+
+/**
+ * The prescription behind a set. A logged set wraps its prescribed set the way a
+ * logged exercise wraps its planned one (see lib/plannedExercise); the training
+ * responses carry no OpenAPI schema, so every known alias is tried before giving
+ * up and letting the caller fall back to the program day's own prescription.
+ */
+function prescriptionOf(set: any): any | null {
+  const nested =
+    set?.prescribedSet ?? set?.plannedSet ?? set?.programSet ?? set?.prescription;
+  if (nested) return nested;
+  return isLoggedSet(set) ? null : (set ?? null);
+}
+
+/** The prescribed sets of a planned exercise, whichever key the payload uses. */
+function plannedSetsOf(exercise: any): any[] {
+  const sets = exercise?.sets || exercise?.prescribedSets || exercise?.plannedSets;
+  return Array.isArray(sets) ? sets : [];
+}
+
+/**
+ * The program day's prescription for a logged exercise. Matched by id first —
+ * a logged exercise carries the planned one's id under one of several names —
+ * then by position, since both lists describe the same day in the same order.
+ */
+function matchPrescribed(planned: any[], item: any, index: number): any | null {
+  if (!Array.isArray(planned) || planned.length === 0) return null;
+  const ids = [
+    item?.plannedExerciseId,
+    item?.programExerciseId,
+    item?.prescribedExerciseId,
+    item?.exerciseId,
+    item?.exercise?.id,
+  ].filter(Boolean);
+  const byId = planned.find(
+    (p: any) => ids.includes(p?.id) || (p?.exerciseId && ids.includes(p.exerciseId))
+  );
+  return byId ?? planned[index] ?? null;
 }
 
 /** "Last time · 100 kg × 8, 8, 8", when the payload carries a previous session. */
@@ -197,16 +249,58 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
   /** Read-only: a finalized log, or a day that can't be logged yet. */
   const isLocked = Boolean(logError) || Boolean(activeLog?.completedAt || activeLog?.finishedAt);
 
+  // The day's own prescription. `rawExercises` prefers the LOG payload once one
+  // exists, and a logged set carries actuals rather than the coach's numbers —
+  // so the targets have to be read back off the program day alongside it.
+  const prescribedExercises: any[] = useMemo(
+    () => dayData?.exercises || dayData?.prescribedExercises || [],
+    [dayData]
+  );
+
   const exercises: NormalizedExercise[] = useMemo(() => {
     return rawExercises.map((item: any, index: number) => {
       const sets: any[] = item?.sets || item?.loggedSets || [];
+      const planned = matchPrescribed(prescribedExercises, item, index);
+      const plannedSets = plannedSetsOf(planned);
+      // Extra sets have no prescription, so they must not consume a planned slot
+      // and shift every prescribed set after them onto the wrong target.
+      let plannedCursor = 0;
       // The prescribed exercise is flat (exerciseName, primaryMuscle, equipment[]);
       // see lib/plannedExercise.
       const info = plannedExerciseInfo(item, index);
       const details = [info.equipment.join(", "), info.muscle]
         .filter(Boolean)
         .join(" · ");
-      const firstWorking = sets.find((s) => !s?.isExtra) ?? sets[0];
+      const normalizedSets: NormalizedSet[] = sets.map((set: any, setIndex: number) => {
+        const isExtra = Boolean(set?.isExtra || set?.isExtraSet);
+        // The set's own prescription when the payload nests one, otherwise the
+        // program day's set in the same slot.
+        const prescribed =
+          prescriptionOf(set) ?? (isExtra ? null : (plannedSets[plannedCursor] ?? null));
+        if (!isExtra) plannedCursor += 1;
+
+        // Prefill order: what was logged -> what the coach prescribed. A value
+        // is only ever `null` when neither exists, and the card blocks confirm.
+        const loggedWeight = set?.actualWeightKg ?? set?.loggedWeightKg;
+        const loggedReps = set?.actualReps ?? set?.loggedReps;
+        const prescribedReps =
+          prescribed?.repsMin ?? prescribed?.repsMax ?? prescribed?.reps ?? null;
+
+        return {
+          id: set?.id || `${item?.id}-set-${setIndex}`,
+          setType: set?.setType || prescribed?.setType || "working",
+          isExtra,
+          target: setTarget(prescribed, unit),
+          serverDraft: draftFromKg(
+            loggedWeight ?? (isLoggedSet(set) ? set?.weightKg : null) ?? prescribed?.weightKg ?? null,
+            loggedReps ?? (isLoggedSet(set) ? set?.reps : null) ?? prescribedReps,
+            unit
+          ),
+          serverLogged: set?.outcome === "completed" || set?.outcome === "partial",
+        };
+      });
+
+      const firstWorking = normalizedSets.find((s) => !s.isExtra) ?? normalizedSets[0];
 
       return {
         id: item?.id || `exercise-${index}`,
@@ -223,32 +317,17 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
         ].filter(Boolean) as string[],
         name: info.name,
         detailChip: details || null,
-        targetChip: firstWorking ? setTarget(firstWorking, unit) : null,
+        // "No target" is the set card's own placeholder — as a chip it would just
+        // be a header that says nothing, so it is dropped instead.
+        targetChip:
+          firstWorking && firstWorking.target !== "No target" ? firstWorking.target : null,
         lastTime: lastTimeLine(item, unit),
         coachNotes: info.coachNotes || null,
-        restSeconds: item?.restSeconds ?? DEFAULT_REST_SECONDS,
-        sets: sets.map((set: any, setIndex: number) => {
-          // Prefill order: what was logged -> what the coach prescribed. A value
-          // is only ever `null` when neither exists, and the card blocks confirm.
-          const loggedWeight = set?.actualWeightKg ?? set?.loggedWeightKg;
-          const loggedReps = set?.actualReps ?? set?.loggedReps;
-          const prescribedReps = set?.repsMin ?? set?.repsMax ?? set?.reps ?? null;
-          return {
-            id: set?.id || `${item?.id}-set-${setIndex}`,
-            setType: set?.setType || "working",
-            isExtra: Boolean(set?.isExtra || set?.isExtraSet),
-            target: setTarget(set, unit),
-            serverDraft: draftFromKg(
-              loggedWeight ?? set?.weightKg ?? null,
-              loggedReps ?? prescribedReps,
-              unit
-            ),
-            serverLogged: set?.outcome === "completed" || set?.outcome === "partial",
-          };
-        }),
+        restSeconds: item?.restSeconds ?? planned?.restSeconds ?? DEFAULT_REST_SECONDS,
+        sets: normalizedSets,
       };
     });
-  }, [rawExercises, unit]);
+  }, [rawExercises, prescribedExercises, unit]);
 
   const clampedIndex = Math.min(activeIndex, Math.max(0, exercises.length - 1));
   const activeExercise = exercises[clampedIndex];

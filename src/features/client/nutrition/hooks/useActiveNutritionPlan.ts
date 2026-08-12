@@ -4,6 +4,7 @@ import {
   useGetMyNutritionPlansQuery,
   useGetNutritionCalendarQuery,
 } from "@/api/endpoints/nutrition.endpoints";
+import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import { todayIso } from "@/shared/utils/dayProgress";
 import { useMemo } from "react";
 import { calendarDayId, isConflict, pickActivePlan, unwrap, unwrapList } from "../data";
@@ -31,6 +32,9 @@ export interface ActiveNutritionPlan {
  */
 export function useActiveNutritionPlan(): ActiveNutritionPlan {
   const iso = todayIso();
+  // Every query below is cache-keyed by tenant: switching coaches must not be
+  // able to serve the previous coach's plan (name, targets, days) from cache.
+  const { tenantId } = useActiveTenant();
 
   const {
     data: currentData,
@@ -38,7 +42,10 @@ export function useActiveNutritionPlan(): ActiveNutritionPlan {
     isError: isCurrentError,
     error: currentError,
     refetch: refetchCurrent,
-  } = useGetCurrentNutritionPlanQuery();
+  } = useGetCurrentNutritionPlanQuery(
+    { tenantId: tenantId ?? "" },
+    { skip: !tenantId }
+  );
 
   // A 409 on `current` means two published plans overlap today, so it is NOT a
   // fallback trigger — but a 404/no-plan is, and the list is also how a plan that
@@ -48,12 +55,15 @@ export function useActiveNutritionPlan(): ActiveNutritionPlan {
     isLoading: isPlansLoading,
     isError: isPlansError,
     refetch: refetchPlans,
-  } = useGetMyNutritionPlansQuery();
+  } = useGetMyNutritionPlansQuery({ tenantId: tenantId ?? "" }, { skip: !tenantId });
 
   // Plan days are relative to the plan's start and often carry no date, so the
   // calendar names today's day when it can. It is a hint, not the only source —
   // `normalizeDay` also derives dates from the plan's start.
-  const { data: calendarData } = useGetNutritionCalendarQuery({ from: iso, to: iso });
+  const { data: calendarData } = useGetNutritionCalendarQuery(
+    { tenantId: tenantId ?? "", from: iso, to: iso },
+    { skip: !tenantId }
+  );
   const todayDayId = useMemo(
     () => calendarDayId(unwrapList(calendarData)[0]),
     [calendarData]
@@ -73,7 +83,10 @@ export function useActiveNutritionPlan(): ActiveNutritionPlan {
     data: fullPlanData,
     isLoading: isFullLoading,
     refetch: refetchFull,
-  } = useGetMyNutritionPlanQuery(summaryPlan?.id ?? "", { skip: !summaryPlan?.id });
+  } = useGetMyNutritionPlanQuery(
+    { tenantId: tenantId ?? "", planId: summaryPlan?.id ?? "" },
+    { skip: !tenantId || !summaryPlan?.id }
+  );
 
   const plan = useMemo(
     () => unwrap(fullPlanData) ?? summaryPlan ?? null,

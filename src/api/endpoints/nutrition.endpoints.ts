@@ -10,32 +10,36 @@ import {
 
 const N = '/client/me/nutrition';
 
+type TenantScoped<T = unknown> = T & { tenantId: string };
+
 export const nutritionEndpoints = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     // ----- Reading the plan
-    getMyNutritionPlans: builder.query<any[], void>({
+    getMyNutritionPlans: builder.query<any[], TenantScoped>({
       query: () => `${N}/plans`,
       providesTags: ['NutritionPlans'],
     }),
     // 409 here means two published plans cover today — surface the conflict
     // rather than treating it as "no plan".
-    getCurrentNutritionPlan: builder.query<any, void>({
+    getCurrentNutritionPlan: builder.query<any, TenantScoped>({
       query: () => `${N}/plans/current`,
       providesTags: ['NutritionPlans'],
     }),
-    getMyNutritionPlan: builder.query<any, string>({
-      query: (planId) => `${N}/plans/${planId}`,
-      providesTags: (result, error, planId) => [{ type: 'NutritionPlan', id: planId }],
+    getMyNutritionPlan: builder.query<any, TenantScoped<{ planId: string }>>({
+      query: ({ planId }) => `${N}/plans/${planId}`,
+      providesTags: (result, error, { planId }) => [
+        { type: 'NutritionPlan', id: planId },
+      ],
     }),
-    getNutritionCalendar: builder.query<any, CalendarQuery>({
+    getNutritionCalendar: builder.query<any, TenantScoped<CalendarQuery>>({
       query: ({ from, to }) => ({ url: `${N}/calendar`, params: { from, to } }),
       providesTags: ['NutritionCalendar'],
     }),
-    getNutritionDay: builder.query<any, string>({
-      query: (dayId) => `${N}/days/${dayId}`,
+    getNutritionDay: builder.query<any, TenantScoped<{ dayId: string }>>({
+      query: ({ dayId }) => `${N}/days/${dayId}`,
       // Tagged so finishing or skipping refreshes the day's log state — the day
       // payload is what a finished day's history is read back from.
-      providesTags: (result, error, dayId) => [{ type: 'NutritionDay', id: dayId }],
+      providesTags: (result, error, { dayId }) => [{ type: 'NutritionDay', id: dayId }],
     }),
     // Read-only browse of the coach's Food library — active Foods only, so no
     // `includeInactive`. Separate cache namespace from the coach's own list.
@@ -68,9 +72,9 @@ export const nutritionEndpoints = baseApi.injectEndpoints({
         'NutritionPlans',
       ],
     }),
-    getNutritionLog: builder.query<any, string>({
-      query: (logId) => `${N}/logs/${logId}`,
-      providesTags: (result, error, logId) => [{ type: 'NutritionLog', id: logId }],
+    getNutritionLog: builder.query<any, TenantScoped<{ logId: string }>>({
+      query: ({ logId }) => `${N}/logs/${logId}`,
+      providesTags: (result, error, { logId }) => [{ type: 'NutritionLog', id: logId }],
     }),
     updateNutritionLog: builder.mutation<
       any,

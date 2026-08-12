@@ -4,7 +4,10 @@ import { ActivityGraphQuery, ActivityGraphResponse } from '../types';
 export const activityEndpoints = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     // Omit `year` for the rolling latest 365 days. 400 means the year is invalid.
-    getActivityGraph: builder.query<ActivityGraphResponse, ActivityGraphQuery | void>({
+    getActivityGraph: builder.query<
+      ActivityGraphResponse,
+      ActivityGraphQuery & { tenantId: string }
+    >({
       query: (args) => ({
         url: '/client/me/activity',
         params: args?.year ? { year: args.year } : undefined,

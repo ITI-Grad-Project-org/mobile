@@ -504,9 +504,10 @@ function ClientProfile() {
 
   // Header stats: the streak comes from the same graph the Today screen draws,
   // the goal from the intake filled in for the active coach.
-  const { data: activity } = useGetActivityGraphQuery(undefined, {
-    refetchOnFocus: true,
-  });
+  const { data: activity } = useGetActivityGraphQuery(
+    { tenantId: activeTenantId ?? "" },
+    { refetchOnFocus: true, skip: !activeTenantId }
+  );
   const { data: intake } = useGetIntakeQuery(
     { tenantId: activeTenantId ?? "" },
     { skip: !activeTenantId }

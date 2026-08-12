@@ -131,7 +131,7 @@ export function CoachProfileScreen({ tenantId }: { tenantId: string }) {
   // Every /client/me action resolves the tenant from the JWT, so this coach has
   // to be the active one before we can write anything for them.
   const ensureActive = async () => {
-    if (!isActive) await switchCoach(tenantId);
+    if (!isActive) await switchCoach(tenantId, { resetNavigation: false });
   };
 
   const runAction = async (

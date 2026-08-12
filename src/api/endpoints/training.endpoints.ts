@@ -8,30 +8,34 @@ import {
 
 const T = '/client/me/training';
 
-// Client-side workout execution. All endpoints require auth and are scoped to the
-// active tenant via the x-tenant-id header.
+type TenantScoped<T = unknown> = T & { tenantId: string };
+
+// Client-side workout execution. All endpoints require auth; the server resolves
+// the tenant from the JWT, so a switch must re-key these caches.
 export const trainingEndpoints = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     // ----- Reading the plan
-    getMyPrograms: builder.query<any[], void>({
+    getMyPrograms: builder.query<any[], TenantScoped>({
       query: () => `${T}/programs`,
       providesTags: ['Programs'],
     }),
-    getCurrentProgram: builder.query<any, void>({
+    getCurrentProgram: builder.query<any, TenantScoped>({
       query: () => `${T}/programs/current`,
       providesTags: ['Programs'],
     }),
-    getMyProgram: builder.query<any, string>({
-      query: (programId) => `${T}/programs/${programId}`,
-      providesTags: (result, error, programId) => [{ type: 'Program', id: programId }],
+    getMyProgram: builder.query<any, TenantScoped<{ programId: string }>>({
+      query: ({ programId }) => `${T}/programs/${programId}`,
+      providesTags: (result, error, { programId }) => [
+        { type: 'Program', id: programId },
+      ],
     }),
-    getCalendar: builder.query<any, CalendarQuery>({
+    getCalendar: builder.query<any, TenantScoped<CalendarQuery>>({
       query: ({ from, to }) => ({ url: `${T}/calendar`, params: { from, to } }),
       providesTags: ['Calendar'],
     }),
-    getTrainingDay: builder.query<any, string>({
-      query: (programDayId) => `${T}/days/${programDayId}`,
-      providesTags: (result, error, programDayId) => [
+    getTrainingDay: builder.query<any, TenantScoped<{ programDayId: string }>>({
+      query: ({ programDayId }) => `${T}/days/${programDayId}`,
+      providesTags: (result, error, { programDayId }) => [
         { type: 'TrainingDay', id: programDayId },
       ],
     }),
@@ -55,9 +59,9 @@ export const trainingEndpoints = baseApi.injectEndpoints({
       // every set activity that workout had already put on the heatmap.
       invalidatesTags: ['Calendar', 'TrainingDay', 'Activity', 'Program', 'Programs'],
     }),
-    getWorkoutLog: builder.query<any, string>({
-      query: (logId) => `${T}/logs/${logId}`,
-      providesTags: (result, error, logId) => [{ type: 'WorkoutLog', id: logId }],
+    getWorkoutLog: builder.query<any, TenantScoped<{ logId: string }>>({
+      query: ({ logId }) => `${T}/logs/${logId}`,
+      providesTags: (result, error, { logId }) => [{ type: 'WorkoutLog', id: logId }],
     }),
     logSet: builder.mutation<
       any,

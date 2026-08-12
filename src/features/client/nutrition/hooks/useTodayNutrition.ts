@@ -6,6 +6,7 @@ import {
   useGetNutritionLogQuery,
 } from "@/api/endpoints/nutrition.endpoints";
 import type { NutritionTargets } from "@/api/types";
+import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import { todayIso } from "@/shared/utils/dayProgress";
 import { useMemo } from "react";
 import {
@@ -37,12 +38,21 @@ export interface TodayNutrition {
 
 export function useTodayNutrition(): TodayNutrition {
   const iso = todayIso();
+  // Cache-keyed by tenant so a coach switch can't leave the old coach's plan
+  // and totals on today's cards.
+  const { tenantId } = useActiveTenant();
 
   const { data: planData, isLoading: isPlanLoading, error: planError } =
-    useGetCurrentNutritionPlanQuery();
+    useGetCurrentNutritionPlanQuery(
+      { tenantId: tenantId ?? "" },
+      { skip: !tenantId }
+    );
 
   const { data: calendarData, isLoading: isCalendarLoading } =
-    useGetNutritionCalendarQuery({ from: iso, to: iso });
+    useGetNutritionCalendarQuery(
+      { tenantId: tenantId ?? "", from: iso, to: iso },
+      { skip: !tenantId }
+    );
 
   const row = useMemo(() => unwrapList(calendarData)[0] ?? null, [calendarData]);
 
@@ -59,8 +69,8 @@ export function useTodayNutrition(): TodayNutrition {
   // fall back to it — fetched in full only when the calendar came up empty, and
   // usually already cached by the Nutrition tab.
   const { data: fullPlanData, isLoading: isFullPlanLoading } = useGetMyNutritionPlanQuery(
-    plan?.id ?? "",
-    { skip: Boolean(row) || !plan?.id }
+    { tenantId: tenantId ?? "", planId: plan?.id ?? "" },
+    { skip: Boolean(row) || !tenantId || !plan?.id }
   );
 
   const fullPlan = useMemo(() => unwrap(fullPlanData) ?? plan, [fullPlanData, plan]);
@@ -83,9 +93,10 @@ export function useTodayNutrition(): TodayNutrition {
   // The calendar row carries the log only once the client has started one.
   const rowLogId: string | null = useMemo(() => calendarLogId(row), [row]);
 
-  const { data: dayData, isLoading: isDayLoading } = useGetNutritionDayQuery(dayId ?? "", {
-    skip: !dayId,
-  });
+  const { data: dayData, isLoading: isDayLoading } = useGetNutritionDayQuery(
+    { tenantId: tenantId ?? "", dayId: dayId ?? "" },
+    { skip: !tenantId || !dayId }
+  );
 
   // Once the day is finished the calendar row can stop carrying the log, which
   // would read as today's calories and water resetting to zero. The day payload
@@ -95,9 +106,10 @@ export function useTodayNutrition(): TodayNutrition {
     [rowLogId, dayData]
   );
 
-  const { data: logData, isLoading: isLogLoading } = useGetNutritionLogQuery(logId ?? "", {
-    skip: !logId,
-  });
+  const { data: logData, isLoading: isLogLoading } = useGetNutritionLogQuery(
+    { tenantId: tenantId ?? "", logId: logId ?? "" },
+    { skip: !tenantId || !logId }
+  );
 
   const day = useMemo(
     () => (dayId ? normalizeDay(dayData ?? row ?? planFallbackDay, fullPlan, iso, dayId) : null),

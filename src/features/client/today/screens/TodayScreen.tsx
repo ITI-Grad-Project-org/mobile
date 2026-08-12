@@ -52,23 +52,32 @@ export function TodayScreen() {
     []
   );
 
-  const { data: myProgramsData } = useGetMyProgramsQuery();
-  const { data: currentProgData } = useGetCurrentProgramQuery();
+  // Every training query is cache-keyed by tenant, so switching coaches can
+  // never serve the previous coach's program out of the cache.
+  const { data: myProgramsData } = useGetMyProgramsQuery(
+    { tenantId: tenantId ?? "" },
+    { skip: !tenantId }
+  );
+  const { data: currentProgData } = useGetCurrentProgramQuery(
+    { tenantId: tenantId ?? "" },
+    { skip: !tenantId }
+  );
 
   const rawPrograms = (myProgramsData as any)?.data || myProgramsData || [];
   const programs = Array.isArray(rawPrograms) ? rawPrograms : [];
   const activeProgram = (currentProgData as any)?.data || currentProgData;
   const publishedProgram = programs.length > 0 ? programs[0] : activeProgram;
 
-  const { data: fullProgramData } = useGetMyProgramQuery(publishedProgram?.id || "", {
-    skip: !publishedProgram?.id,
-  });
+  const { data: fullProgramData } = useGetMyProgramQuery(
+    { tenantId: tenantId ?? "", programId: publishedProgram?.id || "" },
+    { skip: !tenantId || !publishedProgram?.id }
+  );
   const fullProgram = (fullProgramData as any)?.data || fullProgramData || publishedProgram;
 
   const todayIso = useMemo(() => localTodayIso(), []);
   const { data: calendarData } = useGetCalendarQuery(
-    { from: todayIso, to: todayIso },
-    { skip: !todayIso }
+    { tenantId: tenantId ?? "", from: todayIso, to: todayIso },
+    { skip: !tenantId || !todayIso }
   );
 
   const calendarItems = useMemo(
@@ -86,9 +95,10 @@ export function TodayScreen() {
     activeProgram?.currentDay?.id ||
     "";
 
-  const { data: realDayData } = useGetTrainingDayQuery(todayDayId, {
-    skip: !todayDayId,
-  });
+  const { data: realDayData } = useGetTrainingDayQuery(
+    { tenantId: tenantId ?? "", programDayId: todayDayId },
+    { skip: !tenantId || !todayDayId }
+  );
 
   const realDay = realDayData?.data || realDayData || calendarItems[0]?.programDay || calendarItems[0]?.day || activeProgram?.currentDay;
 

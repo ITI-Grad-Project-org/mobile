@@ -1,6 +1,7 @@
 import { useGetActivityGraphQuery } from "@/api/endpoints/activity.endpoints";
 import { useRole } from "@/lib/role";
 import { cn } from "@/lib/utils";
+import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import { Icon } from "@/shared/ui/Icon";
 import { Pressable, Text, View } from "@/tw";
 import { Tone } from "@/tw/Tone";
@@ -75,9 +76,11 @@ export function StreakHero({
   // `refetchOnFocus` covers reopening the app on this screen; the focus effect
   // below covers navigating back to it. Both exist because activity can be
   // recorded on another device, where no local mutation invalidates the cache.
-  const { data, isLoading, isError, refetch } = useGetActivityGraphQuery(undefined, {
-    refetchOnFocus: true,
-  });
+  const { tenantId } = useActiveTenant();
+  const { data, isLoading, isError, refetch } = useGetActivityGraphQuery(
+    { tenantId: tenantId ?? "" },
+    { refetchOnFocus: true, skip: !tenantId }
+  );
   const [gridWidth, setGridWidth] = useState(0);
   const [selected, setSelected] = useState<DayCellData | null>(null);
 

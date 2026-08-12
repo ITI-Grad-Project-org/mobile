@@ -1,4 +1,5 @@
 import { useGetMyNutritionPlanQuery } from "@/api/endpoints/nutrition.endpoints";
+import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import { Card } from "@/shared/ui/Card";
 import { GlassButton } from "@/shared/ui/GlassButton";
 import { Icon } from "@/shared/ui/Icon";
@@ -27,11 +28,18 @@ interface NutritionPlanDetailsScreenProps {
  * week progress, stepper, today's CTA, then what's left and what's done.
  */
 export function NutritionPlanDetailsScreen({ planId }: NutritionPlanDetailsScreenProps) {
+  // Keyed by tenant: the planId arrives in the route, so without it a coach
+  // switch would re-serve the old coach's plan straight from cache.
+  const { tenantId } = useActiveTenant();
+
   const {
     data: planData,
     isLoading,
     isError,
-  } = useGetMyNutritionPlanQuery(planId, { skip: !planId });
+  } = useGetMyNutritionPlanQuery(
+    { tenantId: tenantId ?? "", planId },
+    { skip: !tenantId || !planId }
+  );
 
   // Only for the calendar hint and today's date — the plan itself comes from the
   // route, so a client can open any plan they were given, not just the active one.

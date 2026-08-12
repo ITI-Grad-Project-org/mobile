@@ -191,15 +191,17 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
   const [sessionStartedAt] = useState(() => Date.now());
   const elapsed = useElapsedSeconds(sessionStartedAt);
 
-  const { data: dayQueryData } = useGetTrainingDayQuery(programDayId, {
-    skip: !programDayId,
-  });
+  const { data: dayQueryData } = useGetTrainingDayQuery(
+    { tenantId: tenantId ?? "", programDayId },
+    { skip: !tenantId || !programDayId }
+  );
 
   const [startOrResumeLog, { isLoading: isStarting }] = useStartOrResumeLogMutation();
 
-  const { data: logData, isLoading: isLogLoading } = useGetWorkoutLogQuery(logId ?? "", {
-    skip: !logId,
-  });
+  const { data: logData, isLoading: isLogLoading } = useGetWorkoutLogQuery(
+    { tenantId: tenantId ?? "", logId: logId ?? "" },
+    { skip: !tenantId || !logId }
+  );
 
   const [logSet] = useLogSetMutation();
   const [addExtraSet, { isLoading: isAddingExtra }] = useAddExtraSetMutation();

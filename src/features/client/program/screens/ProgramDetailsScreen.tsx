@@ -2,6 +2,7 @@ import {
   useGetCalendarQuery,
   useGetMyProgramQuery,
 } from "@/api/endpoints/training.endpoints";
+import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import { Card } from "@/shared/ui/Card";
 import { GlassButton } from "@/shared/ui/GlassButton";
 import { Icon } from "@/shared/ui/Icon";
@@ -23,18 +24,28 @@ interface ProgramDetailsScreenProps {
 }
 
 export function ProgramDetailsScreen({ programId }: ProgramDetailsScreenProps) {
+  // Keyed by tenant: this screen is reached with a programId in the route, so
+  // without it a coach switch would re-serve the old coach's program from cache.
+  const { tenantId } = useActiveTenant();
+
   const {
     data: programData,
     isLoading,
     isError,
-  } = useGetMyProgramQuery(programId, { skip: !programId });
+  } = useGetMyProgramQuery(
+    { tenantId: tenantId ?? "", programId },
+    { skip: !tenantId || !programId }
+  );
 
   const program = programData?.data || programData;
 
   // Today's scheduled day id, straight from the calendar — the program payload
   // doesn't always carry dates, and this is what Today already keys off.
   const iso = todayIso();
-  const { data: calendarData } = useGetCalendarQuery({ from: iso, to: iso });
+  const { data: calendarData } = useGetCalendarQuery(
+    { tenantId: tenantId ?? "", from: iso, to: iso },
+    { skip: !tenantId }
+  );
   const todayDayId = useMemo(() => {
     const items = (calendarData as any)?.data || calendarData || [];
     const item = Array.isArray(items) ? items[0] : null;

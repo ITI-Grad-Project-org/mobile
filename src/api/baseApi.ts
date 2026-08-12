@@ -8,7 +8,13 @@ import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import * as SecureStore from 'expo-secure-store';
 
 import { BASE_URL } from './config';
+import { currentTenantEpoch } from './tenantEpoch';
 import { refreshAccessToken } from './tokenRefresh';
+
+const STALE_TENANT_ERROR: FetchBaseQueryError = {
+  status: 'CUSTOM_ERROR',
+  error: 'Response discarded: fetched under a previous tenant.',
+};
 
 const rawBaseQuery = fetchBaseQuery({
   baseUrl: BASE_URL,
@@ -44,7 +50,16 @@ function forceLogout(api: Parameters<BaseQueryFn>[1]) {
 
 const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> =
   async (args, api, extraOptions) => {
+    const startedUnderEpoch = currentTenantEpoch();
     let result = await rawBaseQuery(args, api, extraOptions);
+
+    // A tenant switch landed while this was in flight: the payload belongs to
+    // the old coach. Drop it before anything can cache or render it — and
+    // before the 401 branch, since an expired old-tenant token must not log the
+    // (now correctly authenticated) user out.
+    if (currentTenantEpoch() !== startedUnderEpoch) {
+      return { error: STALE_TENANT_ERROR };
+    }
 
     const url = typeof args === 'string' ? args : args.url;
     const isAuthRequest =
@@ -63,6 +78,9 @@ const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQue
       if (refreshed) {
         // Retry the original request with the new token.
         result = await rawBaseQuery(args, api, extraOptions);
+        if (currentTenantEpoch() !== startedUnderEpoch) {
+          return { error: STALE_TENANT_ERROR };
+        }
       } else {
         forceLogout(api);
       }

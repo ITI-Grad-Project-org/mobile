@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { StyleSheet, useColorScheme } from "react-native";
 import Animated, {
   Easing,
@@ -24,9 +24,11 @@ const LOGO_HEIGHT = Math.round((LOGO_WIDTH * 607) / 1080);
 
 type Props = {
   onFinish: () => void;
+  /** Keep the overlay up (no fade-out) until this flips back to false. */
+  hold?: boolean;
 };
 
-export function AnimatedSplash({ onFinish }: Props) {
+export function AnimatedSplash({ onFinish, hold = false }: Props) {
   const scheme = useColorScheme() === "dark" ? "dark" : "light";
   const themedBg = useCSSVariable("--background") as string | undefined;
   const backgroundColor = themedBg ?? FALLBACK_BG[scheme];
@@ -35,6 +37,14 @@ export function AnimatedSplash({ onFinish }: Props) {
   const logoScale = useSharedValue(0.85);
   const screenOpacity = useSharedValue(1);
 
+  // Kept in a ref so an inline `onFinish` from the parent can't restart the
+  // fade-out animation on every re-render.
+  const onFinishRef = useRef(onFinish);
+  useEffect(() => {
+    onFinishRef.current = onFinish;
+  }, [onFinish]);
+  const finish = useCallback(() => onFinishRef.current(), []);
+
   useEffect(() => {
     // Logo fades + springs in.
     logoOpacity.value = withTiming(1, {
@@ -42,6 +52,11 @@ export function AnimatedSplash({ onFinish }: Props) {
       easing: Easing.out(Easing.cubic),
     });
     logoScale.value = withSpring(1, { damping: 13, stiffness: 130, mass: 0.8 });
+  }, [logoOpacity, logoScale]);
+
+  useEffect(() => {
+    // While held (e.g. a tenant switch is in flight) the overlay stays opaque.
+    if (hold) return;
 
     // Hold, then fade the overlay out and notify the parent when done.
     screenOpacity.value = withDelay(
@@ -50,11 +65,11 @@ export function AnimatedSplash({ onFinish }: Props) {
         0,
         { duration: 380, easing: Easing.in(Easing.cubic) },
         (finished) => {
-          if (finished) runOnJS(onFinish)();
+          if (finished) runOnJS(finish)();
         }
       )
     );
-  }, [logoOpacity, logoScale, screenOpacity, onFinish]);
+  }, [hold, screenOpacity, finish]);
 
   const screenStyle = useAnimatedStyle(() => ({
     opacity: screenOpacity.value,

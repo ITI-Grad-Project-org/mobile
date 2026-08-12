@@ -59,6 +59,7 @@ function AppContent() {
 
   const { isAuthenticated, persona } = useAppSelector((state) => state.auth);
   const activeTenantId = useAppSelector((state) => state.activeTenant.tenantId);
+  const tenantSwitching = useAppSelector((state) => state.activeTenant.switching);
 
   // Queries to load active tenant / memberships details
   const { data: coachMe, isLoading: loadingCoach } = useGetCoachMeQuery(undefined, {
@@ -117,6 +118,28 @@ function AppContent() {
     }
   }, [authRestored, memberships, activeTenantId, dispatch]);
 
+  // Switching tenants must look and behave like a cold start: every screen is
+  // torn down and remounted so nothing keeps rendering the previous tenant's
+  // data (the RTK Query cache is reset in useSwitchCoach, but screens can hold
+  // derived local state, and a mounted navigator would otherwise survive).
+  // Adjusted during render (not in an effect) so the remount and the splash
+  // land in the same commit as the tenant change — no frame of stale UI.
+  const [tenantView, setTenantView] = useState({ id: activeTenantId, epoch: 0 });
+  if (tenantView.id !== activeTenantId) {
+    setTenantView((prev) => ({
+      id: activeTenantId,
+      // Only a real switch remounts — not the initial null -> tenant assignment.
+      epoch: prev.id && activeTenantId ? prev.epoch + 1 : prev.epoch,
+    }));
+  }
+
+  // Bring the branded splash back for the duration of the switch.
+  const [wasSwitching, setWasSwitching] = useState(tenantSwitching);
+  if (wasSwitching !== tenantSwitching) {
+    setWasSwitching(tenantSwitching);
+    if (tenantSwitching) setSplashDone(false);
+  }
+
   // One app-wide chat socket. It lives here rather than on the chat screens so
   // inbox rows and tab badges stay live from any tab.
   useChatEvents();
@@ -144,7 +167,7 @@ function AppContent() {
 
   return (
     <View style={{ flex: 1 }}>
-      <Stack screenOptions={{ headerShown: false }}>
+      <Stack key={tenantView.epoch} screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(onboarding)" />
@@ -154,8 +177,11 @@ function AppContent() {
         <Stack.Screen name="my-profile" />
         <Stack.Screen name="coach/[tenantId]" />
       </Stack>
-      {!splashDone && (
-        <AnimatedSplash onFinish={() => setSplashDone(true)} />
+      {(!splashDone || tenantSwitching) && (
+        <AnimatedSplash
+          hold={tenantSwitching}
+          onFinish={() => setSplashDone(true)}
+        />
       )}
     </View>
   );

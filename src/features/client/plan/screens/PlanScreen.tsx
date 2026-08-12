@@ -7,6 +7,7 @@ import {
 import { dayLogState, isDayCompleted, isDaySkipped } from "@/lib/logState";
 import { plannedExerciseInfo } from "@/lib/plannedExercise";
 import { useActiveCoach } from "@/lib/role";
+import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import { cn } from "@/lib/utils";
 import { Card } from "@/shared/ui/Card";
 import { Icon } from "@/shared/ui/Icon";
@@ -23,8 +24,17 @@ import type { DayPlan } from "../data";
 export function PlanScreen() {
   const coach = useActiveCoach();
 
-  const { data: myProgramsData } = useGetMyProgramsQuery();
-  const { data: currentProgData } = useGetCurrentProgramQuery();
+  // Cache-keyed by tenant so a coach switch can't serve the old coach's plan.
+  const { tenantId } = useActiveTenant();
+
+  const { data: myProgramsData } = useGetMyProgramsQuery(
+    { tenantId: tenantId ?? "" },
+    { skip: !tenantId }
+  );
+  const { data: currentProgData } = useGetCurrentProgramQuery(
+    { tenantId: tenantId ?? "" },
+    { skip: !tenantId }
+  );
 
   const rawPrograms = (myProgramsData as any)?.data || myProgramsData || [];
   const programs = Array.isArray(rawPrograms) ? rawPrograms : [];
@@ -33,10 +43,8 @@ export function PlanScreen() {
   const publishedProgram = programs.length > 0 ? programs[0] : currentProgram;
 
   const { data: fullProgramData } = useGetMyProgramQuery(
-    publishedProgram?.id || "",
-    {
-      skip: !publishedProgram?.id,
-    }
+    { tenantId: tenantId ?? "", programId: publishedProgram?.id || "" },
+    { skip: !tenantId || !publishedProgram?.id }
   );
 
   const fullProgram =
@@ -45,7 +53,10 @@ export function PlanScreen() {
   // Today's scheduled day, straight from the calendar — the program payload
   // doesn't always carry dates, and this is what Today already keys off.
   const iso = todayIso();
-  const { data: calendarData } = useGetCalendarQuery({ from: iso, to: iso });
+  const { data: calendarData } = useGetCalendarQuery(
+    { tenantId: tenantId ?? "", from: iso, to: iso },
+    { skip: !tenantId }
+  );
   const todayDayId = useMemo(() => {
     const items = (calendarData as any)?.data || calendarData || [];
     const item = Array.isArray(items) ? items[0] : null;

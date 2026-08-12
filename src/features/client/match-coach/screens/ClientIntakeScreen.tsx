@@ -154,7 +154,10 @@ export function ClientIntakeScreen() {
         return;
       }
 
-      // 1. Confirm onboarding code with backend if code was provided
+      // 1. Confirm onboarding code with backend if code was provided. The
+      // confirm endpoint creates the intake in the same call, so we must NOT
+      // POST it again afterwards — the server rejects the second write with
+      // "intake already exists".
       if (code) {
         await confirmOnboarding({
           code,
@@ -162,15 +165,9 @@ export function ClientIntakeScreen() {
         }).unwrap();
       }
 
-      // 2. Submit intake endpoint (POST /client/me/intake)
-      if (targetTenantId) {
-        await createIntake({
-          body: intakeBody,
-          tenantId: targetTenantId,
-        }).unwrap();
-      }
-
-      // 3. Set active tenant in store & SecureStore
+      // 2. Set active tenant in store & SecureStore. This has to happen before
+      // any further call: the base query reads `x-tenant-id` from the store, so
+      // a request sent earlier would be scoped to the previous tenant.
       if (targetTenantId) {
         dispatch(setActiveTenant(targetTenantId));
         await SecureStore.setItemAsync("activeTenantId", targetTenantId);
@@ -185,6 +182,24 @@ export function ClientIntakeScreen() {
             },
           ])
         );
+      }
+
+      // 3. No code (already a member — e.g. an approved join request), so the
+      // intake still needs its own POST.
+      if (!code && targetTenantId) {
+        try {
+          await createIntake({ body: intakeBody, tenantId: targetTenantId }).unwrap();
+        } catch (err: any) {
+          // A retry after a partially-successful submit 409s. Update instead of
+          // failing the join.
+          const status = err?.status ?? err?.originalStatus;
+          const msg = String(err?.data?.message || err?.error || "");
+          if (status === 409 || /already exist/i.test(msg)) {
+            await updateIntake({ body: intakeBody, tenantId: targetTenantId }).unwrap();
+          } else {
+            throw err;
+          }
+        }
       }
 
       await markProfileComplete({ ...goalData, code, days, level, focus });

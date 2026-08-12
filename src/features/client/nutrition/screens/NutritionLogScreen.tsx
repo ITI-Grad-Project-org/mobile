@@ -17,6 +17,7 @@ import type {
   MealSlot,
   UpdateActualFoodLogDto,
 } from "@/api/types";
+import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import { GlassButton } from "@/shared/ui/GlassButton";
 import { Icon } from "@/shared/ui/Icon";
 import { todayIso } from "@/shared/utils/dayProgress";
@@ -87,9 +88,13 @@ export function NutritionLogScreen({ dayId }: NutritionLogScreenProps) {
   const [editingFood, setEditingFood] = useState<LoggedFood | null>(null);
   const [sheetError, setSheetError] = useState<string | null>(null);
 
-  const { data: dayQueryData, isLoading: isDayLoading } = useGetNutritionDayQuery(dayId, {
-    skip: !dayId,
-  });
+  // Keyed by tenant — this screen is reached with a dayId in the route.
+  const { tenantId } = useActiveTenant();
+
+  const { data: dayQueryData, isLoading: isDayLoading } = useGetNutritionDayQuery(
+    { tenantId: tenantId ?? "", dayId },
+    { skip: !tenantId || !dayId }
+  );
 
   const [startOrResume, { isLoading: isStarting }] = useStartOrResumeNutritionLogMutation();
 
@@ -111,8 +116,8 @@ export function NutritionLogScreen({ dayId }: NutritionLogScreenProps) {
   // For today this hits the same cache entry the Today tab already holds.
   const needsCalendarLookup = Boolean(day?.date) && isClosed && !logId && !dayLogId;
   const { data: calendarData, isLoading: isCalendarLoading } = useGetNutritionCalendarQuery(
-    { from: day?.date ?? "", to: day?.date ?? "" },
-    { skip: !needsCalendarLookup }
+    { tenantId: tenantId ?? "", from: day?.date ?? "", to: day?.date ?? "" },
+    { skip: !needsCalendarLookup || !tenantId }
   );
   const calendarLogIdForDay = useMemo(() => {
     if (!needsCalendarLookup) return null;
@@ -124,8 +129,8 @@ export function NutritionLogScreen({ dayId }: NutritionLogScreenProps) {
   const activeLogId = logId ?? dayLogId ?? calendarLogIdForDay;
 
   const { data: logQueryData, isLoading: isLogLoading } = useGetNutritionLogQuery(
-    activeLogId ?? "",
-    { skip: !activeLogId }
+    { tenantId: tenantId ?? "", logId: activeLogId ?? "" },
+    { skip: !tenantId || !activeLogId }
   );
 
   const [setMealOutcome] = useSetLoggedMealOutcomeMutation();

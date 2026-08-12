@@ -1,7 +1,7 @@
 import "@/global.css";
-import { Stack } from "expo-router";
+import { router, Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { StatusBar, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -9,7 +9,7 @@ import { Provider } from 'react-redux';
 import * as SecureStore from 'expo-secure-store';
 
 import { store, useAppDispatch, useAppSelector } from '@/store';
-import { setAuth } from '@/store/authSlice';
+import { setAuth, setLoading } from '@/store/authSlice';
 import { setActiveTenant } from '@/store/activeTenantSlice';
 import { setMemberships } from '@/store/membershipsSlice';
 import { AnimatedSplash } from "@/shared/components/AnimatedSplash";
@@ -47,6 +47,9 @@ function AppContent() {
       } catch (e) {
         console.warn("Failed to restore session from SecureStore:", e);
       } finally {
+        // Clear the "still restoring" flag even when there was no session, so
+        // `auth.loading` never stays stuck true for a signed-out user.
+        dispatch(setLoading(false));
         setAuthRestored(true);
       }
     }
@@ -118,22 +121,29 @@ function AppContent() {
   // inbox rows and tab badges stay live from any tab.
   useChatEvents();
 
-  const handleRootLayout = useCallback(() => {
+  useEffect(() => {
+    if (!authRestored || isAuthenticated) return;
+    if (router.canDismiss()) {
+      router.dismissAll();
+    }
+    router.replace('/(auth)/login');
+  }, [authRestored, isAuthenticated]);
+
+  // Hide the native splash from an effect, not from onLayout: the tree below
+  // mounts once and its onLayout would not fire again when these queries later
+  // settle, which would leave the splash up forever.
+  useEffect(() => {
     if (authRestored && !loadingCoach && !loadingMemberships) {
       SplashScreen.hideAsync().catch(() => {});
     }
   }, [authRestored, loadingCoach, loadingMemberships]);
 
-  // Wait until session is restored and initial profile/membership queries finish
-  const isInitialLoading = !authRestored || (isAuthenticated && (loadingCoach || loadingMemberships));
-
-  if (isInitialLoading) {
+  if (!authRestored) {
     return null;
   }
 
-
   return (
-    <View style={{ flex: 1 }} onLayout={handleRootLayout}>
+    <View style={{ flex: 1 }}>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="(auth)" />

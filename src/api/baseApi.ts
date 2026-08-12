@@ -27,6 +27,11 @@ const rawBaseQuery = fetchBaseQuery({
 });
 
 function forceLogout(api: Parameters<BaseQueryFn>[1]) {
+  const state = api.getState() as any;
+  if (!state?.auth?.isAuthenticated) {
+    return;
+  }
+
   clearTokens();
   // The chat socket holds its own copy of the now-dead token.
   disconnectChatSocket();

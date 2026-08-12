@@ -1,41 +1,14 @@
+import { useCoachHomeData } from "@/features/coach/home/hooks/useCoachHomeData";
 import { cn } from "@/lib/utils";
 import { Card } from "@/shared/ui/Card";
 import { Icon } from "@/shared/ui/Icon";
 import { SectionTitle } from "@/shared/ui/SectionTitle";
 import { Pressable, ScrollView, Text, useCSSVariable, View } from "@/tw";
+import { Image } from "@/tw/image";
 import { Tone } from "@/tw/Tone";
 import { LinearGradient } from "expo-linear-gradient";
-
-const triage = [
-  {
-    tone: "primary" as const,
-    icon: "alert-triangle" as const,
-    title: "Sarah hasn't logged in 4 days",
-    sub: "Attrition risk · last session Jun 22",
-    cta: "Reach out",
-  },
-  {
-    tone: "ink" as const,
-    icon: "message-square" as const,
-    title: "3 check-ins waiting for review",
-    sub: "Alex · Mia · Daniel",
-    cta: "Review",
-  },
-  {
-    tone: "sun" as const,
-    icon: "clock" as const,
-    title: "2 plans ending this week",
-    sub: "Renew before Sunday",
-    cta: "Renew",
-  },
-];
-
-const feed = [
-  { name: "Alex Rivera", action: "completed Lower body day", time: "12m", color: "mint" },
-  { name: "Mia Chen", action: "submitted weekly check-in", time: "1h", color: "lilac" },
-  { name: "Daniel Park", action: "logged 5 km Zone 2 run", time: "2h", color: "sky" },
-  { name: "Sofia Reyes", action: "hit a new squat PR · 95 kg", time: "5h", color: "peach" },
-] as const;
+import { useMemo } from "react";
+import { RefreshControl } from "react-native";
 
 /** Monogram initials from a name — deterministic, always renders (unlike emoji). */
 function initials(name: string) {
@@ -59,30 +32,81 @@ export function HomeScreen() {
   const primaryColor = (useCSSVariable("--primary") as string) || "#e5673a";
   const peachColor = (useCSSVariable("--peach") as string) || "#f7a083";
 
+  const {
+    greeting,
+    firstName,
+    fullName,
+    avatarUrl,
+    activeClients,
+    unreadThreads,
+    unreadNames,
+    plansEndingSoon,
+    feed,
+    isLoading,
+    isFetching,
+    refetchAll,
+  } = useCoachHomeData();
+
+  const triage = useMemo(
+    () => [
+      // TODO: no coach-visible client-activity endpoint exists (/client/me/activity
+      // is self-scoped), so this row stays illustrative until the API adds one.
+      {
+        tone: "primary" as const,
+        icon: "alert-triangle" as const,
+        title: "Sarah hasn't logged in 4 days",
+        sub: "Attrition risk · last session Jun 22",
+        cta: "Reach out",
+      },
+      {
+        tone: "ink" as const,
+        icon: "message-square" as const,
+        title: unreadThreads
+          ? `${unreadThreads} check-in${unreadThreads === 1 ? "" : "s"} waiting for review`
+          : "No check-ins waiting",
+        sub: unreadNames.length ? unreadNames.join(" · ") : "You're all caught up",
+        cta: "Review",
+      },
+      {
+        tone: "sun" as const,
+        icon: "clock" as const,
+        title: plansEndingSoon
+          ? `${plansEndingSoon} plan${plansEndingSoon === 1 ? "" : "s"} ending this week`
+          : "No plans ending this week",
+        sub: plansEndingSoon ? "Renew before they lapse" : "Nothing to renew",
+        cta: "Renew",
+      },
+    ],
+    [unreadThreads, unreadNames, plansEndingSoon]
+  );
+
   return (
     <ScrollView
       className="flex-1 bg-background"
       contentContainerClassName="gap-y-5 pt-5 pb-30"
       showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={isFetching && !isLoading}
+          onRefresh={refetchAll}
+          tintColor={primaryColor}
+        />
+      }
     >
       {/* Header */}
       <View className="flex-row items-center justify-between px-1">
         <View className="min-w-0 flex-1">
-          <Text className="text-[13px] text-muted-foreground">Friday morning</Text>
-          <Text className="text-[26px] font-bold tracking-tight text-foreground mt-0.5">Hey, Marco</Text>
+          <Text className="text-[13px] text-muted-foreground">{greeting}</Text>
+          <Text className="text-[26px] font-bold tracking-tight text-foreground mt-0.5">
+            {firstName ? `Hey, ${firstName}` : "Hey there"}
+          </Text>
         </View>
-        <Tone
-          name="ink"
-          className="h-12 w-12 shrink-0 rounded-full items-center justify-center shadow-soft"
-        >
-          <Text className="text-[16px] font-bold text-ink-foreground">M</Text>
-        </Tone>
       </View>
 
-      {/* KPI row */}
+      {/* KPI row — Adherence and MRR have no endpoint behind them yet. */}
       <View className="flex-row gap-x-2">
         {[
-          { v: "24", l: "Active", tone: "" },
+          { v: isLoading ? "—" : String(activeClients), l: "Active", tone: "" },
           { v: "92%", l: "Adherence", tone: "text-success" },
           { v: "$8.4k", l: "MRR", tone: "" },
         ].map((k) => (
@@ -101,7 +125,7 @@ export function HomeScreen() {
           title="Needs you now"
           action={
             <Text className="text-[12px] text-muted-foreground bg-secondary/80 px-2 py-0.5 rounded-full font-semibold">
-              3
+              {triage.length}
             </Text>
           }
         />
@@ -164,7 +188,8 @@ export function HomeScreen() {
         </View>
       </View>
 
-      {/* AI suggestion */}
+      {/* AI suggestion — the assistant is async job-ticket based (docs/06) and
+          isn't wired yet, so this copy is still illustrative. */}
       <Card tone="lilac" glass className="p-4">
         <View className="flex-row items-start gap-x-3">
           <View className="h-10 w-10 shrink-0 bg-lilac-ink rounded-2xl justify-center items-center">
@@ -200,11 +225,23 @@ export function HomeScreen() {
           action={<Icon name="chevron-right" size={16} color="--muted-foreground" className="opacity-80" />}
         />
         <Card className="p-2" glass>
+          {feed.length === 0 && (
+            <View className="items-center gap-1 py-8">
+              <Text className="text-[14px] font-semibold text-foreground">
+                {isLoading ? "Loading activity…" : "No activity yet"}
+              </Text>
+              {!isLoading && (
+                <Text className="text-[12px] text-muted-foreground">
+                  Client messages will show up here.
+                </Text>
+              )}
+            </View>
+          )}
           {feed.map((f, i) => {
             const colors = colorMap[f.color] || { bg: "bg-muted", text: "text-muted-foreground" };
             return (
               <Pressable
-                key={f.name}
+                key={f.key}
                 className={cn(
                   "flex-row w-full items-center gap-x-3 rounded-2xl p-3 active:bg-secondary/60",
                   i !== feed.length - 1 && "border-b border-border/50"
@@ -226,7 +263,7 @@ export function HomeScreen() {
         </Card>
       </View>
 
-      {/* Weekly perf */}
+      {/* Weekly perf — no aggregate sessions/adherence endpoint exists yet. */}
       <Card tone="ink" className="p-5" glass>
         <View className="flex-row items-center justify-between">
           <View>

@@ -1,5 +1,5 @@
 import { useGetConversationsQuery } from "@/api/endpoints/chat.endpoints";
-import { formatThreadTime } from "@/features/shared/messaging/format";
+import { clientName, formatThreadTime } from "@/features/shared/messaging/format";
 import type { ConversationSummary } from "@/features/shared/messaging/types";
 import { cn } from "@/lib/utils";
 import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
@@ -13,11 +13,6 @@ import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 
 // Apple Liquid Glass is iOS 26+ only — fall back to a frosted card elsewhere.
 const LIQUID_GLASS = isLiquidGlassAvailable();
-
-function clientName(c: ConversationSummary): string {
-  const full = [c.client?.firstName, c.client?.lastName].filter(Boolean).join(" ").trim();
-  return full || "Client";
-}
 
 /** Last-message line — our own replies read "You: …", as in every chat app. */
 function preview(c: ConversationSummary): string {

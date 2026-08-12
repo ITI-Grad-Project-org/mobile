@@ -21,6 +21,8 @@ import { RoleToggle, type AuthRole } from "../components/RoleToggle";
 import { getAuthErrorMessage } from "../utils/authError";
 
 import {
+  useLazyGetCoachMeQuery,
+  useLazyGetCustomerMembershipsQuery,
   useLoginCoachMutation,
   useLoginCustomerMutation,
   useRegisterCoachMutation,
@@ -31,7 +33,10 @@ import {
   useLazyGetCoachProfileQuery,
 } from "@/api/endpoints/profile.endpoints";
 import { useAppDispatch } from "@/store";
+import { setActiveTenant } from "@/store/activeTenantSlice";
 import { saveTokens, setAuth } from "@/store/authSlice";
+import { setMemberships } from "@/store/membershipsSlice";
+import * as SecureStore from "expo-secure-store";
 
 export type AuthMode = "signup" | "login";
 
@@ -49,6 +54,8 @@ export function AuthScreen({
   const [loginCustomer] = useLoginCustomerMutation();
   const [fetchCoachProfile] = useLazyGetCoachProfileQuery();
   const [fetchClientProfile] = useLazyGetClientProfileQuery();
+  const [fetchCoachMe] = useLazyGetCoachMeQuery();
+  const [fetchMemberships] = useLazyGetCustomerMembershipsQuery();
 
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [role, setRole] = useState<AuthRole>("client");
@@ -77,6 +84,48 @@ export function AuthScreen({
           pw === confirmPw
       )
     : Boolean(emailOk && pw.length >= 1);
+
+  // Resolve the active tenant BEFORE navigating into the app. Tenant-scoped
+  // requests read `x-tenant-id` from the store, and the destination screens fire
+  // theirs on mount — landing there with no active tenant caches empty/failed
+  // results that never refetch once the tenant arrives.
+  const primeActiveTenant = async (persona: "coach" | "customer") => {
+    try {
+      if (persona === "coach") {
+        const me: any = await fetchCoachMe().unwrap();
+        const tenantId = me?.currentTenant?.id || me?.tenant?.id;
+        if (!tenantId) return;
+        dispatch(
+          setMemberships([
+            {
+              tenantId,
+              tenantName:
+                me?.currentTenant?.name || me?.businessName || "My Gym",
+              role: "owner",
+              status: "active",
+            },
+          ])
+        );
+        dispatch(setActiveTenant(tenantId));
+        await SecureStore.setItemAsync("activeTenantId", tenantId);
+        return;
+      }
+
+      const list: any[] = await fetchMemberships().unwrap();
+      if (!list?.length) return;
+      dispatch(setMemberships(list));
+      const active: any = list.find((m: any) => m.status === "active") || list[0];
+      const tenantId = active?.tenantId || active?.tenant?.id || active?.id;
+      if (tenantId) {
+        dispatch(setActiveTenant(tenantId));
+        await SecureStore.setItemAsync("activeTenantId", tenantId);
+      }
+    } catch (e) {
+      // A client with no coach yet legitimately has no tenant; the root layout
+      // retries this once the app is mounted.
+      console.warn("Could not resolve active tenant after login:", e);
+    }
+  };
 
   const enterApp = () => {
     setBusy(true);
@@ -182,6 +231,7 @@ export function AuthScreen({
       if (accessToken && refreshToken) {
         const persona = role === "coach" ? "coach" : "customer";
         await saveTokens(accessToken, refreshToken, persona);
+        await primeActiveTenant(persona);
 
         let profileDone: boolean;
         try {

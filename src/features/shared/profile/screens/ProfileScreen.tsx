@@ -109,7 +109,6 @@ function CoachProfile() {
     dispatch(clearActiveTenant());
     dispatch(clearMemberships());
     dispatch(baseApi.util.resetApiState());
-    router.replace("/(auth)/login");
   };
 
   const signOut = async () => {
@@ -537,12 +536,15 @@ function ClientProfile() {
     await clearTokens();
     // The chat socket authenticates with its own copy of the token.
     disconnectChatSocket();
+    // Leaving for the login screen is the root layout's job: it reacts to
+    // `isAuthenticated` going false and tears the signed-in stack down. Doing it
+    // here too would queue a second POP_TO_TOP that lands after the stack is
+    // already gone ("The action 'POP_TO_TOP' was not handled by any navigator").
     dispatch(clearAuth());
     dispatch(clearChatUi());
     dispatch(clearActiveTenant());
     dispatch(clearMemberships());
     dispatch(baseApi.util.resetApiState());
-    router.replace("/(auth)/login");
   };
 
   const signOut = async () => {

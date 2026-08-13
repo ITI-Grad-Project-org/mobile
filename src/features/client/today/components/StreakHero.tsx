@@ -292,7 +292,7 @@ export function StreakHero({
         <View className="mt-3 flex-row gap-2">
           <Stat label="Longest" value={`${summary.longestStreakDays}d`} />
           <Stat label="Active days" value={String(summary.activeDays)} />
-          <Stat label="Sessions" value={String(summary.totalActivities)} />
+          <Stat label="Activities" value={String(summary.totalActivities)} />
         </View>
       ) : null}
 
@@ -326,11 +326,11 @@ function captionFor({
   if (selected) {
     const when = formatCellDate(selected.date);
     if (selected.activityCount === 0) return `No activity · ${when}`;
-    const noun = selected.activityCount === 1 ? "session" : "sessions";
+    const noun = selected.activityCount === 1 ? "Activity" : "Activities";
     return `${selected.activityCount} ${noun} · ${when}`;
   }
-  if (!hasDays) return "Log your first session to start your streak";
-  return "Tap a square for that day · darker = more sessions";
+  if (!hasDays) return "Log your first Activity to start your streak";
+  return "Tap a square for that day · darker = more Activities";
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
@@ -385,7 +385,7 @@ const DayCell = React.memo(function DayCell({
     <Pressable
       hitSlop={4}
       accessibilityRole="button"
-      accessibilityLabel={`${cell.activityCount} sessions on ${formatCellDate(cell.date)}`}
+      accessibilityLabel={`${cell.activityCount} Activities on ${formatCellDate(cell.date)}`}
       onPress={() => onPress(selected ? null : cell)}
       className={cn(
         "rounded-[3px]",

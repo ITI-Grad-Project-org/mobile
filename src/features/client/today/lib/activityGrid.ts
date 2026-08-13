@@ -6,11 +6,6 @@ const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 /** A slot with no day behind it: before the graph's range, or after today. */
 export interface PadCell {
   kind: "pad";
-  /**
-   * After today. These aren't drawn at all — the grid ends on today's square and
-   * grows a cell at a time as the days arrive. Pads BEFORE the range still have
-   * to hold their space, or the first column's rows slide off their weekdays.
-   */
   future: boolean;
 }
 export interface DayCellData {

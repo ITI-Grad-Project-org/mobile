@@ -8,13 +8,14 @@ import { dayLogState, isDayCompleted, isDaySkipped } from "@/lib/logState";
 import { plannedExerciseInfo } from "@/lib/plannedExercise";
 import { useActiveCoach } from "@/lib/role";
 import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
-import { cn } from "@/lib/utils";
 import { Card } from "@/shared/ui/Card";
 import { Icon } from "@/shared/ui/Icon";
+import { WeekStepper } from "@/shared/ui/WeekStepper";
 import { todayIso } from "@/shared/utils/dayProgress";
 import { Pressable, ScrollView, Text, View } from "@/tw";
 import { router } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
+import { formatDateRange } from "@/features/client/program/lib/programWeek";
 import { DayCard } from "../components/DayCard";
 import { DaySheet } from "../components/DaySheet";
 import { NutritionOverview, useActiveNutritionPlan } from "@/features/client/nutrition";
@@ -104,7 +105,8 @@ export function PlanScreen() {
   const [weekOverride, setWeekOverride] = useState<number | null>(null);
   const selectedWeekIndex = weekOverride ?? todayWeekIndex ?? 0;
 
-  const days: DayPlan[] = useMemo(() => {
+  /** The selected week's days, straight off the payload. */
+  const rawWeekDays: any[] = useMemo(() => {
     let rawDays: any[] = [];
     if (weeksList.length > 0) {
       const selectedWeek = weeksList[selectedWeekIndex] || weeksList[0];
@@ -135,9 +137,20 @@ export function PlanScreen() {
       }
     }
 
-    if (!Array.isArray(rawDays) || rawDays.length === 0) return [];
+    return Array.isArray(rawDays) ? rawDays : [];
+  }, [fullProgram, publishedProgram, weeksList, selectedWeekIndex]);
 
-    return rawDays.map((day: any, i: number) => {
+  /** "10 – 16 Aug" for the stepper — "" when the payload carries no dates. */
+  const weekDateRange = useMemo(
+    () =>
+      formatDateRange(
+        rawWeekDays.map((day: any) => day?.scheduledDate ?? day?.date ?? day?.scheduledAt)
+      ),
+    [rawWeekDays]
+  );
+
+  const days: DayPlan[] = useMemo(() => {
+    return rawWeekDays.map((day: any, i: number) => {
       let shortWeekday = `D${day.dayNumber || day.position || i + 1}`;
       let dayOfMonth: number = Number(day.dayNumber || day.position || i + 1);
 
@@ -201,7 +214,7 @@ export function PlanScreen() {
         notes: day.notes,
       };
     });
-  }, [fullProgram, publishedProgram, weeksList, selectedWeekIndex, isTodayDay]);
+  }, [rawWeekDays, isTodayDay]);
 
   const [sub, setSub] = useState<PlanSub>("training");
   const [openDay, setOpenDay] = useState<DayPlan | null>(null);
@@ -269,46 +282,15 @@ export function PlanScreen() {
       {/* Content */}
       {sub === "training" ? (
         <View className="gap-y-4">
-          {/* Week Switcher Card */}
+          {/* Same stepper the program detail screen uses. */}
           {totalWeeks > 1 ? (
-            <Card glass className="flex-row items-center justify-between p-3">
-              <Pressable
-                onPress={() => setWeekOverride(Math.max(0, selectedWeekIndex - 1))}
-                disabled={selectedWeekIndex === 0}
-                className={cn(
-                  "h-9 w-9 items-center justify-center rounded-full bg-secondary active:opacity-70",
-                  selectedWeekIndex === 0 && "opacity-40"
-                )}
-                accessibilityLabel="Previous week"
-              >
-                <Icon name="chevron-left" size={16} color="--foreground" />
-              </Pressable>
-
-              <View className="items-center">
-                <Text className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  {publishedProgram?.schedulePhase
-                    ? publishedProgram.schedulePhase.replace("_", " ")
-                    : "BLOCK A"}
-                </Text>
-                <Text className="text-[16px] font-bold text-foreground">
-                  Week {selectedWeekIndex + 1} of {totalWeeks}
-                </Text>
-              </View>
-
-              <Pressable
-                onPress={() =>
-                  setWeekOverride(Math.min(totalWeeks - 1, selectedWeekIndex + 1))
-                }
-                disabled={selectedWeekIndex >= totalWeeks - 1}
-                className={cn(
-                  "h-9 w-9 items-center justify-center rounded-full bg-secondary active:opacity-70",
-                  selectedWeekIndex >= totalWeeks - 1 && "opacity-40"
-                )}
-                accessibilityLabel="Next week"
-              >
-                <Icon name="chevron-right" size={16} color="--foreground" />
-              </Pressable>
-            </Card>
+            <WeekStepper
+              index={selectedWeekIndex}
+              total={totalWeeks}
+              dateRange={weekDateRange}
+              isCurrent={todayWeekIndex === selectedWeekIndex}
+              onChange={setWeekOverride}
+            />
           ) : null}
 
           {days.length === 0 ? (

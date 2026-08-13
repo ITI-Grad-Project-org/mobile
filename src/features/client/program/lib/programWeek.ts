@@ -51,9 +51,14 @@ export function formatLongDay(iso: string | null): string | null {
   return `${WEEKDAYS[date.getDay()]} ${date.getDate()} ${MONTHS[date.getMonth()]}`;
 }
 
-function dateRangeOf(workouts: { date: string | null }[]): string {
-  const dates = workouts
-    .map((w) => parseIso(w.date))
+/**
+ * "10 – 16 Aug" — the span covered by a set of dates, ignoring the ones the
+ * payload left out. Empty when nothing in the set carries a date.
+ * Exported so the plan screen's week stepper reads identically to this one's.
+ */
+export function formatDateRange(values: unknown[]): string {
+  const dates = values
+    .map(parseIso)
     .filter((d): d is Date => d !== null)
     .sort((a, b) => a.getTime() - b.getTime());
   if (dates.length === 0) return "";
@@ -63,6 +68,10 @@ function dateRangeOf(workouts: { date: string | null }[]): string {
   return sameMonth
     ? `${first.getDate()} – ${last.getDate()} ${MONTHS[last.getMonth()]}`
     : `${first.getDate()} ${MONTHS[first.getMonth()]} – ${last.getDate()} ${MONTHS[last.getMonth()]}`;
+}
+
+function dateRangeOf(workouts: { date: string | null }[]): string {
+  return formatDateRange(workouts.map((w) => w.date));
 }
 
 /**

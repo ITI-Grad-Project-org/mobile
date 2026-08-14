@@ -6,6 +6,7 @@ import {
 import { Link as RouterLink } from "expo-router";
 import React from "react";
 import {
+  FlatList as RNFlatList,
   Pressable as RNPressable,
   ScrollView as RNScrollView,
   Text as RNText,
@@ -70,6 +71,20 @@ export const ScrollView = (
   });
 };
 ScrollView.displayName = "CSS(ScrollView)";
+
+// FlatList. Without this wrapper the bare RN list silently ignores
+// className/contentContainerClassName — no padding, no row gap.
+export const FlatList = <ItemT,>(
+  props: React.ComponentProps<typeof RNFlatList<ItemT>> & {
+    className?: string;
+    contentContainerClassName?: string;
+  }
+) => {
+  return useCssElement(RNFlatList as React.ComponentType<any>, props, {
+    className: "style",
+    contentContainerClassName: "contentContainerStyle",
+  });
+};
 
 // Pressable
 export const Pressable = (

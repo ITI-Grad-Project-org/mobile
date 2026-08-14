@@ -84,7 +84,10 @@ export function useCoachHomeData(): CoachHomeData {
   const profile = useGetCoachProfileQuery(undefined, skip);
   const clients = useGetClientsQuery({ tenantId: tenantId ?? "" }, skip);
   const conversations = useGetConversationsQuery({ tenantId: tenantId ?? "" }, skip);
-  const programs = useListProgramsQuery({ status: "published" }, skip);
+  const programs = useListProgramsQuery(
+    { tenantId: tenantId ?? "", status: "published" },
+    skip
+  );
 
   const coach = useMemo(() => resolveCoachFields(profile.data), [profile.data]);
 
@@ -147,8 +150,15 @@ export function useCoachHomeData(): CoachHomeData {
     unreadNames,
     plansEndingSoon,
     feed,
+    // No tenant yet = the queries are skipped, so every count below is a
+    // placeholder zero, not an answer. Report that as loading rather than
+    // letting the KPI row claim the coach has 0 clients.
     isLoading:
-      profile.isLoading || clients.isLoading || conversations.isLoading || programs.isLoading,
+      !tenantId ||
+      profile.isLoading ||
+      clients.isLoading ||
+      conversations.isLoading ||
+      programs.isLoading,
     isFetching:
       profile.isFetching || clients.isFetching || conversations.isFetching || programs.isFetching,
     isError: profile.isError || clients.isError || conversations.isError || programs.isError,

@@ -15,7 +15,7 @@ import { todayIso } from "@/shared/utils/dayProgress";
 import { Pressable, ScrollView, Text, View } from "@/tw";
 import { router } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
-import { formatDateRange } from "@/features/client/program/lib/programWeek";
+import { formatDateRange } from "@/features/shared/plans/lib/programWeek";
 import { DayCard } from "../components/DayCard";
 import { DaySheet } from "../components/DaySheet";
 import { NutritionOverview, useActiveNutritionPlan } from "@/features/client/nutrition";

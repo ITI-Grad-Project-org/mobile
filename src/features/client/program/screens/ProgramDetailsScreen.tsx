@@ -17,7 +17,7 @@ import { useMemo, useState } from "react";
 import { ActivityIndicator } from "react-native";
 import { TodayWorkoutCard } from "../components/TodayWorkoutCard";
 import { CompletedWorkoutRow, UpcomingWorkoutRow } from "../components/WorkoutRows";
-import { buildWeek, findTodayWeekIndex, weekCountOf } from "../lib/programWeek";
+import { buildWeek, findTodayWeekIndex, weekCountOf } from "@/features/shared/plans/lib/programWeek";
 
 interface ProgramDetailsScreenProps {
   programId: string;

@@ -19,13 +19,24 @@ const P = '/plans/training/client-programs';
 export const programsEndpoints = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     // ----- Program level
-    listPrograms: builder.query<any[], ListProgramsQuery | void>({
-      query: (params) => ({ url: P, params: params ?? undefined }),
-      providesTags: ['Programs'],
+    // tenantId is never sent in the URL — the x-tenant-id header/JWT does the
+    // real scoping. It rides along in the args so the cache is keyed per tenant
+    // and a tenant switch can't serve the previous coach's programs.
+    listPrograms: builder.query<any[], ListProgramsQuery & { tenantId: string }>({
+      query: ({ tenantId, ...params }) => ({ url: P, params }),
+      // The plain tag stays so the mutations below (which only know a programId)
+      // keep invalidating these lists.
+      providesTags: (result, error, { tenantId }) => [
+        'Programs',
+        { type: 'Programs', id: `LIST-${tenantId}` },
+      ],
     }),
-    getProgram: builder.query<any, string>({
-      query: (programId) => `${P}/${programId}`,
-      providesTags: (result, error, programId) => [{ type: 'Program', id: programId }],
+    getProgram: builder.query<any, { tenantId: string; programId: string }>({
+      query: ({ programId }) => `${P}/${programId}`,
+      providesTags: (result, error, { tenantId, programId }) => [
+        { type: 'Program', id: programId },
+        { type: 'Program', id: `${tenantId}:${programId}` },
+      ],
     }),
     createProgram: builder.mutation<any, CreateClientProgramDto>({
       query: (body) => ({ url: P, method: 'POST', body }),
@@ -101,9 +112,15 @@ export const programsEndpoints = baseApi.injectEndpoints({
       }),
       invalidatesTags: (result, error, { programId }) => [{ type: 'Program', id: programId }],
     }),
-    getProgramDayLog: builder.query<any, { programId: string; programDayId: string }>({
+    getProgramDayLog: builder.query<
+      any,
+      { tenantId: string; programId: string; programDayId: string }
+    >({
       query: ({ programId, programDayId }) =>
         `${P}/${programId}/days/${programDayId}/log`,
+      providesTags: (result, error, { tenantId, programDayId }) => [
+        { type: 'Program', id: `${tenantId}:DAY-${programDayId}` },
+      ],
     }),
 
     // ----- Exercises within a day

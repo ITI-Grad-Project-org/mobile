@@ -3,7 +3,7 @@ import { GlassButton } from "@/shared/ui/GlassButton";
 import { Icon } from "@/shared/ui/Icon";
 import { Pressable, Text, View } from "@/tw";
 import { Tone } from "@/tw/Tone";
-import type { ProgramWorkout } from "../lib/programWeek";
+import type { ProgramWorkout } from "@/features/shared/plans/lib/programWeek";
 
 interface TodayWorkoutCardProps {
   workout: ProgramWorkout;

@@ -3,7 +3,7 @@ import { View } from "@/tw";
 
 export default function CoachPlansRoute() {
   return (
-    <View className="flex-1 bg-background px-4">
+    <View className="flex-1 bg-background">
       <PlansScreen />
     </View>
   );

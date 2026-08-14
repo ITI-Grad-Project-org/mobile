@@ -3,7 +3,7 @@ import React, { type ReactNode } from "react";
 import { useCssElement } from "react-native-css";
 
 import { cn } from "@/lib/utils";
-import { Pressable } from "@/tw";
+import { Pressable, useCSSVariable } from "@/tw";
 
 const LIQUID_GLASS = isLiquidGlassAvailable();
 
@@ -24,6 +24,7 @@ export function GlassButton({
   accessibilityLabel,
   disabled,
   hitSlop = 8,
+  tint,
 }: {
   onPress: () => void;
   children: ReactNode;
@@ -31,7 +32,11 @@ export function GlassButton({
   accessibilityLabel?: string;
   disabled?: boolean;
   hitSlop?: number;
+  tint?: string;
 }) {
+  // Called before the platform branch so the hook order never depends on it.
+  const tintColor = useCSSVariable(tint ?? "") as string | undefined;
+
   if (!LIQUID_GLASS) {
     return (
       <Pressable
@@ -55,6 +60,7 @@ export function GlassButton({
     <CSSGlassView
       glassEffectStyle="regular"
       isInteractive={!disabled}
+      tintColor={tint ? tintColor : undefined}
       className={cn(
         // self-start so the wrapper hugs its content instead of stretching to
         // fill the cross axis — otherwise a back button spans the whole row.

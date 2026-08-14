@@ -2,7 +2,7 @@ import { Card } from "@/shared/ui/Card";
 import { Icon } from "@/shared/ui/Icon";
 import { Text, View } from "@/tw";
 import { Tone } from "@/tw/Tone";
-import { formatLongDay, type ProgramWorkout } from "../lib/programWeek";
+import { formatLongDay, type ProgramWorkout } from "@/features/shared/plans/lib/programWeek";
 
 /** The date column is a fixed width so every row's name starts on the same line. */
 const DATE_COLUMN_WIDTH = 38;

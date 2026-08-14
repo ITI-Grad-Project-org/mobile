@@ -61,14 +61,44 @@ function AppContent() {
   const activeTenantId = useAppSelector((state) => state.activeTenant.tenantId);
   const tenantSwitching = useAppSelector((state) => state.activeTenant.switching);
 
-  // Queries to load active tenant / memberships details
+  // Queries to load active tenant / memberships details.
+  // `refetchOnMountOrArgChange` matters here: the login screen primes these via
+  // lazy triggers, and if that call failed the cache holds an ERROR entry.
+  // Subscribing to a cached error does not retry on its own, so without this the
+  // active tenant would stay null for the whole session — every tenant-scoped
+  // query skipped, Home reading "0 clients" until the app was restarted.
   const { data: coachMe, isLoading: loadingCoach } = useGetCoachMeQuery(undefined, {
     skip: !isAuthenticated || persona !== 'coach',
+    refetchOnMountOrArgChange: true,
   });
 
   const { data: memberships, isLoading: loadingMemberships } = useGetCustomerMembershipsQuery(undefined, {
     skip: !isAuthenticated || persona !== 'customer',
+    refetchOnMountOrArgChange: true,
   });
+
+  // Safety net for a session that became authenticated with no active tenant —
+  // a login whose tenant prime failed, or any path that navigates into the app
+  // without priming. `restoreSession` only reads the persisted tenant once at
+  // startup, so without this the session stays tenant-less (and every screen
+  // renders empty) until the app is relaunched. The role effects below still
+  // have the final say once /auth/me or /memberships answers.
+  useEffect(() => {
+    if (!authRestored || !isAuthenticated || activeTenantId) return;
+    let cancelled = false;
+    SecureStore.getItemAsync('activeTenantId')
+      .then((savedTenantId) => {
+        if (!cancelled && savedTenantId) {
+          dispatch(setActiveTenant(savedTenantId));
+        }
+      })
+      .catch(() => {
+        // No persisted tenant: the role effects below are the only source left.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authRestored, isAuthenticated, activeTenantId, dispatch]);
 
   // Set memberships and active tenant for coach.
   // Gated on `authRestored` so the SecureStore-persisted tenant (applied in

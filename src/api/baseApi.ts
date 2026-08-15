@@ -116,6 +116,7 @@ export const baseApi = createApi({
     'NutritionDay',
     'NutritionLog',
     'Activity',
+    'Analytics',
     'Conversations',
     'Messages',
   ],

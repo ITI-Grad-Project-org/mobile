@@ -723,3 +723,194 @@ export interface ActivityGraphResponse {
 export interface ActivityGraphQuery {
   year?: number; // omit for the rolling latest 365 days
 }
+
+// ---------------------------------------------------------------------------
+// Analytics (coach-only, read-only)
+
+/** Percentage out of 100 (72.7 = "72.7%", do not multiply). null = no denominator. */
+export type Pct = number | null;
+/** Inclusive ISO calendar date, `YYYY-MM-DD` — a date, not a timestamp. */
+export type ISODate = string;
+
+/**
+ * Send neither bound for the last 30 days, or one for a 30-day window anchored
+ * to it. `to` before `from` is a 400.
+ */
+export interface DateWindow {
+  from?: ISODate;
+  to?: ISODate;
+}
+
+export interface AttentionParams {
+  /** Measure urgency from this date instead of today. */
+  asOf?: ISODate;
+  riskThresholdDays?: number; // >= 1, default 7
+  endingHorizonDays?: number; // >= 1, default 14
+}
+
+export interface AnalyticsActivityParams extends DateWindow {
+  /** 1–200, default 50. Outside that range is rejected, not clamped. */
+  limit?: number;
+}
+
+export interface AdherenceParams extends DateWindow {
+  /** Omit for the whole roster. */
+  membershipId?: string;
+}
+
+/** MRR keyed by ISO 4217 code. There is no FX rate — render one line per
+ *  currency and never sum them. A single-currency practice gets a one-entry
+ *  map; still iterate it. */
+export type CurrencyAmounts = Record<string, number>;
+
+export interface OverviewWeekday {
+  weekday: number; // 1 = Monday … 7 = Sunday — confirm the base
+  volume: number;
+}
+
+export interface Overview {
+  roster: { total: number; active: number; paused: number }; // confirm
+  mrr: CurrencyAmounts;
+  sessionAdherencePct: Pct;
+  /** Derived from the window's END date, not today. Label the card from the
+   *  window whenever the user has changed the range. Weeks run Mon–Sun. */
+  thisWeek: {
+    volume: number;
+    previousVolume: number | null; // null = no prior week to compare
+    changePct: Pct;
+    /** Always seven rows including empty days — do not gap-fill. */
+    byDay: OverviewWeekday[];
+  };
+  /** Badges for the /analytics/attention lists, computed at the DEFAULT
+   *  thresholds. Pass custom thresholds to attention and they disagree. */
+  attentionCounts: {
+    atRisk: number;
+    checkinsAwaitingReview: number;
+    programsEndingSoon: number;
+  };
+}
+
+export interface AtRiskClient {
+  membershipId: string;
+  clientName: string;
+  daysSilent: number;
+  /** Counted from the join date, not from a last activity: word these rows
+   *  "hasn't started yet", not "gone quiet for 9 days". */
+  neverActive: boolean;
+}
+export interface CheckinAwaitingReview {
+  checkinId: string;
+  membershipId: string;
+  clientName: string;
+  submittedAt: string; // timestamp
+}
+export interface ProgramEndingSoon {
+  programId: string;
+  membershipId: string;
+  clientName: string;
+  endDate: ISODate;
+  /** Covers the whole programme run, not the window. */
+  completionPct: Pct;
+}
+/** Three lists, each already sorted most-urgent-first — never re-sort. Paused
+ *  memberships never appear. The action differs per list: message / review /
+ *  renew, so keep them as three sections. */
+export interface Attention {
+  atRisk: AtRiskClient[];
+  checkinsAwaitingReview: CheckinAwaitingReview[];
+  programsEndingSoon: ProgramEndingSoon[];
+}
+
+export interface AnalyticsActivityRow {
+  id: string;
+  membershipId: string;
+  clientName: string;
+  type: 'workout_set' | 'meal' | 'checkin' | (string & {}); // confirm the union
+  /** Orders the feed (newest first). */
+  loggedAt: string;
+  /** Display only — many rows share one value, so sorting by it scrambles. */
+  trainingDate: ISODate;
+  summary: string; // confirm
+}
+
+export interface RosterClientRow {
+  membershipId: string;
+  clientName: string;
+  /** null = nothing scheduled; these rows sort LAST and are not the worst
+   *  performers. Render a dash. */
+  adherencePct: Pct;
+}
+/** Ordered worst-adherence-first: the risk list is the top, the leaderboard is
+ *  the bottom reversed. One call, two sections. */
+export interface Roster {
+  statusMix: Record<string, number>; // confirm
+  mrr: CurrencyAmounts;
+  clients: RosterClientRow[];
+}
+
+/**
+ * Two independent readings — show both, never average them.
+ * Session completion counts days the client never opened the app against them.
+ * Volume adherence compares actual reps × weight to the prescription, and is
+ * meaningless without `comparableSets`: RPE / %1RM sets have no absolute target
+ * and are excluded from both sides, so an all-RPE programme returns
+ * `comparableSets: 0` with a null ratio meaning "not measurable this way".
+ */
+export interface Adherence {
+  sessionAdherencePct: Pct;
+  scheduledSessions: number; // confirm
+  completedSessions: number; // confirm
+  volumeAdherencePct: Pct;
+  comparableSets: number;
+}
+
+/** Returned exactly as recorded, every field nullable, values never carried
+ *  forward. A gap is a gap: no fill, no connectNulls, no last-value-forward. */
+export interface ProgressMeasurement {
+  date: ISODate;
+  weightKg: number | null;
+  bodyFatPct: number | null;
+  // Further measurement fields exist and are all nullable — add them here once
+  // confirmed against the analytics-service schema.
+}
+export interface StrengthPoint {
+  date: ISODate;
+  /** Epley estimate, weight × (1 + reps / 30), best set per exercise per day.
+   *  Label the axis "est. 1RM". */
+  estimated1rm: number;
+}
+export interface StrengthSeries {
+  /** Grouped by the name on the logged row, not the exercise id — two
+   *  similarly-named entries are legitimately two lines. */
+  exerciseName: string;
+  /** null when the window holds a single training day: hide the delta chip
+   *  rather than showing "0%". */
+  changePct: Pct;
+  /** Capped at 12 reps; bodyweight and timed work are excluded, so some
+   *  exercises returning nothing is by design, not "no data". */
+  points: StrengthPoint[];
+}
+export interface Progress {
+  measurements: ProgressMeasurement[];
+  /** Most-trained exercise first — default an exercise picker to [0]. */
+  strength: StrengthSeries[];
+}
+
+/** Whole history per template, never windowed, ordered by how widely used.
+ *  The headline is `avgLastActiveWeek` against `durationWeeks` ("stops at week
+ *  5 of 12") — one paired stat, not two columns. */
+export interface TemplateEffectiveness {
+  templateId: string;
+  templateName: string;
+  timesAssigned: number; // confirm — this is the sort key
+  durationWeeks: number;
+  /** null for a template with no completed session — excluded from the mean. */
+  avgLastActiveWeek: number | null;
+}
+
+/** One row per planned week including dead ones — plots as-is, no gap-filling.
+ *  The curve never rises: an uptick is a sort bug on `week`. */
+export interface SurvivalPoint {
+  week: number;
+  survivingPct: number; // monotonically non-increasing
+}

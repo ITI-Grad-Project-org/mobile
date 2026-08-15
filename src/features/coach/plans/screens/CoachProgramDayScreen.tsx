@@ -19,13 +19,6 @@ interface CoachProgramDayScreenProps {
   programDayId: string;
 }
 
-/**
- * One prescribed training day, plus whatever came back from the client.
- *
- * The prescription is read out of the parent program's cached payload — this
- * screen re-subscribes to the same query rather than asking for the day again —
- * so opening a day is instant. Only the log is a fresh request.
- */
 export function CoachProgramDayScreen({ programId, programDayId }: CoachProgramDayScreenProps) {
   const { tenantId } = useActiveTenant();
 
@@ -134,7 +127,7 @@ function ExerciseCard({ exercise }: { exercise: any }) {
   const notes = exercise?.coachNotes || exercise?.notes || null;
 
   return (
-    <Card glass className="p-4">
+    <Card className="p-4">
       <Text className="text-[14.5px] font-semibold text-foreground">{name}</Text>
 
       {chips.length > 0 ? (

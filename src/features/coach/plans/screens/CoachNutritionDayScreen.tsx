@@ -10,7 +10,7 @@ import { SectionHeader } from "@/shared/ui/SectionHeader";
 import { ScrollView, Text, View } from "@/tw";
 import { useMemo } from "react";
 import { NotLoggedYet, PlanLoading, PlanNotFound } from "../components/PlanStates";
-import { PlanTargetsRow } from "../components/PlanTargetsRow";
+import { DailyTargetCard } from "../components/DailyTargetCard";
 import { findDayById, formatDayDate, mealsOf } from "../lib/coachPlanDays";
 import { formatNumber, humanize, normalizePlan } from "../lib/normalizePlan";
 
@@ -69,10 +69,10 @@ export function CoachNutritionDayScreen({ planId, dayId }: CoachNutritionDayScre
       />
 
       <View className="gap-y-4 p-4">
-        <PlanTargetsRow
+        <DailyTargetCard
           targets={day?.effectiveTargets}
-          title="Target for this day"
-          hint={
+          kicker="Target for this day"
+          trailing={
             typeof day?.prescribedTotals?.calories === "number"
               ? `${formatNumber(day.prescribedTotals.calories)} kcal planned`
               : null
@@ -139,7 +139,7 @@ function MealCard({ meal }: { meal: any }) {
     .join(" · ");
 
   return (
-    <Card glass className="p-4">
+    <Card className="p-4">
       <Text className="text-[14.5px] font-semibold text-foreground">
         {meal?.mealName || humanize(meal?.slot) || "Meal"}
       </Text>
@@ -240,7 +240,7 @@ function NutritionReviewCard({ review }: { review: any }) {
   const state = reported?.state ? String(reported.state).replace(/_/g, " ") : null;
 
   return (
-    <Card glass className="p-4">
+    <Card className="p-4">
       {state ? (
         <View className="mb-3 flex-row items-center gap-x-2">
           <Icon name="check" size={15} color="--mint-ink" />

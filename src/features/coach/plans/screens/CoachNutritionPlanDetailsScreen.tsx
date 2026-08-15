@@ -8,10 +8,10 @@ import { WeekStepper } from "@/shared/ui/WeekStepper";
 import { Pressable, ScrollView, Text, View } from "@/tw";
 import { router } from "expo-router";
 import { useMemo, useState } from "react";
+import { DailyTargetCard } from "../components/DailyTargetCard";
 import { PlanClientRow } from "../components/PlanClientRow";
 import { PlanLoading, PlanNotFound } from "../components/PlanStates";
 import { PlanTimelineCard, statValue } from "../components/PlanTimelineCard";
-import { PlanTargetsRow } from "../components/PlanTargetsRow";
 import { useCoachPlanClient } from "../hooks/useCoachPlanClient";
 import {
   buildNutritionWeek,
@@ -19,9 +19,10 @@ import {
   nutritionMealsPerDay,
   nutritionWeekCount,
   planSchedule,
-  relativeSince,
+  describePlanStart,
   todayIso,
 } from "../lib/coachPlanDays";
+import { tdeeOf } from "../lib/macroSplit";
 import { formatNumber, normalizePlan } from "../lib/normalizePlan";
 
 interface CoachNutritionPlanDetailsScreenProps {
@@ -118,9 +119,8 @@ export function CoachNutritionPlanDetailsScreen({
       <View className="gap-y-4 p-4">
         <PlanClientRow
           client={client}
-          since={
-            schedule.startDate ? `Started ${relativeSince(schedule.startDate, today)}` : null
-          }
+          kind="nutrition"
+          since={describePlanStart(schedule.startDate, today)}
           onChat={
             client?.id
               ? () =>
@@ -134,7 +134,7 @@ export function CoachNutritionPlanDetailsScreen({
 
         <PlanTimelineCard plan={plan} schedule={schedule} stats={stats} />
 
-        <PlanTargetsRow targets={data?.targets} title="Daily target" />
+        <DailyTargetCard targets={data?.targets} tdee={tdeeOf(data)} />
 
         <WeekStepper
           index={weekIndex}

@@ -25,7 +25,6 @@ export function PlanCard({ plan, onPress, onContinue }: PlanCardProps) {
   return (
     <Card
       interactive
-      glass
       onPress={onPress}
       accessibilityRole="button"
       className={cn("gap-3 rounded-lg px-3.75 py-3.5", plan.isArchived && "opacity-70")}

@@ -261,6 +261,21 @@ export function relativeSince(iso: string | null, today: string): string | null 
   return weeks < 9 ? `${weeks} weeks ago` : `${Math.floor(days / 30)} months ago`;
 }
 
+/**
+ * "Started 4 days ago" / "Starts tomorrow" — the verb has to follow the tense,
+ * so the whole phrase is built here rather than prefixed at the call site.
+ */
+export function describePlanStart(iso: string | null, today: string): string | null {
+  const start = parseIso(iso);
+  const now = parseIso(today);
+  if (!start || !now) return null;
+
+  const days = Math.round((now.getTime() - start.getTime()) / 86_400_000);
+  if (days === 0) return "Starts today";
+  if (days < 0) return `Starts ${relativeSince(iso, today)}`;
+  return `Started ${relativeSince(iso, today)}`;
+}
+
 export interface ProgramStats {
   sessions: number;
   restDays: number;

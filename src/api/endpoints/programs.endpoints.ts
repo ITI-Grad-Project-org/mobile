@@ -40,7 +40,8 @@ export const programsEndpoints = baseApi.injectEndpoints({
     }),
     createProgram: builder.mutation<any, CreateClientProgramDto>({
       query: (body) => ({ url: P, method: 'POST', body }),
-      invalidatesTags: ['Programs'],
+      // Assigning work changes what analytics counts as scheduled.
+      invalidatesTags: ['Programs', 'Analytics'],
     }),
     updateProgram: builder.mutation<
       any,
@@ -61,6 +62,7 @@ export const programsEndpoints = baseApi.injectEndpoints({
       invalidatesTags: (result, error, programId) => [
         { type: 'Program', id: programId },
         'Programs',
+        'Analytics',
       ],
     }),
     publishProgram: builder.mutation<any, string>({
@@ -68,6 +70,7 @@ export const programsEndpoints = baseApi.injectEndpoints({
       invalidatesTags: (result, error, programId) => [
         { type: 'Program', id: programId },
         'Programs',
+        'Analytics',
       ],
     }),
     rescheduleProgram: builder.mutation<
@@ -82,6 +85,7 @@ export const programsEndpoints = baseApi.injectEndpoints({
       invalidatesTags: (result, error, { programId }) => [
         { type: 'Program', id: programId },
         'Programs',
+        'Analytics',
       ],
     }),
     cancelProgram: builder.mutation<any, string>({
@@ -89,6 +93,7 @@ export const programsEndpoints = baseApi.injectEndpoints({
       invalidatesTags: (result, error, programId) => [
         { type: 'Program', id: programId },
         'Programs',
+        'Analytics',
       ],
     }),
     // Restore an archived program to the coach's normal lists.
@@ -97,6 +102,7 @@ export const programsEndpoints = baseApi.injectEndpoints({
       invalidatesTags: (result, error, programId) => [
         { type: 'Program', id: programId },
         'Programs',
+        'Analytics',
       ],
     }),
 

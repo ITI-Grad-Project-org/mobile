@@ -242,7 +242,6 @@ export function ClientsScreen() {
                         interactive
                         onPress={() => setActiveClient(c)}
                         className="flex-row items-center gap-x-3 p-3"
-                        glass
                       >
                         {avatarUrl ? (
                           <Image

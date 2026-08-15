@@ -13,7 +13,7 @@ import { PlanClientRow } from "../components/PlanClientRow";
 import { PlanLoading, PlanNotFound } from "../components/PlanStates";
 import { PlanTimelineCard } from "../components/PlanTimelineCard";
 import { useCoachPlanClient } from "../hooks/useCoachPlanClient";
-import { planSchedule, programStats, relativeSince, todayIso } from "../lib/coachPlanDays";
+import { describePlanStart, planSchedule, programStats, todayIso } from "../lib/coachPlanDays";
 import { normalizePlan } from "../lib/normalizePlan";
 
 interface CoachProgramDetailsScreenProps {
@@ -111,11 +111,8 @@ export function CoachProgramDetailsScreen({ programId }: CoachProgramDetailsScre
       <View className="gap-y-4 p-4">
         <PlanClientRow
           client={client}
-          since={
-            schedule.startDate
-              ? `Started ${relativeSince(schedule.startDate, today)}`
-              : null
-          }
+          kind="training"
+          since={describePlanStart(schedule.startDate, today)}
           onChat={
             client?.id
               ? () =>

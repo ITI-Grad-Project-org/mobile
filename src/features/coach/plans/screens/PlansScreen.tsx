@@ -128,9 +128,6 @@ export function PlansScreen() {
         keyExtractor={(plan) => plan.id}
         renderItem={renderItem}
         contentContainerClassName="px-5 pt-3.5 pb-[110px] gap-3"
-        // The 110px above clears the floating tab bar; this adds the home
-        // indicator on the devices that have one, as a class rather than a
-        // computed style.
         ListFooterComponent={<View className={insets.bottom > 0 ? "h-8.5" : "h-0"} />}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"

@@ -4,8 +4,6 @@ import { Card } from "@/shared/ui/Card";
 import { Icon } from "@/shared/ui/Icon";
 import { SectionTitle } from "@/shared/ui/SectionTitle";
 import { Pressable, ScrollView, Text, useCSSVariable, View } from "@/tw";
-import { Image } from "@/tw/image";
-import { Tone } from "@/tw/Tone";
 import { LinearGradient } from "expo-linear-gradient";
 import { useMemo } from "react";
 import { RefreshControl } from "react-native";
@@ -35,8 +33,6 @@ export function HomeScreen() {
   const {
     greeting,
     firstName,
-    fullName,
-    avatarUrl,
     activeClients,
     unreadThreads,
     unreadNames,
@@ -224,7 +220,7 @@ export function HomeScreen() {
           title="Today's activity"
           action={<Icon name="chevron-right" size={16} color="--muted-foreground" className="opacity-80" />}
         />
-        <Card className="p-2" glass>
+        <Card className="p-2">
           {feed.length === 0 && (
             <View className="items-center gap-1 py-8">
               <Text className="text-[14px] font-semibold text-foreground">

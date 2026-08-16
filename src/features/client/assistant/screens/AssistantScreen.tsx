@@ -3,10 +3,10 @@ import { Card } from "@/shared/ui/Card";
 import { Icon, type IconName } from "@/shared/ui/Icon";
 import { SectionTitle } from "@/shared/ui/SectionTitle";
 import { Pressable, ScrollView, Text, TextInput, View, useCSSVariable } from "@/tw";
+import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import { useCallback, useState } from "react";
 import { Keyboard, KeyboardAvoidingView, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 
 // Apple Liquid Glass is iOS 26+ only — fall back to a Card elsewhere.
 const LIQUID_GLASS = isLiquidGlassAvailable();
@@ -141,7 +141,7 @@ export function AssistantScreen() {
               {inputRow}
             </GlassView>
           ) : (
-            <Card className="p-3 mx-2" style={{ marginBottom: insets.bottom + 8 }}>
+            <Card className="p-3 mx-2 mb-2">
               {inputRow}
             </Card>
           );

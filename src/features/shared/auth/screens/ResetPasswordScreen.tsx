@@ -1,13 +1,12 @@
 import { Feather } from "@expo/vector-icons";
+import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
-  Platform,
   TextInput as RNTextInput,
 } from "react-native";
-import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 
 import {
   useForgotPasswordCoachMutation,
@@ -120,8 +119,9 @@ export function ResetPasswordScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
       <KeyboardAvoidingView
+        behavior="padding"
+        keyboardVerticalOffset={10}
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView
           className="flex-1"

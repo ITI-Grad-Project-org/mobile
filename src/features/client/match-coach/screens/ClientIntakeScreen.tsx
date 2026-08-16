@@ -4,7 +4,6 @@ import {
   useUpdateIntakeMutation,
 } from "@/api/endpoints/intake.endpoints";
 import { useConfirmOnboardingMutation } from "@/api/endpoints/onboarding.endpoints";
-import { intakeToFormState } from "../intakeMapping";
 import type {
   CreateClientIntakeDto,
   DietaryPreference,
@@ -29,8 +28,9 @@ import { Tone } from "@/tw/Tone";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { useState } from "react";
-import { ActivityIndicator } from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView } from "react-native";
 import { GOAL_STEPS } from "../config";
+import { intakeToFormState } from "../intakeMapping";
 
 const toEnumValue = (s: string) =>
   s.trim().toLowerCase().replace(/[\s-]+/g, "_");
@@ -230,154 +230,161 @@ export function ClientIntakeScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
-      <View className="flex-row items-center justify-between px-5 pb-3 pt-2">
-        <GlassButton
-          onPress={() => router.back()}
-          accessibilityLabel="Back"
-          className="h-9 w-9 rounded-full"
-        >
-          <Icon name="chevron-left" size={18} color="--foreground" />
-        </GlassButton>
-        <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-          {isEdit ? "Edit Intake" : "Client Intake"}
-        </Text>
-      </View>
-
-      <ScrollView
-        className="flex-1"
-        contentContainerClassName="px-5 pb-8 pt-2 grow"
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+      <KeyboardAvoidingView
+        behavior="padding"
+        keyboardVerticalOffset={10}
+        style={{ flex: 1 }}
       >
-        <Tone
-          name="mint"
-          className="flex-row items-center gap-3 rounded-3xl p-4 shadow-soft"
-          glass
-        >
-          {avatarUrl ? (
-            <Image
-              source={{ uri: avatarUrl }}
-              className="h-14 w-14 rounded-2xl bg-secondary object-cover"
-            />
-          ) : (
-            <View className="h-14 w-14 rounded-2xl bg-secondary items-center justify-center">
-              <Icon name="person" size={26} color="--mint-ink" />
-            </View>
-          )}
-
-          <View className="flex-1 min-w-0">
-            <Text className="text-[11px] font-semibold uppercase tracking-wider text-mint-ink opacity-70">
-              {isEdit ? "Your coach" : "You're joining"}
-            </Text>
-            <Text
-              className="text-[18px] font-bold text-mint-ink truncate"
-              numberOfLines={1}
-            >
-              {coachName}
-            </Text>
-            {businessName ? (
-              <Text className="text-[12px] text-mint-ink opacity-80" numberOfLines={1}>
-                {businessName}
-              </Text>
-            ) : null}
-          </View>
-        </Tone>
-
-        <Text className="mt-7 text-[26px] font-bold text-foreground">
-          {isEdit ? "Update your intake" : "A few quick questions"}
-        </Text>
-        <Text className="mt-1 text-[14px] text-muted-foreground">
-          {isEdit
-            ? `Keep ${firstName} up to date with your goals and preferences.`
-            : `So ${firstName} can build the right plan for you.`}
-        </Text>
-
-        {submitErr ? (
-          <View className="mt-4 rounded-2xl bg-destructive/10 border border-destructive/20 p-3">
-            <Text className="text-[12.5px] font-medium text-destructive text-center">
-              {submitErr}
-            </Text>
-          </View>
-        ) : null}
-
-        <View className="mt-6 gap-6">
-          <View>
-            <ChipsLabel>
-              How many days a week do you want to train?
-            </ChipsLabel>
-            <ChipsRow
-              value={days}
-              onChange={setDays}
-              options={["2", "3", "4", "5", "6"]}
-            />
-          </View>
-          <View>
-            <ChipsLabel>What&apos;s your fitness level?</ChipsLabel>
-            <ChipsRow
-              value={level}
-              onChange={setLevel}
-              options={["Beginner", "Intermediate", "Advanced"]}
-            />
-          </View>
-          <View>
-            <ChipsLabel>What are you focused on?</ChipsLabel>
-            <ChipsRow
-              multiValue={focus}
-              onToggle={(o) =>
-                setFocus((f) =>
-                  f.includes(o) ? f.filter((x) => x !== o) : [...f, o]
-                )
-              }
-              options={[
-                "Strength",
-                "Yoga",
-                "Cardio",
-                "Weight loss",
-                "Mobility",
-              ]}
-            />
-          </View>
+        <View className="flex-row items-center justify-between px-5 pb-3 pt-2">
+          <GlassButton
+            onPress={() => router.back()}
+            accessibilityLabel="Back"
+            className="h-9 w-9 rounded-full"
+          >
+            <Icon name="chevron-left" size={18} color="--foreground" />
+          </GlassButton>
+          <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            {isEdit ? "Edit Intake" : "Client Intake"}
+          </Text>
         </View>
 
-        {GOAL_STEPS.map((step) => (
-          <View key={step.title} className="mt-8">
-            <Text className="text-[20px] font-bold text-foreground">
-              {step.title}
-            </Text>
-            {step.subtitle ? (
-              <Text className="mt-1 text-[13.5px] text-muted-foreground">
-                {step.subtitle}
+        <ScrollView
+          className="flex-1"
+          contentContainerClassName="px-5 pb-8 pt-2 grow"
+          keyboardShouldPersistTaps="always"
+          keyboardDismissMode="none"
+          showsVerticalScrollIndicator={false}
+        >
+          <Tone
+            name="mint"
+            className="flex-row items-center gap-3 rounded-3xl p-4 shadow-soft"
+            glass
+          >
+            {avatarUrl ? (
+              <Image
+                source={{ uri: avatarUrl }}
+                className="h-14 w-14 rounded-2xl bg-secondary object-cover"
+              />
+            ) : (
+              <View className="h-14 w-14 rounded-2xl bg-secondary items-center justify-center">
+                <Icon name="person" size={26} color="--mint-ink" />
+              </View>
+            )}
+
+            <View className="flex-1 min-w-0">
+              <Text className="text-[11px] font-semibold uppercase tracking-wider text-mint-ink opacity-70">
+                {isEdit ? "Your coach" : "You're joining"}
               </Text>
-            ) : null}
-            <View className="mt-5 gap-5">
-              {step.fields.map((f) => (
-                <FieldRenderer
-                  key={f.key}
-                  field={f}
-                  value={goalData[f.key]}
-                  onChange={(v) => setGoal(f.key, v)}
-                />
-              ))}
+              <Text
+                className="text-[18px] font-bold text-mint-ink truncate"
+                numberOfLines={1}
+              >
+                {coachName}
+              </Text>
+              {businessName ? (
+                <Text className="text-[12px] text-mint-ink opacity-80" numberOfLines={1}>
+                  {businessName}
+                </Text>
+              ) : null}
+            </View>
+          </Tone>
+
+          <Text className="mt-7 text-[26px] font-bold text-foreground">
+            {isEdit ? "Update your intake" : "A few quick questions"}
+          </Text>
+          <Text className="mt-1 text-[14px] text-muted-foreground">
+            {isEdit
+              ? `Keep ${firstName} up to date with your goals and preferences.`
+              : `So ${firstName} can build the right plan for you.`}
+          </Text>
+
+          {submitErr ? (
+            <View className="mt-4 rounded-2xl bg-destructive/10 border border-destructive/20 p-3">
+              <Text className="text-[12.5px] font-medium text-destructive text-center">
+                {submitErr}
+              </Text>
+            </View>
+          ) : null}
+
+          <View className="mt-6 gap-6">
+            <View>
+              <ChipsLabel>
+                How many days a week do you want to train?
+              </ChipsLabel>
+              <ChipsRow
+                value={days}
+                onChange={setDays}
+                options={["2", "3", "4", "5", "6"]}
+              />
+            </View>
+            <View>
+              <ChipsLabel>What&apos;s your fitness level?</ChipsLabel>
+              <ChipsRow
+                value={level}
+                onChange={setLevel}
+                options={["Beginner", "Intermediate", "Advanced"]}
+              />
+            </View>
+            <View>
+              <ChipsLabel>What are you focused on?</ChipsLabel>
+              <ChipsRow
+                multiValue={focus}
+                onToggle={(o) =>
+                  setFocus((f) =>
+                    f.includes(o) ? f.filter((x) => x !== o) : [...f, o]
+                  )
+                }
+                options={[
+                  "Strength",
+                  "Yoga",
+                  "Cardio",
+                  "Weight loss",
+                  "Mobility",
+                ]}
+              />
             </View>
           </View>
-        ))}
-      </ScrollView>
 
-      <View className="border-t border-border/60 px-5 pt-3">
-        <Pressable
-          disabled={!ready || isSubmitting}
-          onPress={handleSubmit}
-          className="h-14 flex-row items-center justify-center gap-2 rounded-2xl bg-primary shadow-soft active:opacity-90 disabled:opacity-50"
-        >
-          {isSubmitting ? (
-            <ActivityIndicator color="#ffffff" size="small" />
-          ) : (
-            <Text className="text-[15px] font-semibold text-primary-foreground">
-              {isEdit ? "Save changes" : "Submit Intake & Join"}
-            </Text>
-          )}
-        </Pressable>
-      </View>
+          {GOAL_STEPS.map((step) => (
+            <View key={step.title} className="mt-8">
+              <Text className="text-[20px] font-bold text-foreground">
+                {step.title}
+              </Text>
+              {step.subtitle ? (
+                <Text className="mt-1 text-[13.5px] text-muted-foreground">
+                  {step.subtitle}
+                </Text>
+              ) : null}
+              <View className="mt-5 gap-5">
+                {step.fields.map((f) => (
+                  <FieldRenderer
+                    key={f.key}
+                    field={f}
+                    value={goalData[f.key]}
+                    onChange={(v) => setGoal(f.key, v)}
+                  />
+                ))}
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+
+        <View className="border-t border-border/60 px-5 pt-3">
+          <Pressable
+            disabled={!ready || isSubmitting}
+            onPress={handleSubmit}
+            className="h-14 flex-row items-center justify-center gap-2 rounded-2xl bg-primary shadow-soft active:opacity-90 disabled:opacity-50"
+          >
+            {isSubmitting ? (
+              <ActivityIndicator color="#ffffff" size="small" />
+            ) : (
+              <Text className="text-[15px] font-semibold text-primary-foreground">
+                {isEdit ? "Save changes" : "Submit Intake & Join"}
+              </Text>
+            )}
+          </Pressable>
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

@@ -29,7 +29,7 @@ import { Image } from "@/tw/image";
 import { Tone } from "@/tw/Tone";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Platform } from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView } from "react-native";
 
 import { CoachCard } from "../components/CoachCard";
 import { JoinRequestModal } from "../components/JoinRequestModal";
@@ -406,8 +406,9 @@ export function MatchCoachScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
       <KeyboardAvoidingView
+        behavior="padding"
+        keyboardVerticalOffset={10}
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         {/* Header + toggle */}
         <View className="gap-3 px-5 pb-3 pt-2">

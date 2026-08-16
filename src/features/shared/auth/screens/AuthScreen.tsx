@@ -3,7 +3,6 @@ import { useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
-  Platform,
 } from "react-native";
 
 import { hasOnboarded, resetOnboarded } from "@/shared/hooks/useOnboarding";
@@ -76,13 +75,13 @@ export function AuthScreen({
 
   const valid = isSignup
     ? Boolean(
-        fname.trim() &&
-          lname.trim() &&
-          (!isCoach || businessName.trim()) &&
-          emailOk &&
-          pwOk &&
-          pw === confirmPw
-      )
+      fname.trim() &&
+      lname.trim() &&
+      (!isCoach || businessName.trim()) &&
+      emailOk &&
+      pwOk &&
+      pw === confirmPw
+    )
     : Boolean(emailOk && pw.length >= 1);
 
   // Resolve the active tenant BEFORE navigating into the app. Tenant-scoped
@@ -296,8 +295,9 @@ export function AuthScreen({
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
       <KeyboardAvoidingView
+        behavior="padding"
+        keyboardVerticalOffset={10}
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView
           className="flex-1"

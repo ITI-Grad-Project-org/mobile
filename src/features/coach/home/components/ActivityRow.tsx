@@ -40,28 +40,28 @@ export function ActivityRow({ row, divided, onPress }: ActivityRowProps) {
     <Pressable
       onPress={onPress}
       className={cn(
-        "flex-row items-center gap-3 px-3.5 py-3 active:bg-secondary/50",
+        "flex-row items-center gap-3 px-3.5 py-3.5 active:bg-secondary/50",
         divided && "border-t border-border"
       )}
     >
-      <View className={cn("h-8 w-8 shrink-0 items-center justify-center rounded-full", tint.bg)}>
-        <Text className={cn("text-[11px] font-semibold", tint.fg)}>
+      <View className={cn("h-8.5 w-8.5 shrink-0 items-center justify-center rounded-full", tint.bg)}>
+        <Text className={cn("text-[12px] font-semibold", tint.fg)}>
           {initialsOf(row.clientName)}
         </Text>
       </View>
 
       <View className="min-w-0 flex-1">
-        <Text className="text-sm font-semibold text-foreground" numberOfLines={1}>
+        <Text className="text-[15px] font-semibold text-foreground" numberOfLines={1}>
           {row.clientName}
         </Text>
-        <Text className="mt-0.5 text-xs text-muted-foreground" numberOfLines={1}>
+        <Text className="mt-0.5 text-[12.5px] text-muted-foreground" numberOfLines={1}>
           {row.summary}
         </Text>
       </View>
 
       {/* loggedAt, never trainingDate: the feed is ordered by when it was
           logged, and the two differ for anyone training around midnight. */}
-      <Text className="shrink-0 text-[11.5px] text-muted-foreground">
+      <Text className="shrink-0 text-[12px] text-muted-foreground">
         {formatLoggedAt(row.loggedAt)}
       </Text>
     </Pressable>

@@ -206,14 +206,14 @@ export function HomeScreen() {
                   {mrrLines.map((line) => (
                     <Text
                       key={line}
-                      className="text-[13.5px] font-semibold text-foreground"
+                      className="text-[15px] font-semibold text-foreground"
                     >
                       {line}
                     </Text>
                   ))}
                 </View>
               ) : (
-                <Text className="relative text-[19px] font-bold leading-none text-muted-foreground">
+                <Text className="relative text-[21px] font-bold leading-none text-muted-foreground">
                   —
                 </Text>
               )}

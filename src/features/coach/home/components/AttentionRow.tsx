@@ -49,7 +49,7 @@ export function AttentionRow({
       to="--card"
       angle={140}
       className={cn(
-        "relative flex-row items-center gap-3 overflow-hidden px-3.25 py-3",
+        "relative flex-row items-center gap-3 overflow-hidden px-3.5 py-3.5",
         // Lands after the glass rim, so tailwind-merge keeps the red border.
         danger && "border border-danger/26"
       )}
@@ -60,26 +60,29 @@ export function AttentionRow({
 
       <View
         className={cn(
-          "h-7.5 w-7.5 shrink-0 items-center justify-center rounded-full",
+          "h-8.5 w-8.5 shrink-0 items-center justify-center rounded-full",
           bubbleClassName
         )}
       >
         {icon ? (
-          <Icon name={icon} size={15} color="--danger" />
+          <Icon name={icon} size={17} color="--danger" />
         ) : (
-          <Text className={cn("text-[13px] font-bold", bubbleTextClassName)}>{count}</Text>
+          <Text className={cn("text-[14px] font-bold", bubbleTextClassName)}>{count}</Text>
         )}
       </View>
 
       <View className="min-w-0 flex-1">
         <Text
-          className="text-[14.5px] font-semibold leading-tight text-foreground"
+          className="text-[15.5px] font-semibold leading-tight text-foreground"
           numberOfLines={2}
         >
           {title}
         </Text>
         <Text
-          className={cn("mt-0.5 text-xs", danger ? "text-danger-muted" : "text-muted-foreground")}
+          className={cn(
+            "mt-0.5 text-[12.5px]",
+            danger ? "text-danger-muted" : "text-muted-foreground"
+          )}
           numberOfLines={1}
         >
           {subtitle}
@@ -92,13 +95,13 @@ export function AttentionRow({
         onPress={onPress}
         hitSlop={PILL_HIT_SLOP}
         className={cn(
-          "shrink-0 items-center justify-center rounded-full px-3.5 py-2 active:opacity-85",
+          "shrink-0 items-center justify-center rounded-full px-4 py-2.5 active:opacity-85",
           emphasis ? "bg-primary" : "border border-border"
         )}
       >
         <Text
           className={cn(
-            "text-[12.5px] font-semibold",
+            "text-[13px] font-semibold",
             emphasis ? "text-primary-foreground" : "text-foreground"
           )}
         >

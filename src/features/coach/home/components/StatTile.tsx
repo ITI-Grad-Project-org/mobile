@@ -25,7 +25,7 @@ interface StatTileProps {
  * One of the three tiles above the roster strip.
  *
  * Not StatCell: that one is 16px/10.5px and lives inside plan cards. This is
- * 19px/9.5px with a sparkline layer behind the text, so it's a sibling rather
+ * 21px/10.5px with a sparkline layer behind the text, so it's a sibling rather
  * than a variant — bending StatCell into both would break the Plans screens.
  */
 export function StatTile({
@@ -44,16 +44,16 @@ export function StatTile({
     <Surface
       radius="md"
       glass
-      className={cn("relative flex-1 items-start gap-[5px] overflow-hidden px-3 py-[11px]", className)}
+      className={cn("relative flex-1 items-start gap-1.5 overflow-hidden px-3.5 py-3.5", className)}
     >
       {showSparkline ? (
-        <Sparkline data={sparkline} className="absolute inset-x-0 bottom-0 h-[26px] opacity-50" />
+        <Sparkline data={sparkline} className="absolute inset-x-0 bottom-0 h-7.5 opacity-50" />
       ) : null}
 
       {children ?? (
         <Text
           className={cn(
-            "relative text-[19px] font-bold leading-none tracking-[-0.02em]",
+            "relative text-[21px] font-bold leading-none tracking-[-0.02em]",
             value === null
               ? "text-muted-foreground"
               : tone === "success"
@@ -65,7 +65,7 @@ export function StatTile({
         </Text>
       )}
 
-      <Text className="relative text-[9.5px] font-semibold uppercase tracking-[0.11em] text-muted-foreground">
+      <Text className="relative text-[10.5px] font-semibold uppercase tracking-[0.11em] text-muted-foreground">
         {label}
       </Text>
     </Surface>

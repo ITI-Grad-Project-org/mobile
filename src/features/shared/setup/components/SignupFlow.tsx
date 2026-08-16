@@ -2,8 +2,7 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Keyboard,
-  KeyboardAvoidingView,
-  Platform,
+  KeyboardAvoidingView
 } from "react-native";
 import Reanimated, {
   useAnimatedStyle,
@@ -160,8 +159,9 @@ export function SignupFlow({
   return (
     <SafeAreaView className="flex-1 bg-background" edges={edges}>
       <KeyboardAvoidingView
+        behavior="padding"
+        keyboardVerticalOffset={10}
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         {/* Header */}
         <View className="gap-3 border-b border-border/60 px-4 pb-3 pt-2">
@@ -194,8 +194,8 @@ export function SignupFlow({
         <ScrollView
           className="flex-1"
           contentContainerClassName="px-5 pb-8 pt-6 grow"
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+          keyboardShouldPersistTaps="always"
+          keyboardDismissMode="none"
           showsVerticalScrollIndicator={false}
         >
           <View key={idx} className="animate-fade-up gap-6">
@@ -226,7 +226,7 @@ export function SignupFlow({
         </ScrollView>
 
         {/* Footer */}
-        <View className="border-t border-border/60 px-4 pb-2 pt-3">
+        <View className="border-t border-border/60 px-4 pt-3">
           {saveError ? (
             <Text className="mb-2 text-center text-[12px] font-medium text-destructive">
               {saveError}

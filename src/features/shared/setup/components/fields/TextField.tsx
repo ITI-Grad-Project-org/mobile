@@ -113,7 +113,7 @@ export function TextField({
           inputAccessoryViewID={needsAccessory ? accessoryId : undefined}
           selectTextOnFocus={isNumber}
           className={cn(
-            "rounded-2xl border bg-secondary text-[15px] text-foreground",
+            "rounded-2xl border bg-secondary text-[15px] text-foreground p-2",
             multiline ? "min-h-28 px-4 py-3" : "h-14 px-4 py-0",
             field.unit && !multiline && "pr-12",
             focused ? "border-primary/40" : "border-transparent"

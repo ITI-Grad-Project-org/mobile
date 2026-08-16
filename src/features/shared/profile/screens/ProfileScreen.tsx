@@ -1,36 +1,36 @@
 import { baseApi } from "@/api/baseApi";
+import { useGetActivityGraphQuery } from "@/api/endpoints/activity.endpoints";
+import {
+  useLogoutCoachMutation,
+  useLogoutCustomerMutation,
+} from "@/api/endpoints/auth.endpoints";
+import { useGetClientsQuery } from "@/api/endpoints/clients.endpoints";
+import { useGetDirectoryCoachQuery } from "@/api/endpoints/directory.endpoints";
+import { useGetIntakeQuery } from "@/api/endpoints/intake.endpoints";
 import {
   useDeleteClientProfileMutation,
   useDeleteCoachProfileMutation,
   useGetClientProfileQuery,
   useGetCoachProfileQuery,
 } from "@/api/endpoints/profile.endpoints";
-import {
-  useLogoutCoachMutation,
-  useLogoutCustomerMutation,
-} from "@/api/endpoints/auth.endpoints";
-import { useGetActivityGraphQuery } from "@/api/endpoints/activity.endpoints";
-import { useGetClientsQuery } from "@/api/endpoints/clients.endpoints";
-import { useGetDirectoryCoachQuery } from "@/api/endpoints/directory.endpoints";
-import { useGetIntakeQuery } from "@/api/endpoints/intake.endpoints";
 import { useGetPublicReviewsSummaryQuery } from "@/api/endpoints/reviews.endpoints";
 import { useGetTenantMeQuery } from "@/api/endpoints/tenant.endpoints";
 import { MeasurementsSummaryCard } from "@/features/client/progress";
-import type { ReduxMembership } from "@/store/membershipsSlice";
 import { disconnectChatSocket } from "@/lib/chatSocket";
 import { resolveCoachFields } from "@/lib/coach";
 import { cn } from "@/lib/utils";
 import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import { resetProfile } from "@/shared/hooks/useProfileSetup";
 import { useSwitchCoach } from "@/shared/hooks/useSwitchCoach";
-import { fullName } from "@/shared/utils/name";
 import { Card } from "@/shared/ui/Card";
 import { GlassButton } from "@/shared/ui/GlassButton";
 import { Icon, type IconName } from "@/shared/ui/Icon";
+import { fullName } from "@/shared/utils/name";
 import { useAppDispatch, useAppSelector } from "@/store";
 import { clearActiveTenant } from "@/store/activeTenantSlice";
 import { clearAuth, clearTokens } from "@/store/authSlice";
 import { clearChatUi } from "@/store/chatUiSlice";
+import type { ReduxMembership } from "@/store/membershipsSlice";
 import { clearMemberships, membershipsSelectors } from "@/store/membershipsSlice";
 import { Pressable, SafeAreaView, ScrollView, Text, View } from "@/tw";
 import { Image } from "@/tw/image";
@@ -706,43 +706,7 @@ function ClientProfile() {
         </Card>
 
         {/* Streak color */}
-        <Card glass>
-          <View className="flex-row items-start gap-3">
-            <View className="h-9 w-9 rounded-xl bg-secondary items-center justify-center">
-              <Icon name="palette" size={16} color="--muted-foreground" />
-            </View>
-            <View className="flex-1 min-w-0">
-              <Text className="text-foreground text-base font-semibold">
-                Streak color
-              </Text>
-              <Text className="text-muted-foreground text-[13px]">
-                Choose your activity-grid palette
-              </Text>
-              <View className="mt-3 flex-row gap-2">
-                {swatches.map((s) => (
-                  <Pressable
-                    key={s.key}
-                    onPress={() => setSelectedAccent(s.key)}
-                    className={cn(
-                      "flex-row items-center gap-2 rounded-full border-2 bg-secondary/60 px-3 py-1.5 active:opacity-70",
-                      selectedAccent === s.key
-                        ? "border-foreground"
-                        : "border-transparent"
-                    )}
-                  >
-                    <View
-                      className="h-4 w-4 rounded-sm"
-                      style={{ backgroundColor: s.color }}
-                    />
-                    <Text className="text-foreground text-sm font-semibold">
-                      {s.label}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-          </View>
-        </Card>
+
 
         {/* Edit profile shortcut */}
         <Pressable

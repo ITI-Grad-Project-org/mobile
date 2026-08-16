@@ -7,11 +7,11 @@ import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import { Icon } from "@/shared/ui/Icon";
 import { Pressable, Text, TextInput, View } from "@/tw";
 import { Image } from "@/tw/image";
+import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 
 const LIQUID_GLASS = isLiquidGlassAvailable();
 
@@ -96,7 +96,7 @@ function ChatThread({
 
   return (
     <KeyboardAvoidingView
-      behavior={"padding"}
+      behavior="padding"
       keyboardVerticalOffset={90}
       style={{ flex: 1 }}
     >
@@ -221,7 +221,7 @@ function ChatThread({
                   gap: 8,
                   padding: 6,
                   borderRadius: 9999,
-                  marginBottom: insets.bottom + 8,
+                  marginBottom: insets.bottom,
                 }}
               >
                 {composerControls}
@@ -229,7 +229,7 @@ function ChatThread({
             ) : (
               <View
                 className="flex-row items-center gap-2 rounded-full border border-border/60 bg-card/80 p-1.5 shadow-soft"
-                style={{ marginBottom: insets.bottom + 8 }}
+                style={{ marginBottom: 8 }}
               >
                 {composerControls}
               </View>

@@ -1,16 +1,15 @@
 import { Feather } from "@expo/vector-icons";
+import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
-  Platform,
   TextInput as RNTextInput,
 } from "react-native";
-import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 
-import { hasOnboarded } from "@/shared/hooks/useOnboarding";
 import { cn } from "@/lib/utils";
+import { hasOnboarded } from "@/shared/hooks/useOnboarding";
 import { Pressable, SafeAreaView, ScrollView, Text, View, useCSSVariable } from "@/tw";
 
 const LIQUID_GLASS = isLiquidGlassAvailable();
@@ -88,8 +87,9 @@ export function VerifyScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
       <KeyboardAvoidingView
+        behavior="padding"
+        keyboardVerticalOffset={10}
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView
           className="flex-1"

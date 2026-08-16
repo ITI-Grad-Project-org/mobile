@@ -1,6 +1,6 @@
 
 import { formatShortDate } from "./format";
-import { asRecord, asString, nameFrom, pick } from "./payload";
+import { asRecord, asString, nameFrom, pick } from "@/shared/utils/analyticsPayload";
 
 export interface ActivityRowView {
   id: string;
@@ -10,6 +10,13 @@ export interface ActivityRowView {
   type: string;
   /** Orders and labels the row. */
   loggedAt?: string;
+  /**
+   * The client's own training day (`activityDate`). Display and BUCKETING only
+   * — never sorting, since many rows share one value. Kept separate from the
+   * summary so the week chart can count by the day trained rather than the
+   * instant logged, which differ either side of midnight.
+   */
+  trainingDate?: string;
   summary: string;
 }
 
@@ -102,6 +109,7 @@ export function normalizeActivityRow(raw: unknown, index: number): ActivityRowVi
     clientName: nameFrom(row),
     type,
     loggedAt: occurredAt,
+    trainingDate,
     summary: showDate ? `${summary} · ${formatShortDate(trainingDate)}` : summary,
   };
 }

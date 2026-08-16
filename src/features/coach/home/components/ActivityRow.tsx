@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import { Pressable, Text, View } from "@/tw";
+import { Image } from "@/tw/image";
 
 import { formatLoggedAt, initialsOf } from "../lib/format";
 import type { ActivityRowView } from "../lib/normalizeActivity";
@@ -36,10 +37,18 @@ interface ActivityRowProps {
   row: ActivityRowView;
   /** Every row but the first draws the rule above it. */
   divided: boolean;
+  /**
+   * The client's photo, looked up by membershipId — the activity payload has
+   * no avatar of its own. Absent for a client with no uploaded photo, so the
+   * tinted initials stay as the fallback rather than an empty disc.
+   */
+  avatarUrl?: string;
   onPress?: () => void;
 }
 
-export function ActivityRow({ row, divided, onPress }: ActivityRowProps) {
+const DISC = "h-8.5 w-8.5 shrink-0 rounded-full";
+
+export function ActivityRow({ row, divided, avatarUrl, onPress }: ActivityRowProps) {
   const tint = tintFor(row.type);
 
   return (
@@ -50,11 +59,18 @@ export function ActivityRow({ row, divided, onPress }: ActivityRowProps) {
         divided && "border-t border-border"
       )}
     >
-      <View className={cn("h-8.5 w-8.5 shrink-0 items-center justify-center rounded-full", tint.bg)}>
-        <Text className={cn("text-[12px] font-semibold", tint.fg)}>
-          {initialsOf(row.clientName)}
-        </Text>
-      </View>
+      {avatarUrl ? (
+        <Image
+          source={{ uri: avatarUrl }}
+          className={cn(DISC, "overflow-hidden object-cover")}
+        />
+      ) : (
+        <View className={cn(DISC, "items-center justify-center", tint.bg)}>
+          <Text className={cn("text-[12px] font-semibold", tint.fg)}>
+            {initialsOf(row.clientName)}
+          </Text>
+        </View>
+      )}
 
       <View className="min-w-0 flex-1">
         <Text className="text-[15px] font-semibold text-foreground" numberOfLines={1}>

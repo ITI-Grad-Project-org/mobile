@@ -10,7 +10,7 @@ import { Image } from "@/tw/image";
 import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView } from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const LIQUID_GLASS = isLiquidGlassAvailable();
@@ -84,6 +84,8 @@ function ChatThread({
   } = useChatThread();
 
   const [input, setInput] = useState("");
+  // iOS sits the composer right on the home indicator; give it a little breathing room.
+  const composerBottom = Platform.OS === "ios" ? insets.bottom + 12 : 8;
   const canSend = canChat && input.trim().length > 0;
 
   const onSend = () => {
@@ -221,7 +223,7 @@ function ChatThread({
                   gap: 8,
                   padding: 6,
                   borderRadius: 9999,
-                  marginBottom: insets.bottom,
+                  marginBottom: composerBottom,
                 }}
               >
                 {composerControls}
@@ -229,7 +231,7 @@ function ChatThread({
             ) : (
               <View
                 className="flex-row items-center gap-2 rounded-full border border-border/60 bg-card/80 p-1.5 shadow-soft"
-                style={{ marginBottom: 8 }}
+                style={{ marginBottom: composerBottom }}
               >
                 {composerControls}
               </View>

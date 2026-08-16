@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import { AvatarStack } from "@/shared/ui/AvatarStack";
 import { Icon } from "@/shared/ui/Icon";
 import { Surface } from "@/shared/ui/Surface";
@@ -11,8 +12,9 @@ import { ActivityRow } from "../components/ActivityRow";
 import { AttentionRow } from "../components/AttentionRow";
 import { InsightCard } from "../components/InsightCard";
 import { StatTile } from "../components/StatTile";
-import { WeekVolumeChart } from "../components/WeekVolumeChart";
+import { WeekActivityChart } from "../components/WeekActivityChart";
 import { useCoachHomeAnalytics } from "../hooks/useCoachHomeAnalytics";
+import { useClientAvatars } from "../hooks/useClientAvatars";
 import { useCoachHomeData } from "../hooks/useCoachHomeData";
 import { useDismissedInsights } from "../hooks/useDismissedInsights";
 import { useRosterCheckins } from "../hooks/useRosterCheckins";
@@ -54,6 +56,9 @@ export function HomeScreen() {
     refetch,
   } = useCoachHomeAnalytics();
   const { dismiss, isDismissed } = useDismissedInsights();
+  // Activity rows carry no avatar — only membershipId — so faces are looked up
+  // from the client list this screen already fetches via useCoachHomeData.
+  const avatars = useClientAvatars();
 
   // The check-in entity /analytics/attention reports on doesn't exist in
   // core-api — a client check-in is a measurement — so the queue is rebuilt
@@ -147,7 +152,16 @@ export function HomeScreen() {
   // no window, so the end is today and "THIS WEEK" is honest — the moment a
   // range picker lands here, this has to be labelled from that window instead.
   const weekLabel = weekLabelFrom(todayIso());
-  const byDay = overview?.thisWeek.byDay ?? [];
+  const byDay = useMemo(() => overview?.thisWeek.byDay ?? [], [overview]);
+  const sessionsLogged = overview?.thisWeek.sessionsLogged ?? 0;
+  const weekChangePct = overview?.thisWeek.changePct ?? null;
+  // The chart speaks in `count`; the payload speaks in `sessions`. Mapped here
+  // rather than renaming the prop, since the bars are a generic per-weekday
+  // count and nothing about the component is session-specific.
+  const weekBars = useMemo(
+    () => byDay.map((day) => ({ weekday: day.weekday, count: day.sessions })),
+    [byDay]
+  );
   const showInsight = insight !== null && !isDismissed(insight.key);
 
   const refreshControl = (
@@ -231,8 +245,8 @@ export function HomeScreen() {
               label="Adherence"
               tone="success"
               // The API has no per-day adherence series, so this traces the
-              // week's logged volume — the only daily shape it does return.
-              sparkline={byDay.map((day) => day.volume)}
+              // week's logged sessions — the only daily shape it does return.
+              sparkline={byDay.map((day) => day.sessions)}
             />
             <StatTile label="MRR" className="flex-[1.25]">
               {mrrLines.length > 0 ? (
@@ -390,6 +404,7 @@ export function HomeScreen() {
                     key={row.id}
                     row={row}
                     divided={i > 0}
+                    avatarUrl={row.membershipId ? avatars.get(row.membershipId) : undefined}
                     onPress={() => openClient(row.membershipId)}
                   />
                 ))
@@ -397,40 +412,53 @@ export function HomeScreen() {
             </Surface>
           </View>
 
-          {/* This week */}
-          {overview ? (
-            <Surface radius="lg" className="gap-3.5 p-3.75">
-              <View className="flex-row items-start justify-between">
-                <View className="min-w-0 flex-1 gap-1">
-                  <Text className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                    {weekLabel ? `This week · ${weekLabel}` : "This week"}
+          {/* This week — sessions the roster trained, straight off
+              overview.thisWeek. These are SESSION counts, not tonnage: the
+              endpoint has no volume figure. Counting /analytics/activity rows
+              instead would count set reports (many per session) and cap at the
+              endpoint's 200-row ceiling, so the number would be both inflated
+              and a floor. */}
+          <Surface radius="lg" className="gap-3.5 p-3.75">
+            <View className="flex-row items-start justify-between">
+              <View className="min-w-0 flex-1 gap-1">
+                <Text className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  {weekLabel ? `This week · ${weekLabel}` : "This week"}
+                </Text>
+                <Text className="text-[22px] font-bold leading-none tracking-[-0.02em] text-foreground">
+                  {sessionsLogged}
+                  <Text className="text-sm font-normal text-muted-foreground">
+                    {" "}
+                    {sessionsLogged === 1 ? "session" : "sessions"}
                   </Text>
-                  <Text className="text-[22px] font-bold leading-none tracking-[-0.02em] text-foreground">
-                    {overview.thisWeek.volume}
-                    <Text className="text-sm font-normal text-muted-foreground">
-                      {" "}
-                      sessions
-                    </Text>
+                </Text>
+              </View>
+              {/* Hidden entirely when null — no prior week or a zero baseline,
+                  neither of which is "no change". */}
+              {weekChangePct !== null ? (
+                <View
+                  className={cn(
+                    "rounded-[14px] px-2.5 py-1",
+                    weekChangePct >= 0 ? "bg-success/12" : "bg-danger/12"
+                  )}
+                >
+                  <Text
+                    className={cn(
+                      "text-xs font-semibold",
+                      weekChangePct >= 0 ? "text-success" : "text-danger"
+                    )}
+                  >
+                    {weekChangePct > 0 ? "+" : ""}
+                    {formatPctShort(weekChangePct)}
                   </Text>
                 </View>
-                {/* Hidden entirely when null — there was no prior week to
-                    compare, which is not the same as no change. */}
-                {overview.thisWeek.changePct !== null ? (
-                  <View className="rounded-[14px] bg-success/12 px-2.5 py-1">
-                    <Text className="text-xs font-semibold text-success">
-                      {overview.thisWeek.changePct > 0 ? "+" : ""}
-                      {formatPctShort(overview.thisWeek.changePct)}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
+              ) : null}
+            </View>
 
-              <WeekVolumeChart
-                byDay={byDay}
-                todayWeekday={todayWeekdayMondayBased()}
-              />
-            </Surface>
-          ) : null}
+            <WeekActivityChart
+              byDay={weekBars}
+              todayWeekday={todayWeekdayMondayBased()}
+            />
+          </Surface>
         </>
       )}
     </ScrollView>

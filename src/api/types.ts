@@ -766,19 +766,30 @@ export interface AdherenceParams extends DateWindow {
 export type CurrencyAmounts = Record<string, number>;
 
 export interface OverviewWeekday {
-  weekday: number; // 1 = Monday … 7 = Sunday — confirm the base
-  volume: number;
+  weekday: number; // 1 = Monday … 7 = Sunday
+  /** SESSIONS trained that day — not sets, not tonnage. The endpoint has no
+   *  tonnage figure at all, so nothing here can be labelled "volume". */
+  sessions: number;
 }
 
+/**
+ * VERIFIED against a live response (2026-08-16). Two things the prose got
+ * wrong, both of which rendered as a silent 0: the attention counts are FLAT on
+ * the root (`clientsAtRisk`, `checkinsAwaitingReview`, `programsEndingSoon`) —
+ * there is no `attentionCounts` object — and MRR is nested under
+ * `roster.mrrByCurrency`, not a root-level `mrr`. `roster` carries a count per
+ * status (active / paused / invited / requested / archived) and no total.
+ */
 export interface Overview {
-  roster: { total: number; active: number; paused: number }; // confirm
+  /** `total` is derived client-side: the API sends only per-status counts. */
+  roster: { total: number; active: number; paused: number };
   mrr: CurrencyAmounts;
   sessionAdherencePct: Pct;
   /** Derived from the window's END date, not today. Label the card from the
    *  window whenever the user has changed the range. Weeks run Mon–Sun. */
   thisWeek: {
-    volume: number;
-    previousVolume: number | null; // null = no prior week to compare
+    sessionsLogged: number;
+    previousWeekSessions: number | null; // null = no prior week to compare
     changePct: Pct;
     /** Always seven rows including empty days — do not gap-fill. */
     byDay: OverviewWeekday[];
@@ -867,33 +878,69 @@ export interface Roster {
  * and are excluded from both sides, so an all-RPE programme returns
  * `comparableSets: 0` with a null ratio meaning "not measurable this way".
  */
+/**
+ * VERIFIED against a live response (2026-08-16). The session ratio is
+ * `sessionCompletionPct`, not `sessionAdherencePct` — that spelling belongs to
+ * the overview response, and mixing them up yields a silent dash here.
+ *
+ * A session has FIVE outcomes, not two: completed / partial / skipped /
+ * inProgress, and the rest unstarted. `completedSessions` alone under-reports
+ * work in progress — a live response showed `completedSessions: 0` alongside
+ * `setsCompleted: 4`, because the one scheduled session was still in progress.
+ */
 export interface Adherence {
-  sessionAdherencePct: Pct;
-  scheduledSessions: number; // confirm
-  completedSessions: number; // confirm
-  volumeAdherencePct: Pct;
+  scheduledSessions: number;
+  completedSessions: number;
+  partialSessions: number;
+  skippedSessions: number;
+  inProgressSessions: number;
+  sessionCompletionPct: Pct;
   comparableSets: number;
+  /** Reps × weight, summed over comparable sets only. Both are 0 when
+   *  `comparableSets` is 0 — that is "nothing to compare", not "no work done". */
+  prescribedVolume: number;
+  actualVolume: number;
+  volumeAdherencePct: Pct;
+  setsCompleted: number;
+  setsPartial: number;
+  setsSkipped: number;
+  /** Sets logged beyond the prescription. Not a failure — don't fold it into
+   *  an adherence figure. */
+  setsExtra: number;
 }
 
 /** Returned exactly as recorded, every field nullable, values never carried
- *  forward. A gap is a gap: no fill, no connectNulls, no last-value-forward. */
+ *  forward. A gap is a gap: no fill, no connectNulls, no last-value-forward.
+ *  VERIFIED (2026-08-16): the date field is `measuredOn`, not `date`. */
 export interface ProgressMeasurement {
-  date: ISODate;
+  measuredOn: ISODate;
   weightKg: number | null;
   bodyFatPct: number | null;
-  // Further measurement fields exist and are all nullable — add them here once
-  // confirmed against the analytics-service schema.
+  chestCm: number | null;
+  waistCm: number | null;
+  hipsCm: number | null;
+  armCm: number | null;
+  thighCm: number | null;
 }
+/** VERIFIED (2026-08-16): the reading is `bestE1rmKg` — the best set that day,
+ *  not a per-set series — and each point also carries its set count and volume. */
 export interface StrengthPoint {
   date: ISODate;
   /** Epley estimate, weight × (1 + reps / 30), best set per exercise per day.
    *  Label the axis "est. 1RM". */
-  estimated1rm: number;
+  bestE1rmKg: number;
+  sets: number;
+  volumeKg: number;
 }
 export interface StrengthSeries {
   /** Grouped by the name on the logged row, not the exercise id — two
-   *  similarly-named entries are legitimately two lines. */
+   *  similarly-named entries are legitimately two lines. Comes through with the
+   *  logger's own casing ("barbell Bench Press") — title-case it for display. */
   exerciseName: string;
+  firstE1rmKg: number;
+  latestE1rmKg: number;
+  /** The window's best, which need not be the latest — a client can peak mid-window. */
+  bestE1rmKg: number;
   /** null when the window holds a single training day: hide the delta chip
    *  rather than showing "0%". */
   changePct: Pct;
@@ -902,6 +949,12 @@ export interface StrengthSeries {
   points: StrengthPoint[];
 }
 export interface Progress {
+  /** Echoed back by the endpoint — useful for asserting the response matches
+   *  the row the sheet is showing. */
+  membershipId: string;
+  clientName: string;
+  from: ISODate;
+  to: ISODate;
   measurements: ProgressMeasurement[];
   /** Most-trained exercise first — default an exercise picker to [0]. */
   strength: StrengthSeries[];

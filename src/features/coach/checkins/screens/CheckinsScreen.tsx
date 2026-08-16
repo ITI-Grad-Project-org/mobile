@@ -98,9 +98,16 @@ export function CheckinsScreen() {
             <Surface key={client.clientId} radius="lg">
               <Pressable
                 onPress={() =>
+                  // The detail screen needs BOTH ids: measurements are keyed by
+                  // the client's user id, the strength series by membershipId.
                   router.push({
-                    pathname: "/(coach)/chat/[id]",
-                    params: { id: client.clientId },
+                    pathname: "/(coach)/check-ins/[clientId]",
+                    params: {
+                      clientId: client.clientId,
+                      membershipId: client.membershipId,
+                      name: client.name,
+                      avatarUrl: client.avatarUrl,
+                    },
                   })
                 }
                 className="flex-row items-center gap-3 px-3.5 py-3.5 active:opacity-80"

@@ -1,3 +1,4 @@
+import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { router } from "expo-router";
 import React, { useState } from "react";
 import { ActivityIndicator } from "react-native";
@@ -6,18 +7,14 @@ import { useListMeasurementsQuery } from "@/api/endpoints/measurements.endpoints
 import type { Measurement } from "@/api/types";
 import { Card } from "@/shared/ui/Card";
 import { Icon } from "@/shared/ui/Icon";
+import { MetricGrid } from "@/shared/ui/MetricGrid";
 import { SectionTitle } from "@/shared/ui/SectionTitle";
 import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import { Image } from "@/tw/image";
 import { Pressable, ScrollView, Text, useCSSVariable, View } from "@/tw";
 import { MeasurementActionsSheet } from "../components/MeasurementActionsSheet";
-import WeightChart from "../components/WeightChart";
-import {
-  deriveMeasurementStats,
-  formatDelta,
-  formatShortDate,
-  type MetricSummary,
-} from "../lib/measurements";
+import WeightChart from "@/shared/ui/WeightChart";
+import { deriveMeasurementStats, formatDelta, formatShortDate } from "../lib/measurements";
 
 const openForm = () => router.push("/(client)/measurement");
 
@@ -31,44 +28,6 @@ function AddButton() {
       <Icon name="plus" size={14} color="--primary-foreground" />
       <Text className="text-[12px] font-semibold text-primary-foreground">Add</Text>
     </Pressable>
-  );
-}
-
-type GridTone = "ink" | "lilac" | "sun" | "peach";
-
-// Literal class names per tone so NativeWind keeps them at build time.
-const TONE_INK: Record<GridTone, string> = {
-  ink: "text-ink-foreground",
-  lilac: "text-lilac-ink",
-  sun: "text-sun-ink",
-  peach: "text-peach-ink",
-};
-
-/** A single toned metric tile in the grid. */
-function MetricCard({ metric, tone }: { metric: MetricSummary; tone: GridTone }) {
-  const hasValue = metric.value !== undefined;
-  const inkClass = TONE_INK[tone];
-  const goodDelta =
-    metric.delta !== undefined &&
-    metric.delta !== 0 &&
-    (metric.lowerIsBetter ? metric.delta < 0 : metric.delta > 0);
-
-  return (
-    <Card tone={tone} className="flex-1" glass>
-      <Text className={`text-[11px] font-semibold uppercase tracking-wider opacity-70 ${inkClass}`}>
-        {metric.label}
-      </Text>
-      <Text className={`mt-1 text-2xl font-black ${inkClass}`}>
-        {hasValue ? `${metric.value} ${metric.unit}` : "—"}
-      </Text>
-      {metric.delta !== undefined && metric.delta !== 0 ? (
-        <Text
-          className={`mt-1 text-[11px] ${goodDelta ? "text-success" : `opacity-80 ${inkClass}`}`}
-        >
-          {formatDelta(metric.delta)} {metric.unit}
-        </Text>
-      ) : null}
-    </Card>
   );
 }
 
@@ -97,25 +56,61 @@ function EmptyState() {
   );
 }
 
+/**
+ * Shown when the client has no active membership yet — a fresh sign-up, or an
+ * invitation still pending.
+ *
+ * Measurements live inside a coaching relationship: /client/me/measurements
+ * answers 400 ("Client has no active tenant selected") or 404 ("Active client
+ * membership not found") in that state, and POST rejects the same way. So this
+ * deliberately does NOT offer "Log your first measurement" — that button would
+ * fail with the very error this state replaces.
+ */
+function NoMembershipState() {
+  return (
+    <Card glass className="items-center gap-3 py-8">
+      <View className="h-14 w-14 items-center justify-center rounded-full bg-secondary">
+        <Icon name="ruler" size={24} color="--muted-foreground" />
+      </View>
+      <View className="items-center gap-1">
+        <Text className="text-[16px] font-bold text-foreground">Nothing to track yet</Text>
+        <Text className="max-w-xs text-center text-[13px] text-muted-foreground">
+          Join a coach to start logging your weight and body measurements.
+        </Text>
+      </View>
+      <Pressable
+        onPress={() => router.push("/(setup)/match-coach")}
+        className="mt-1 h-12 flex-row items-center justify-center gap-2 rounded-2xl bg-primary px-6 shadow-soft active:opacity-90"
+      >
+        <Icon name="user-plus" size={16} color="--primary-foreground" />
+        <Text className="text-[14px] font-semibold text-primary-foreground">Find a coach</Text>
+      </Pressable>
+    </Card>
+  );
+}
+
 export function ProgressScreen() {
   const { tenantId } = useActiveTenant();
   const primaryColor = (useCSSVariable("--primary") as string) || "#e5673a";
   const [selected, setSelected] = useState<Measurement | null>(null);
 
-  const { data, isLoading, isError, refetch } = useListMeasurementsQuery(
+  const { data, isLoading, isError, error, refetch } = useListMeasurementsQuery(
     { tenantId: tenantId ?? "", limit: 100 },
     { skip: !tenantId }
   );
 
+  // No active membership is not a failed request. The endpoint answers 400
+  // ("Client has no active tenant selected") or 404 ("Active client membership
+  // not found") for a client who hasn't joined a coach — and with no tenant at
+  // all the query is skipped, which lands here too. Rendering any of these as
+  // "Couldn't load your measurements" tells a new client something broke when
+  // nothing did.
+  const status = (error as FetchBaseQueryError | undefined)?.status;
+  const noMembership = !tenantId || status === 400 || status === 404;
+
   const stats = deriveMeasurementStats(data);
   const weight = stats.metrics.find((m) => m.key === "weightKg");
   const weightGood = weight?.delta !== undefined && weight.delta < 0;
-
-  // Curated grid: four toned tiles. Weight leads the headline card above, so the
-  // grid surfaces the next most useful metrics.
-  const gridKeys: MetricSummary["key"][] = ["waistCm", "bodyFatPct", "chestCm", "thighCm"];
-  const gridTones: GridTone[] = ["ink", "lilac", "sun", "peach"];
-  const gridMetrics = gridKeys.map((k) => stats.metrics.find((m) => m.key === k)!);
 
   const chart =
     stats.weightSeries.length >= 2
@@ -144,6 +139,8 @@ export function ProgressScreen() {
         <View className="items-center py-16">
           <ActivityIndicator color={primaryColor} />
         </View>
+      ) : noMembership ? (
+        <NoMembershipState />
       ) : isError ? (
         <Card glass className="items-center gap-3 py-8">
           <Text className="text-[14px] text-muted-foreground">
@@ -220,17 +217,8 @@ export function ProgressScreen() {
             )}
           </Card>
 
-          {/* Metric grid */}
-          <View className="gap-3">
-            <View className="flex-row gap-3">
-              <MetricCard metric={gridMetrics[0]} tone={gridTones[0]} />
-              <MetricCard metric={gridMetrics[1]} tone={gridTones[1]} />
-            </View>
-            <View className="flex-row gap-3">
-              <MetricCard metric={gridMetrics[2]} tone={gridTones[2]} />
-              <MetricCard metric={gridMetrics[3]} tone={gridTones[3]} />
-            </View>
-          </View>
+          {/* Metric grid — shared with the coach's check-in detail screen. */}
+          <MetricGrid metrics={stats.metrics} />
 
           {/* Progress photos */}
           {stats.latestPhotos.length > 0 ? (

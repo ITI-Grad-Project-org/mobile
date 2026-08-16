@@ -1,4 +1,3 @@
-import type { OverviewWeekday } from "@/api/types";
 import { cn } from "@/lib/utils";
 import { fillHeightClass } from "@/shared/ui/ProgressTrack";
 import { withAlpha } from "@/shared/utils/color";
@@ -6,35 +5,29 @@ import { Text, View, useCSSVariable } from "@/tw";
 import { LinearGradient } from "expo-linear-gradient";
 import { StyleSheet } from "react-native";
 
-/** 1 = Monday … 7 = Sunday, matching the API's documented base. */
+/** 1 = Monday … 7 = Sunday. */
 const LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
 
-interface WeekVolumeChartProps {
-  /** Straight from overview.thisWeek.byDay — rendered in the order received. */
-  byDay: OverviewWeekday[];
-  /** Today in byDay's own base, or null when the window isn't the current week. */
+export interface WeekActivityDay {
+  /** 1 = Monday … 7 = Sunday. */
+  weekday: number;
+  count: number;
+}
+
+interface WeekActivityChartProps {
+  /** Seven entries, Monday first — rendered in the order received. */
+  byDay: WeekActivityDay[];
+  /** Today's Monday-based weekday, or null when the window isn't this week. */
   todayWeekday: number | null;
 }
 
-export function WeekVolumeChart({ byDay, todayWeekday }: WeekVolumeChartProps) {
+export function WeekActivityChart({ byDay, todayWeekday }: WeekActivityChartProps) {
   const lilac = useCSSVariable("--lilac") as string | undefined;
   const lilacBright = useCSSVariable("--lilac-bright") as string | undefined;
 
-  // The API always returns seven rows including empty days, so there is no
-  // gap-filling here — and no re-ordering, since the array order IS Mon→Sun.
-  const max = byDay.reduce((acc, day) => (day.volume > acc ? day.volume : acc), 0);
-
-  if (__DEV__) {
-    const outOfRange = byDay.filter((day) => day.weekday < 1 || day.weekday > 7);
-    if (outOfRange.length > 0) {
-      console.warn(
-        `[WeekVolumeChart] weekday values outside 1–7: ${outOfRange
-          .map((day) => day.weekday)
-          .join(", ")}. The API doc says 1 = Monday; if this is 0-based the ` +
-          `weekday letters are off by one.`
-      );
-    }
-  }
+  // Bars are scaled against the busiest day, so a quiet week still reads as a
+  // shape rather than seven stubs.
+  const max = byDay.reduce((acc, day) => (day.count > acc ? day.count : acc), 0);
 
   return (
     <View className="h-26 flex-row items-end gap-1.75">
@@ -43,13 +36,13 @@ export function WeekVolumeChart({ byDay, todayWeekday }: WeekVolumeChartProps) {
         const letter = LETTERS[day.weekday - 1] ?? LETTERS[i] ?? "";
 
         return (
-          <View key={`${day.weekday}-${i}`} className="flex-1 items-center justify-end gap-1.5">
+          <View key={day.weekday} className="flex-1 items-center justify-end gap-1.5">
             <View className="h-19.5 w-full justify-end">
-              {day.volume > 0 && max > 0 ? (
+              {day.count > 0 && max > 0 ? (
                 <View
                   className={cn(
                     "w-full overflow-hidden rounded-t-md rounded-b-[3px]",
-                    fillHeightClass(day.volume / max)
+                    fillHeightClass(day.count / max)
                   )}
                 >
                   <LinearGradient
@@ -80,4 +73,4 @@ export function WeekVolumeChart({ byDay, todayWeekday }: WeekVolumeChartProps) {
     </View>
   );
 }
-WeekVolumeChart.displayName = "WeekVolumeChart";
+WeekActivityChart.displayName = "WeekActivityChart";

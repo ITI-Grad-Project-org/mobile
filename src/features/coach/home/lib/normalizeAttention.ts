@@ -1,6 +1,6 @@
 import type { Attention } from "@/api/types";
 
-import { asRecord, nameFrom, pick, pickBool, pickList, pickNumber } from "./payload";
+import { asRecord, nameFrom, pick, pickBool, pickList, pickNumber } from "@/shared/utils/analyticsPayload";
 
 /**
  * The attention queues, made shape-tolerant.

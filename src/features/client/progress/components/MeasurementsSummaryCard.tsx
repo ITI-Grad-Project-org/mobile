@@ -6,7 +6,7 @@ import { Card } from "@/shared/ui/Card";
 import { Icon } from "@/shared/ui/Icon";
 import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import { Pressable, Text, useCSSVariable, View } from "@/tw";
-import WeightChart from "./WeightChart";
+import WeightChart from "@/shared/ui/WeightChart";
 import { deriveMeasurementStats, formatDelta } from "../lib/measurements";
 
 const openForm = () => router.push("/(client)/measurement");

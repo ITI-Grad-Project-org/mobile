@@ -4,6 +4,8 @@ import {
 } from "@/api/endpoints/clients.endpoints";
 import { useRevokeInvitationMutation } from "@/api/endpoints/invitations.endpoints";
 import { sfx } from "@/lib/sfx";
+import { useClientAnalytics } from "../hooks/useClientAnalytics";
+import { ClientStatsCard } from "./ClientStatsCard";
 import { GlassButton } from "@/shared/ui/GlassButton";
 import { Icon } from "@/shared/ui/Icon";
 import { Pressable, ScrollView, Text, View } from "@/tw";
@@ -27,6 +29,12 @@ export function ClientDetailSheet({ client, tenantId, onClose }: ClientDetailShe
     { id: fetchId, tenantId },
     { skip: !fetchId || !tenantId }
   );
+
+  // Invited and requested memberships have no training history, so the card
+  // would be an empty box on every pending row. /analytics/* is keyed by
+  // MEMBERSHIP id — passing clientUserId here 404s.
+  const hasJoined = client?.status !== "invited" && client?.status !== "requested";
+  const stats = useClientAnalytics(hasJoined ? membershipId : undefined, tenantId);
 
   const [removeClient, { isLoading: isRemoving }] = useRemoveClientMutation();
   const [revokeInvitation, { isLoading: isRevoking }] = useRevokeInvitationMutation();
@@ -215,6 +223,15 @@ export function ClientDetailSheet({ client, tenantId, onClose }: ClientDetailShe
               </View>
             ) : null}
           </View>
+
+          {hasJoined ? (
+            <ClientStatsCard
+              adherence={stats.adherence}
+              progress={stats.progress}
+              isLoading={stats.isLoading}
+              isError={stats.isError}
+            />
+          ) : null}
 
           {/* Request Message Section */}
           {requestMessage ? (

@@ -1,4 +1,5 @@
-import type { CurrencyAmounts, ISODate, Pct } from "@/api/types";
+import type { CurrencyAmounts, ISODate } from "@/api/types";
+import { DASH } from "@/shared/utils/pct";
 
 /**
  * The thresholds /analytics/attention uses when you pass none. Home passes
@@ -9,24 +10,9 @@ import type { CurrencyAmounts, ISODate, Pct } from "@/api/types";
 export const DEFAULT_RISK_THRESHOLD_DAYS = 7;
 export const DEFAULT_ENDING_HORIZON_DAYS = 14;
 
-/** What a null Pct renders as, everywhere. */
-export const DASH = "—";
-
-/**
- * A percentage for display. null means the denominator was zero — there was no
- * basis to answer — so it renders a dash. Never `?? 0`: a client with nothing
- * scheduled has not failed to train.
- */
-export function formatPct(value: Pct): string {
-  if (value === null || value === undefined) return DASH;
-  return `${value.toFixed(1)}%`;
-}
-
-/** Same contract, without the decimal — for tight spots like a stat tile. */
-export function formatPctShort(value: Pct): string {
-  if (value === null || value === undefined) return DASH;
-  return `${Math.round(value)}%`;
-}
+/** Pct rendering moved to shared once the coach clients feature needed it too.
+ *  Re-exported here so Home's existing imports keep reading from one place. */
+export { DASH, formatPct, formatPctShort } from "@/shared/utils/pct";
 
 /**
  * MRR is a map keyed by ISO 4217, not a total. There is no FX rate in the
@@ -119,7 +105,7 @@ function parseIsoDate(iso: string | undefined): Date | null {
 /**
  * Today in the same base as Overview.thisWeek.byDay[].weekday (1 = Monday …
  * 7 = Sunday). The base is documented but unverified against a live response,
- * so WeekVolumeChart also warns on out-of-range values rather than trusting it.
+ * so WeekActivityChart buckets by date rather than trusting a weekday index.
  */
 export function todayWeekdayMondayBased(): number {
   const day = new Date().getDay(); // 0 = Sunday

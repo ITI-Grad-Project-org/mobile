@@ -1,5 +1,6 @@
 import { useGetAnalyticsActivityQuery } from "@/api/endpoints/analytics.endpoints";
 import { ActivityRow } from "@/features/coach/home/components/ActivityRow";
+import { useClientAvatars } from "@/features/coach/home/hooks/useClientAvatars";
 import {
   describeActivityShape,
   toActivityRows,
@@ -31,6 +32,9 @@ export function ActivityScreen() {
     { tenantId: tenantId ?? "", limit: FEED_LIMIT },
     { skip: !tenantId }
   );
+  // The feed carries no avatar — only membershipId — so faces come from the
+  // client list, which the Clients tab has usually already cached.
+  const avatars = useClientAvatars();
 
   const rows = useMemo(() => {
     describeActivityShape(feed.data ?? []);
@@ -99,7 +103,12 @@ export function ActivityScreen() {
         <Surface radius="lg">
           {/* Order is the API's — newest by loggedAt, never re-sorted. */}
           {rows.map((row, i) => (
-            <ActivityRow key={row.id} row={row} divided={i > 0} />
+            <ActivityRow
+              key={row.id}
+              row={row}
+              divided={i > 0}
+              avatarUrl={row.membershipId ? avatars.get(row.membershipId) : undefined}
+            />
           ))}
         </Surface>
       )}

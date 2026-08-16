@@ -21,6 +21,7 @@ import {
   type ActivityRowView,
 } from "../lib/normalizeActivity";
 import { describeAttentionShape, normalizeAttention } from "../lib/normalizeAttention";
+import { describeOverviewShape, normalizeOverview } from "../lib/normalizeOverview";
 
 /**
  * Render Home from lib/fixtures instead of the network, so the states the API
@@ -100,6 +101,13 @@ export function useCoachHomeAnalytics(): CoachHomeAnalytics {
     return normalizeAttention(attention.data);
   }, [attention.data]);
 
+  // And the same again for overview — where a missing nested object doesn't
+  // render blank, it throws on `overview.roster.active` and takes the screen.
+  const summary = useMemo(() => {
+    describeOverviewShape(overview.data);
+    return normalizeOverview(overview.data);
+  }, [overview.data]);
+
   const refetch = useCallback(() => {
     if (!tenantId) return;
     overview.refetch();
@@ -121,7 +129,7 @@ export function useCoachHomeAnalytics(): CoachHomeAnalytics {
   }
 
   return {
-    overview: overview.data,
+    overview: summary,
     attention: queues,
     activity: rows,
     // No tenant means every query is skipped, so the empty values below are

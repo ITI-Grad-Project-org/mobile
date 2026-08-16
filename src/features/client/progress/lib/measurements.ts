@@ -1,32 +1,17 @@
+import { unwrapList } from "@/api/pagination";
 import type { Measurement } from "@/api/types";
+import { METRICS, type MetricMeta } from "@/features/shared/measurements/metrics";
 
-/** Numeric metric fields on a measurement that we track a trend for. */
-export type MetricKey =
-  | "weightKg"
-  | "bodyFatPct"
-  | "chestCm"
-  | "waistCm"
-  | "hipsCm"
-  | "armCm"
-  | "thighCm";
-
-export type MetricMeta = {
-  key: MetricKey;
-  label: string;
-  unit: string;
-  /** true when a lower value is "good" (used to colour the delta pill). */
-  lowerIsBetter: boolean;
-};
-
-export const METRICS: MetricMeta[] = [
-  { key: "weightKg", label: "Weight", unit: "kg", lowerIsBetter: true },
-  { key: "bodyFatPct", label: "Body fat", unit: "%", lowerIsBetter: true },
-  { key: "waistCm", label: "Waist", unit: "cm", lowerIsBetter: true },
-  { key: "chestCm", label: "Chest", unit: "cm", lowerIsBetter: false },
-  { key: "hipsCm", label: "Hips", unit: "cm", lowerIsBetter: true },
-  { key: "armCm", label: "Arm", unit: "cm", lowerIsBetter: false },
-  { key: "thighCm", label: "Thigh", unit: "cm", lowerIsBetter: false },
-];
+// The metric metadata moved to the shared measurements layer once the coach
+// side started reading the same fields. Re-exported so this feature's existing
+// imports keep working.
+export {
+  METRICS,
+  formatMetric,
+  metricValue,
+  type MetricKey,
+  type MetricMeta,
+} from "@/features/shared/measurements/metrics";
 
 export type MetricSummary = MetricMeta & {
   value: number | undefined;
@@ -53,15 +38,9 @@ function byDateAsc(a: Measurement, b: Measurement): number {
   return a.measuredAt < b.measuredAt ? -1 : a.measuredAt > b.measuredAt ? 1 : 0;
 }
 
+/** Kept as the progress feature's name for the shared envelope reader. */
 export function extractMeasurements(raw: unknown): Measurement[] {
-  if (Array.isArray(raw)) return raw as Measurement[];
-  if (raw && typeof raw === "object") {
-    const obj = raw as Record<string, unknown>;
-    for (const key of ["data", "items", "results", "measurements", "docs"]) {
-      if (Array.isArray(obj[key])) return obj[key] as Measurement[];
-    }
-  }
-  return [];
+  return unwrapList<Measurement>(raw);
 }
 
 export function deriveMeasurementStats(raw: unknown): MeasurementStats {

@@ -283,12 +283,14 @@ export interface Measurement extends MeasurementFields {
   photos?: string[]; // hosted URLs on the way back out
 }
 
-/** Paginated envelope for GET /client/me/measurements. */
 export interface ListMeasurementsResponse {
-  data: Measurement[];
-  page: number;
-  limit: number;
-  total: number;
+  docs: Measurement[];
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -804,11 +806,15 @@ export interface CheckinAwaitingReview {
   clientName: string;
   submittedAt: string; // timestamp
 }
+/** VERIFIED against a live response (2026-08-16): the field is `endsOn`, not
+ *  `endDate`, and the row also carries `programName` and `daysRemaining`. */
 export interface ProgramEndingSoon {
   programId: string;
   membershipId: string;
   clientName: string;
-  endDate: ISODate;
+  programName: string;
+  endsOn: ISODate;
+  daysRemaining: number;
   /** Covers the whole programme run, not the window. */
   completionPct: Pct;
 }
@@ -821,16 +827,21 @@ export interface Attention {
   programsEndingSoon: ProgramEndingSoon[];
 }
 
+/**
+ * VERIFIED against a live response (2026-08-16). Note what is NOT here: there
+ * is no `id` and no `summary` — a row carries only what happened and when, so
+ * the feed's caption has to be built from `activityType` client-side, and its
+ * React key from membershipId + occurredAt.
+ */
 export interface AnalyticsActivityRow {
-  id: string;
   membershipId: string;
   clientName: string;
-  type: 'workout_set' | 'meal' | 'checkin' | (string & {}); // confirm the union
-  /** Orders the feed (newest first). */
-  loggedAt: string;
+  /** e.g. 'workout_set_reported'. Open union — new kinds appear over time. */
+  activityType: 'workout_set_reported' | (string & {});
   /** Display only — many rows share one value, so sorting by it scrambles. */
-  trainingDate: ISODate;
-  summary: string; // confirm
+  activityDate: ISODate;
+  /** Orders the feed (newest first). */
+  occurredAt: string;
 }
 
 export interface RosterClientRow {

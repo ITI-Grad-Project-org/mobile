@@ -1,5 +1,6 @@
 import { baseApi } from '../baseApi';
 import { appendFields, appendFiles } from '../formData';
+import { unwrapList } from '../pagination';
 import {
   ListMeasurementsResponse,
   Measurement,
@@ -52,7 +53,10 @@ export const measurementsEndpoints = baseApi.injectEndpoints({
         params: { page, limit, from, to },
       }),
       providesTags: (result, error, { tenantId }) => {
-        const list = Array.isArray(result) ? result : (result?.data ?? []);
+        // Rows live under `docs`, not `data` — reading the wrong key here meant
+        // no per-measurement tags were ever emitted, so a single-measurement
+        // invalidation silently did nothing.
+        const list = unwrapList<Measurement>(result);
         return [
           { type: 'Measurements', id: `LIST-${tenantId}` },
           ...list.map((m) => ({ type: 'Measurements' as const, id: `${tenantId}:${m.id}` })),
@@ -62,6 +66,35 @@ export const measurementsEndpoints = baseApi.injectEndpoints({
     getMeasurement: builder.query<Measurement, { id: string; tenantId: string }>({
       query: ({ id }) => `/client/me/measurements/${id}`,
       providesTags: (result, error, { id, tenantId }) => [{ type: 'Measurements', id: `${tenantId}:${id}` }],
+    }),
+
+    // ----- Coach-side reads. Same shape as /client/me, addressed by clientId.
+    // `clientId` is the client's USER id (the one /client returns), not a
+    // membershipId — a 404 here means the client isn't in this tenant.
+    listClientMeasurements: builder.query<
+      ListMeasurementsResponse | Measurement[],
+      ListMeasurementsParams & { clientId: string }
+    >({
+      query: ({ clientId, page = 1, limit = 10, from, to }) => ({
+        url: `/client/${clientId}/measurements`,
+        params: { page, limit, from, to },
+      }),
+      providesTags: (result, error, { tenantId, clientId }) => {
+        const list = unwrapList<Measurement>(result);
+        return [
+          { type: 'Measurements', id: `CLIENT-${tenantId}:${clientId}` },
+          ...list.map((m) => ({ type: 'Measurements' as const, id: `${tenantId}:${m.id}` })),
+        ];
+      },
+    }),
+    getClientMeasurement: builder.query<
+      Measurement,
+      { clientId: string; id: string; tenantId: string }
+    >({
+      query: ({ clientId, id }) => `/client/${clientId}/measurements/${id}`,
+      providesTags: (result, error, { id, tenantId }) => [
+        { type: 'Measurements', id: `${tenantId}:${id}` },
+      ],
     }),
     updateMeasurement: builder.mutation<Measurement, MeasurementWriteArgs & { id: string }>({
       query: ({ id, ...args }) => ({
@@ -92,6 +125,9 @@ export const {
   useListMeasurementsQuery,
   useLazyListMeasurementsQuery,
   useGetMeasurementQuery,
+  useListClientMeasurementsQuery,
+  useLazyListClientMeasurementsQuery,
+  useGetClientMeasurementQuery,
   useUpdateMeasurementMutation,
   useDeleteMeasurementMutation,
 } = measurementsEndpoints;

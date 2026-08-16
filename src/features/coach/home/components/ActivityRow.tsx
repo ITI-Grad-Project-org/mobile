@@ -4,10 +4,16 @@ import { Pressable, Text, View } from "@/tw";
 import { formatLoggedAt, initialsOf } from "../lib/format";
 import type { ActivityRowView } from "../lib/normalizeActivity";
 
-/** `type` is an open union in the API, so unknown kinds fall back to secondary. */
+/**
+ * `activityType` is an open union — the live API sends `workout_set_reported`,
+ * and new kinds appear over time — so exact hits are listed here and anything
+ * else is matched loosely below before falling back to secondary.
+ */
 const TINTS: Record<string, { bg: string; fg: string }> = {
   meal: { bg: "bg-mint", fg: "text-mint-ink" },
+  meal_logged: { bg: "bg-mint", fg: "text-mint-ink" },
   workout_set: { bg: "bg-lilac", fg: "text-lilac-ink" },
+  workout_set_reported: { bg: "bg-lilac", fg: "text-lilac-ink" },
   checkin: { bg: "bg-secondary", fg: "text-secondary-foreground" },
 };
 const FALLBACK_TINT = { bg: "bg-secondary", fg: "text-secondary-foreground" };

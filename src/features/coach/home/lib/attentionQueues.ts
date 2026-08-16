@@ -1,4 +1,4 @@
-import type { Attention } from "@/api/types";
+import type { Attention, CheckinAwaitingReview } from "@/api/types";
 import type { IconName } from "@/shared/ui/Icon";
 
 import {
@@ -38,7 +38,17 @@ export interface CollapsedLine {
   label: string;
 }
 
+export interface BuildQueuesOptions {
+  /**
+   * Check-ins derived from measurements, used only when the analytics queue is
+   * empty. See useRosterCheckins for why this exists.
+   */
+  fallbackCheckins?: CheckinAwaitingReview[];
+}
+
 export interface QueueModel {
+  /** True when the check-ins row came from measurements, which changes its copy. */
+  usedFallbackCheckins: boolean;
   /** Non-empty queues, in the API's order. The first gets the filled pill. */
   rows: AttentionRowModel[];
   /** Empty queues as one-line reassurances, suppressed entirely when allClear. */
@@ -47,15 +57,26 @@ export interface QueueModel {
   allClear: boolean;
 }
 
-export function buildQueues(attention: Attention | undefined): QueueModel {
-  if (!attention) return { rows: [], collapsed: [], allClear: false };
+export function buildQueues(
+  attention: Attention | undefined,
+  options: BuildQueuesOptions = {}
+): QueueModel {
+  if (!attention) {
+    return { rows: [], collapsed: [], allClear: false, usedFallbackCheckins: false };
+  }
 
   const rows: AttentionRowModel[] = [];
   const collapsed: CollapsedLine[] = [];
 
   const atRisk = attention.atRisk ?? [];
-  const checkins = attention.checkinsAwaitingReview ?? [];
   const ending = attention.programsEndingSoon ?? [];
+
+  // The analytics queue wins when it has anything; measurements only fill the
+  // gap left by the missing check-in resource.
+  const analyticsCheckins = attention.checkinsAwaitingReview ?? [];
+  const fallbackCheckins = options.fallbackCheckins ?? [];
+  const usedFallbackCheckins = analyticsCheckins.length === 0 && fallbackCheckins.length > 0;
+  const checkins = usedFallbackCheckins ? fallbackCheckins : analyticsCheckins;
 
   if (atRisk.length > 0) {
     const worst = atRisk[0];
@@ -97,16 +118,22 @@ export function buildQueues(attention: Attention | undefined): QueueModel {
       count: checkins.length,
       bubbleClassName: "bg-info-tint",
       bubbleTextClassName: "text-info",
-      title: `${checkins.length} ${pluralise(checkins.length, "check-in")} waiting`,
+      // Measurements carry no "reviewed" flag, so a derived row can only claim
+      // the check-in happened — not that it is still unanswered.
+      title: usedFallbackCheckins
+        ? `${checkins.length} recent ${pluralise(checkins.length, "check-in")}`
+        : `${checkins.length} ${pluralise(checkins.length, "check-in")} waiting`,
       subtitle:
         waiting === null
           ? oldest.clientName
-          : `${oldest.clientName} · oldest waiting ${waiting} ${pluralise(waiting, "day")}`,
+          : usedFallbackCheckins
+            ? `${oldest.clientName} · checked in ${waiting} ${pluralise(waiting, "day")} ago`
+            : `${oldest.clientName} · oldest waiting ${waiting} ${pluralise(waiting, "day")}`,
       actionLabel: "Review",
       membershipId: oldest.membershipId,
     });
   } else {
-    collapsed.push({ key: "checkins", label: "No check-ins waiting" });
+    collapsed.push({ key: "checkins", label: "No recent check-ins" });
   }
 
   if (ending.length > 0) {
@@ -122,7 +149,7 @@ export function buildQueues(attention: Attention | undefined): QueueModel {
       title: `${ending.length} ${pluralise(ending.length, "program")} ending soon`,
       // completionPct covers the whole run, not the window — it's the signal
       // for what to write next, so it belongs on the row.
-      subtitle: `${soonest.clientName} ${formatShortDate(soonest.endDate)} · ${
+      subtitle: `${soonest.clientName} ${formatShortDate(soonest.endsOn)} · ${
         soonest.completionPct === null ? DASH : formatPctShort(soonest.completionPct)
       } done`,
       actionLabel: "Renew",
@@ -136,7 +163,7 @@ export function buildQueues(attention: Attention | undefined): QueueModel {
   }
 
   const allClear = rows.length === 0;
-  return { rows, collapsed: allClear ? [] : collapsed, allClear };
+  return { rows, collapsed: allClear ? [] : collapsed, allClear, usedFallbackCheckins };
 }
 
 export interface InsightModel {

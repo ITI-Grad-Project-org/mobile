@@ -5,6 +5,8 @@ import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import type { StackPerson } from "@/shared/ui/AvatarStack";
 import { useCallback, useMemo } from "react";
 
+import type { RosterClient } from "./useRosterCheckins";
+
 export interface CoachHomeData {
   /** "Friday morning" — device clock, not the server. */
   greeting: string;
@@ -18,10 +20,30 @@ export interface CoachHomeData {
    * link off an attention row has to come through here.
    */
   clientUserIds: Map<string, string>;
+  /** Roster rows that carry both ids — what the per-client reads need. */
+  checkinTargets: RosterClient[];
   isLoading: boolean;
   isFetching: boolean;
   isError: boolean;
   refetchAll: () => void;
+}
+
+let loggedClientShape = false;
+
+/**
+ * Prints the client-list shape once. The list is typed `any[]` and nests the
+ * user differently across shapes, so this is how you find the key holding the
+ * USER id that /client/{clientId}/measurements wants — a membershipId there
+ * comes back 404.
+ *
+ * Module-level rather than inline: the compiler forbids writing to an outer
+ * binding from inside a hook.
+ */
+function describeRosterShape(rows: any[]): void {
+  if (!__DEV__ || loggedClientShape || rows.length === 0) return;
+  loggedClientShape = true;
+  console.log("[roster] client row keys:", Object.keys(rows[0]).join(", "));
+  console.log("[roster] first client row:", JSON.stringify(rows[0], null, 2));
 }
 
 function partOfDay(hour: number): string {
@@ -72,6 +94,26 @@ export function useCoachHomeData(): CoachHomeData {
     [clients.data]
   );
 
+  const checkinTargets = useMemo<RosterClient[]>(() => {
+    const rows = (clients.data ?? []) as any[];
+    describeRosterShape(rows);
+
+    const targets: RosterClient[] = [];
+    for (const row of rows) {
+      const membershipId = row?.membershipId ?? row?.id;
+      const clientId = row?.client?.id ?? row?.clientId ?? row?.userId;
+      if (membershipId && clientId) {
+        targets.push({
+          clientId: String(clientId),
+          membershipId: String(membershipId),
+          name: nameOf(row),
+          avatarUrl: row?.client?.avatarUrl ?? row?.avatarUrl ?? row?.avatar,
+        });
+      }
+    }
+    return targets;
+  }, [clients.data]);
+
   const clientUserIds = useMemo(() => {
     const map = new Map<string, string>();
     for (const row of (clients.data ?? []) as any[]) {
@@ -96,6 +138,7 @@ export function useCoachHomeData(): CoachHomeData {
     firstName: coach.firstName ?? "",
     roster,
     clientUserIds,
+    checkinTargets,
     isLoading: !tenantId || profile.isLoading || clients.isLoading,
     isFetching: profile.isFetching || clients.isFetching,
     isError: profile.isError || clients.isError,

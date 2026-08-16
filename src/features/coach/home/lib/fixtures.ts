@@ -75,7 +75,9 @@ export const FIXTURE_ATTENTION: Attention = {
       programId: "p-1",
       membershipId: "m-4",
       clientName: "Youssef Sami",
-      endDate: "2026-08-22",
+      programName: "12-Week Strength Base",
+      endsOn: "2026-08-22",
+      daysRemaining: 6,
       completionPct: null, // dash, not "0% done"
     },
   ],
@@ -88,32 +90,27 @@ export const FIXTURE_ATTENTION_CLEAR: Attention = {
   programsEndingSoon: [],
 };
 
+/** Mirrors the live shape: no id, no summary, `activityType`/`occurredAt`. */
 export const FIXTURE_ACTIVITY: AnalyticsActivityRow[] = [
   {
-    id: "a-1",
     membershipId: "m-1",
     clientName: "Mia Adel",
-    type: "workout_set",
-    loggedAt: new Date(Date.now() - 45 * 60_000).toISOString(),
-    trainingDate: "2026-08-15",
-    summary: "Upper body A · 18 sets",
+    activityType: "workout_set_reported",
+    occurredAt: new Date(Date.now() - 45 * 60_000).toISOString(),
+    activityDate: "2026-08-15",
   },
   {
-    id: "a-2",
     membershipId: "m-3",
     clientName: "Youssef Sami",
-    type: "meal",
-    loggedAt: new Date(Date.now() - 3 * 3_600_000).toISOString(),
-    trainingDate: "2026-08-15",
-    summary: "Lunch · 620 kcal",
+    activityType: "meal_logged",
+    occurredAt: new Date(Date.now() - 3 * 3_600_000).toISOString(),
+    activityDate: "2026-08-15",
   },
   {
-    id: "a-3",
     membershipId: "m-4",
     clientName: "Nada Hassan",
-    type: "sleep_log", // unknown type — must fall back, not crash
-    loggedAt: new Date(Date.now() - 26 * 3_600_000).toISOString(),
-    trainingDate: "2026-08-14",
-    summary: "Logged 7h 20m",
+    activityType: "sleep_logged", // unknown kind — must degrade, not crash
+    occurredAt: new Date(Date.now() - 26 * 3_600_000).toISOString(),
+    activityDate: "2026-08-14",
   },
 ];

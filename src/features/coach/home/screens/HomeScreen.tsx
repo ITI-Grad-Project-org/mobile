@@ -15,6 +15,7 @@ import { WeekVolumeChart } from "../components/WeekVolumeChart";
 import { useCoachHomeAnalytics } from "../hooks/useCoachHomeAnalytics";
 import { useCoachHomeData } from "../hooks/useCoachHomeData";
 import { useDismissedInsights } from "../hooks/useDismissedInsights";
+import { useRosterCheckins } from "../hooks/useRosterCheckins";
 import {
   buildInsight,
   buildQueues,
@@ -39,6 +40,7 @@ export function HomeScreen() {
     firstName,
     roster,
     clientUserIds,
+    checkinTargets,
     isFetching: identityFetching,
     refetchAll,
   } = useCoachHomeData();
@@ -53,7 +55,18 @@ export function HomeScreen() {
   } = useCoachHomeAnalytics();
   const { dismiss, isDismissed } = useDismissedInsights();
 
-  const queues = useMemo(() => buildQueues(attention), [attention]);
+  // The check-in entity /analytics/attention reports on doesn't exist in
+  // core-api — a client check-in is a measurement — so the queue is rebuilt
+  // from the coach-side measurement reads whenever analytics returns none.
+  const fallbackCheckins = useRosterCheckins(
+    checkinTargets,
+    attention !== undefined && attention.checkinsAwaitingReview.length === 0
+  );
+
+  const queues = useMemo(
+    () => buildQueues(attention, { fallbackCheckins }),
+    [attention, fallbackCheckins]
+  );
   const insight = useMemo(() => buildInsight(attention), [attention]);
 
   const counts = overview?.attentionCounts;
@@ -61,21 +74,44 @@ export function HomeScreen() {
   // the authority for the number (the lists can be server-capped) and both are
   // computed at the same default thresholds, which is why nothing custom is
   // passed to /attention.
-  const badgeTotal = counts
-    ? counts.atRisk + counts.checkinsAwaitingReview + counts.programsEndingSoon
+  //
+  // Summed defensively because attentionCounts has no response schema either —
+  // a key spelled differently would otherwise make the whole sum NaN and put
+  // "NaN" in the badge.
+  const countedTotal = counts
+    ? [counts.atRisk, counts.checkinsAwaitingReview, counts.programsEndingSoon]
+        .filter((n) => typeof n === "number" && Number.isFinite(n))
+        .reduce((sum, n) => sum + n, 0)
     : null;
-
-  if (__DEV__ && counts && attention) {
-    const listTotal =
-      attention.atRisk.length +
+  const listTotal = attention
+    ? attention.atRisk.length +
       attention.checkinsAwaitingReview.length +
-      attention.programsEndingSoon.length;
-    if (badgeTotal !== null && badgeTotal !== listTotal) {
-      console.warn(
-        `[HomeScreen] attentionCounts (${badgeTotal}) disagrees with the attention lists ` +
-          `(${listTotal}). Someone passed a custom threshold to /attention, or the lists are capped.`
-      );
-    }
+      attention.programsEndingSoon.length
+    : null;
+  // Prefer the counts; fall back to the lists rather than showing nothing when
+  // the counts are absent. Measurement-derived check-ins are added on top,
+  // since analytics counted none of them.
+  const derivedCheckins = queues.usedFallbackCheckins ? fallbackCheckins.length : 0;
+  const badgeTotal =
+    countedTotal !== null
+      ? countedTotal + derivedCheckins
+      : listTotal !== null
+        ? listTotal + derivedCheckins
+        : null;
+
+  if (
+    __DEV__ &&
+    !queues.usedFallbackCheckins &&
+    countedTotal !== null &&
+    listTotal !== null &&
+    countedTotal !== listTotal
+  ) {
+    console.warn(
+      `[HomeScreen] attentionCounts (${countedTotal}) disagrees with the attention lists ` +
+        `(${listTotal}). Either a custom threshold reached /attention, the lists are capped, ` +
+        `or a queue is spelled differently than normalizeAttention expects — check the ` +
+        `"[attention] top-level keys" log.`
+    );
   }
 
   const openClient = useCallback(
@@ -95,7 +131,7 @@ export function HomeScreen() {
   const onRowAction = useCallback(
     (row: AttentionRowModel) => {
       if (row.key === "atRisk") return openClient(row.membershipId);
-      if (row.key === "checkins") return router.push("/(coach)/(tabs)/inbox");
+      if (row.key === "checkins") return router.push("/(coach)/check-ins");
       return router.push("/(coach)/(tabs)/plans");
     },
     [openClient]

@@ -1,24 +1,6 @@
-/**
- * The activity feed, made safe to render.
- *
- * /analytics/activity has no response schema in Swagger — core-api documents
- * the params and defers the body to analytics-service — so the field names in
- * `AnalyticsActivityRow` are transcribed from prose and at least one of them is
- * wrong in practice. Two failure modes follow from that, and both showed up:
- *
- *  - a field that turns out to be an OBJECT (a details bag rather than a
- *    pre-formatted string) crashes the row, because React can't render an
- *    object as a child;
- *  - a field that simply isn't there renders an empty line, so every row looks
- *    identical.
- *
- * Everything below therefore reads several plausible spellings, coerces to a
- * string, and never hands an object to <Text>. When the shape is finally
- * confirmed this can collapse back to plain field access — see the dev log in
- * `describeActivityShape`.
- */
 
 import { formatShortDate } from "./format";
+import { asRecord, asString, nameFrom, pick } from "./payload";
 
 export interface ActivityRowView {
   id: string;
@@ -31,60 +13,9 @@ export interface ActivityRowView {
   summary: string;
 }
 
-const UNNAMED = "Client";
-
-function asString(value: unknown): string | undefined {
-  if (typeof value === "string" && value.trim()) return value.trim();
-  if (typeof value === "number" && Number.isFinite(value)) return String(value);
-  return undefined;
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
-}
-
-/** First non-empty string among the given paths, e.g. "client.firstName". */
-function pick(row: Record<string, unknown>, paths: string[]): string | undefined {
-  for (const path of paths) {
-    let cursor: unknown = row;
-    for (const key of path.split(".")) {
-      cursor = asRecord(cursor)?.[key];
-      if (cursor === undefined) break;
-    }
-    const value = asString(cursor);
-    if (value) return value;
-  }
-  return undefined;
-}
-
-function nameFrom(row: Record<string, unknown>): string {
-  const direct = pick(row, [
-    "clientName",
-    "client.name",
-    "client.fullName",
-    "membership.client.name",
-    "user.name",
-    "name",
-  ]);
-  if (direct) return direct;
-
-  // Split names, wherever they hang.
-  for (const base of ["client", "membership.client", "user", ""]) {
-    const prefix = base ? `${base}.` : "";
-    const first = pick(row, [`${prefix}firstName`, `${prefix}givenName`]);
-    const last = pick(row, [`${prefix}lastName`, `${prefix}familyName`]);
-    const joined = [first, last].filter(Boolean).join(" ").trim();
-    if (joined) return joined;
-  }
-
-  return pick(row, ["client.email", "user.email", "email"]) ?? UNNAMED;
-}
-
 function typeFrom(row: Record<string, unknown>): string {
   const raw =
-    pick(row, ["type", "kind", "eventType", "activityType", "event"]) ?? "unknown";
+    pick(row, ["activityType", "type", "kind", "eventType", "event"]) ?? "unknown";
   return raw
     .trim()
     .replace(/([a-z])([A-Z])/g, "$1_$2")
@@ -92,7 +23,10 @@ function typeFrom(row: Record<string, unknown>): string {
     .toLowerCase();
 }
 
-/** "Logged a workout" etc. — the floor when there's no detail to show. */
+/**
+ * The row's caption. The response carries no summary — only `activityType` —
+ * so this IS the line, not a fallback. Phrased as what the client did.
+ */
 function labelForType(type: string): string {
   if (type.includes("workout") || type.includes("set") || type.includes("exercise")) {
     return "Logged a workout";
@@ -102,8 +36,12 @@ function labelForType(type: string): string {
   }
   if (type.includes("checkin") || type.includes("check_in")) return "Submitted a check-in";
   if (type.includes("measurement") || type.includes("weight")) return "Logged a measurement";
+  if (type.includes("water") || type.includes("hydration")) return "Logged water";
   if (type === "unknown") return "Logged activity";
-  return `Logged ${type.replace(/_/g, " ")}`;
+  // Unknown kind: strip the event-y suffix and read the verb back out, so
+  // "sleep_logged" becomes "Logged sleep" rather than "Logged sleep logged".
+  const subject = type.replace(/_(reported|logged|created|completed|submitted)$/, "");
+  return `Logged ${subject.replace(/_/g, " ")}`;
 }
 
 /** Human-readable detail out of a nested bag, when there's no summary string. */
@@ -146,18 +84,24 @@ export function normalizeActivityRow(raw: unknown, index: number): ActivityRowVi
     detailFrom(row) ??
     labelForType(type);
 
-  // Display only — the feed is ordered by loggedAt, and many rows share a
+  // Display only — the feed is ordered by occurredAt, and many rows share a
   // training date, so this can never be allowed to sort anything. Today's date
   // is left off: it's the common case and adds nothing to the row.
-  const trainingDate = pick(row, ["trainingDate", "date", "localDate"]);
+  const trainingDate = pick(row, ["activityDate", "trainingDate", "date", "localDate"]);
   const showDate = trainingDate && trainingDate.slice(0, 10) !== localToday();
 
+  const membershipId = pick(row, ["membershipId", "membership.id", "clientMembershipId"]);
+  const occurredAt = pick(row, ["occurredAt", "loggedAt", "createdAt", "timestamp", "at"]);
+
   return {
-    id: pick(row, ["id", "eventId", "activityId"]) ?? `row-${index}`,
-    membershipId: pick(row, ["membershipId", "membership.id", "clientMembershipId"]),
+    // The response has no id, so the key is composed. membershipId + the
+    // instant is unique in practice: one client can't log two things in the
+    // same millisecond. The index keeps it stable if either is ever missing.
+    id: pick(row, ["id", "eventId", "activityId"]) ?? `${membershipId ?? "row"}-${occurredAt ?? index}`,
+    membershipId,
     clientName: nameFrom(row),
     type,
-    loggedAt: pick(row, ["loggedAt", "createdAt", "occurredAt", "timestamp", "at"]),
+    loggedAt: occurredAt,
     summary: showDate ? `${summary} · ${formatShortDate(trainingDate)}` : summary,
   };
 }

@@ -20,6 +20,7 @@ import {
   toActivityRows,
   type ActivityRowView,
 } from "../lib/normalizeActivity";
+import { describeAttentionShape, normalizeAttention } from "../lib/normalizeAttention";
 
 /**
  * Render Home from lib/fixtures instead of the network, so the states the API
@@ -92,6 +93,13 @@ export function useCoachHomeAnalytics(): CoachHomeAnalytics {
     return toActivityRows(activity.data);
   }, [activity.data]);
 
+  // Same treatment: a queue the API spells differently would otherwise render
+  // as "No check-ins waiting", which is a confident wrong answer.
+  const queues = useMemo(() => {
+    describeAttentionShape(attention.data);
+    return normalizeAttention(attention.data);
+  }, [attention.data]);
+
   const refetch = useCallback(() => {
     if (!tenantId) return;
     overview.refetch();
@@ -114,7 +122,7 @@ export function useCoachHomeAnalytics(): CoachHomeAnalytics {
 
   return {
     overview: overview.data,
-    attention: attention.data,
+    attention: queues,
     activity: rows,
     // No tenant means every query is skipped, so the empty values below are
     // placeholders rather than answers — report that as loading.

@@ -16,6 +16,7 @@ import { Pressable, ScrollView, Text, View } from "@/tw";
 import { router } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { formatDateRange } from "@/features/shared/plans/lib/programWeek";
+import { selectActiveProgram } from "@/features/shared/plans/lib/activeProgram";
 import { DayCard } from "../components/DayCard";
 import { DaySheet } from "../components/DaySheet";
 import { NutritionOverview, useActiveNutritionPlan } from "@/features/client/nutrition";
@@ -37,11 +38,14 @@ export function PlanScreen() {
     { skip: !tenantId }
   );
 
-  const rawPrograms = (myProgramsData as any)?.data || myProgramsData || [];
-  const programs = Array.isArray(rawPrograms) ? rawPrograms : [];
   const currentProgram = (currentProgData as any)?.data || currentProgData;
 
-  const publishedProgram = programs.length > 0 ? programs[0] : currentProgram;
+  // The list arrives unordered and includes finished and not-yet-started
+  // blocks, so the plan has to be picked by its schedule — see lib/activeProgram.
+  const publishedProgram = useMemo(() => {
+    const raw = (myProgramsData as any)?.data || myProgramsData || [];
+    return selectActiveProgram(Array.isArray(raw) ? raw : [], currentProgram);
+  }, [myProgramsData, currentProgram]);
 
   const { data: fullProgramData } = useGetMyProgramQuery(
     { tenantId: tenantId ?? "", programId: publishedProgram?.id || "" },

@@ -19,7 +19,6 @@ export function DayCard({
   return (
     <Card
       interactive
-      glass
       onPress={onPress}
       className={cn(
         "flex-row items-center gap-4 px-4 py-6",

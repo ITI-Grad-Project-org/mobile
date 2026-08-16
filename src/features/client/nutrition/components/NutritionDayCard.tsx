@@ -49,7 +49,8 @@ export function NutritionDayCard({
           : "No meals planned";
 
   // Which meals, in eating order — the day's shape without naming any dish.
-  const slots = describeDaySlots(day) ?? (day.isFlexibleDay ? "Log freely" : null);
+  const slots =
+    describeDaySlots(day) ?? (day.isFlexibleDay ? "Log freely" : null);
 
   const planned = plannedMacros(day);
   const showOverride = hasCalorieOverride(day, baseline);
@@ -71,7 +72,6 @@ export function NutritionDayCard({
 
   return (
     <Card
-      glass
       interactive
       onPress={onPress}
       className={cn(
@@ -119,7 +119,10 @@ export function NutritionDayCard({
             </Text>
           ) : null}
         </View>
-        <Text numberOfLines={1} className="text-[15px] font-semibold text-foreground">
+        <Text
+          numberOfLines={1}
+          className="text-[15px] font-semibold text-foreground"
+        >
           {title}
         </Text>
         {slots ? (
@@ -143,7 +146,9 @@ export function NutritionDayCard({
           "h-9 w-9 shrink-0 items-center justify-center rounded-full",
           isDone ? "bg-primary" : "bg-secondary"
         )}
-        accessibilityLabel={isDone ? "Completed" : isSkipped ? "Skipped" : undefined}
+        accessibilityLabel={
+          isDone ? "Completed" : isSkipped ? "Skipped" : undefined
+        }
       >
         <Icon
           name={isDone ? "check" : isSkipped ? "x" : "chevron-right"}

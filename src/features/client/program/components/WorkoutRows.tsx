@@ -15,7 +15,6 @@ interface RowProps {
 export function UpcomingWorkoutRow({ workout, onPress }: RowProps) {
   return (
     <Card
-      glass
       interactive
       onPress={onPress}
       accessibilityRole="button"
@@ -64,7 +63,6 @@ export function CompletedWorkoutRow({ workout, onPress }: RowProps) {
 
   return (
     <Card
-      glass
       interactive
       onPress={onPress}
       accessibilityRole="button"

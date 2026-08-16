@@ -1,300 +1,402 @@
-import { useCoachHomeData } from "@/features/coach/home/hooks/useCoachHomeData";
-import { cn } from "@/lib/utils";
-import { Card } from "@/shared/ui/Card";
+import { AvatarStack } from "@/shared/ui/AvatarStack";
 import { Icon } from "@/shared/ui/Icon";
-import { SectionTitle } from "@/shared/ui/SectionTitle";
-import { Pressable, ScrollView, Text, useCSSVariable, View } from "@/tw";
-import { LinearGradient } from "expo-linear-gradient";
-import { useMemo } from "react";
-import { RefreshControl } from "react-native";
+import { Surface } from "@/shared/ui/Surface";
+import { todayIso } from "@/shared/utils/date";
+import { Pressable, ScrollView, Text, View, useCSSVariable } from "@/tw";
+import { router } from "expo-router";
+import { useCallback, useMemo } from "react";
+import { ActivityIndicator, RefreshControl } from "react-native";
 
-/** Monogram initials from a name — deterministic, always renders (unlike emoji). */
-function initials(name: string) {
-  return name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase() ?? "")
-    .join("");
-}
+import { ActivityRow } from "../components/ActivityRow";
+import { AttentionRow } from "../components/AttentionRow";
+import { InsightCard } from "../components/InsightCard";
+import { StatTile } from "../components/StatTile";
+import { WeekVolumeChart } from "../components/WeekVolumeChart";
+import { useCoachHomeAnalytics } from "../hooks/useCoachHomeAnalytics";
+import { useCoachHomeData } from "../hooks/useCoachHomeData";
+import { useDismissedInsights } from "../hooks/useDismissedInsights";
+import {
+  buildInsight,
+  buildQueues,
+  type AttentionRowModel,
+} from "../lib/attentionQueues";
+import {
+  DEFAULT_ENDING_HORIZON_DAYS,
+  DEFAULT_RISK_THRESHOLD_DAYS,
+  formatMrrLines,
+  formatPctShort,
+  todayWeekdayMondayBased,
+  weekLabelFrom,
+} from "../lib/format";
 
-const colorMap: Record<string, { bg: string; text: string }> = {
-  mint: { bg: "bg-mint", text: "text-mint-ink" },
-  lilac: { bg: "bg-lilac", text: "text-lilac-ink" },
-  sky: { bg: "bg-sky", text: "text-sky-ink" },
-  peach: { bg: "bg-peach", text: "text-peach-ink" },
-  sun: { bg: "bg-sun", text: "text-sun-ink" },
-};
+const HIT_SLOP = { top: 8, bottom: 8, left: 6, right: 6 };
 
 export function HomeScreen() {
   const primaryColor = (useCSSVariable("--primary") as string) || "#e5673a";
-  const peachColor = (useCSSVariable("--peach") as string) || "#f7a083";
 
   const {
     greeting,
     firstName,
-    activeClients,
-    unreadThreads,
-    unreadNames,
-    plansEndingSoon,
-    feed,
-    isLoading,
-    isFetching,
+    roster,
+    clientUserIds,
+    isFetching: identityFetching,
     refetchAll,
   } = useCoachHomeData();
+  const {
+    overview,
+    attention,
+    activity,
+    isLoading,
+    isFetching,
+    isError,
+    refetch,
+  } = useCoachHomeAnalytics();
+  const { dismiss, isDismissed } = useDismissedInsights();
 
-  const triage = useMemo(
-    () => [
-      // TODO: no coach-visible client-activity endpoint exists (/client/me/activity
-      // is self-scoped), so this row stays illustrative until the API adds one.
-      {
-        tone: "primary" as const,
-        icon: "alert-triangle" as const,
-        title: "Sarah hasn't logged in 4 days",
-        sub: "Attrition risk · last session Jun 22",
-        cta: "Reach out",
-      },
-      {
-        tone: "ink" as const,
-        icon: "message-square" as const,
-        title: unreadThreads
-          ? `${unreadThreads} check-in${unreadThreads === 1 ? "" : "s"} waiting for review`
-          : "No check-ins waiting",
-        sub: unreadNames.length ? unreadNames.join(" · ") : "You're all caught up",
-        cta: "Review",
-      },
-      {
-        tone: "sun" as const,
-        icon: "clock" as const,
-        title: plansEndingSoon
-          ? `${plansEndingSoon} plan${plansEndingSoon === 1 ? "" : "s"} ending this week`
-          : "No plans ending this week",
-        sub: plansEndingSoon ? "Renew before they lapse" : "Nothing to renew",
-        cta: "Renew",
-      },
-    ],
-    [unreadThreads, unreadNames, plansEndingSoon]
+  const queues = useMemo(() => buildQueues(attention), [attention]);
+  const insight = useMemo(() => buildInsight(attention), [attention]);
+
+  const counts = overview?.attentionCounts;
+  // The badge comes from overview, never from the list lengths: the counts are
+  // the authority for the number (the lists can be server-capped) and both are
+  // computed at the same default thresholds, which is why nothing custom is
+  // passed to /attention.
+  const badgeTotal = counts
+    ? counts.atRisk + counts.checkinsAwaitingReview + counts.programsEndingSoon
+    : null;
+
+  if (__DEV__ && counts && attention) {
+    const listTotal =
+      attention.atRisk.length +
+      attention.checkinsAwaitingReview.length +
+      attention.programsEndingSoon.length;
+    if (badgeTotal !== null && badgeTotal !== listTotal) {
+      console.warn(
+        `[HomeScreen] attentionCounts (${badgeTotal}) disagrees with the attention lists ` +
+          `(${listTotal}). Someone passed a custom threshold to /attention, or the lists are capped.`
+      );
+    }
+  }
+
+  const openClient = useCallback(
+    (membershipId: string | undefined) => {
+      const userId = membershipId ? clientUserIds.get(membershipId) : undefined;
+      // The chat route wants the client's user id. Without it, land on the
+      // roster rather than pushing a route that can't resolve.
+      if (userId) {
+        router.push({ pathname: "/(coach)/chat/[id]", params: { id: userId } });
+        return;
+      }
+      router.push("/(coach)/(tabs)/clients");
+    },
+    [clientUserIds]
   );
+
+  const onRowAction = useCallback(
+    (row: AttentionRowModel) => {
+      if (row.key === "atRisk") return openClient(row.membershipId);
+      if (row.key === "checkins") return router.push("/(coach)/(tabs)/inbox");
+      return router.push("/(coach)/(tabs)/plans");
+    },
+    [openClient]
+  );
+
+  const onRefresh = useCallback(() => {
+    refetch();
+    refetchAll();
+  }, [refetch, refetchAll]);
+
+  const mrrLines = formatMrrLines(overview?.mrr);
+  // thisWeek is derived from the WINDOW's end date, not from today. Home sends
+  // no window, so the end is today and "THIS WEEK" is honest — the moment a
+  // range picker lands here, this has to be labelled from that window instead.
+  const weekLabel = weekLabelFrom(todayIso());
+  const byDay = overview?.thisWeek.byDay ?? [];
+  const showInsight = insight !== null && !isDismissed(insight.key);
+
+  const refreshControl = (
+    <RefreshControl
+      refreshing={(isFetching || identityFetching) && !isLoading}
+      onRefresh={onRefresh}
+      tintColor={primaryColor}
+    />
+  );
+
+  const header = (
+    <View className="gap-0.75">
+      <Text className="text-[12.5px] text-muted-foreground">{greeting}</Text>
+      <Text className="font-display text-[28px] font-bold leading-[1.1] tracking-[-0.02em] text-foreground">
+        {firstName ? `Hey, ${firstName}` : "Hey there"}
+      </Text>
+    </View>
+  );
+
+  if (isError) {
+    // Every failure lands here, including a 404 — that means the tenant scoping
+    // is wrong, and rendering it as "nothing to show" would hide the bug.
+    return (
+      <ScrollView
+        className="flex-1 bg-background"
+        contentContainerClassName="gap-y-5 px-5 pt-5 pb-30"
+        showsVerticalScrollIndicator={false}
+        refreshControl={refreshControl}
+      >
+        {header}
+        <Surface radius="lg" className="items-center gap-2 p-6">
+          <Icon name="alert-triangle" size={22} color="--danger" />
+          <Text className="text-[15px] font-semibold text-foreground">
+            Couldn&apos;t load your dashboard
+          </Text>
+          <Text className="text-center text-[12.5px] text-muted-foreground">
+            Check your connection and try again.
+          </Text>
+          <Pressable
+            onPress={onRefresh}
+            hitSlop={HIT_SLOP}
+            className="mt-1 rounded-full bg-primary px-3.5 py-2 active:opacity-85"
+          >
+            <Text className="text-[12.5px] font-semibold text-primary-foreground">
+              Try again
+            </Text>
+          </Pressable>
+        </Surface>
+      </ScrollView>
+    );
+  }
 
   return (
     <ScrollView
       className="flex-1 bg-background"
-      contentContainerClassName="gap-y-5 pt-5 pb-30"
+      contentContainerClassName="gap-y-5 px-5 pt-5 pb-30"
       showsVerticalScrollIndicator={false}
-      refreshControl={
-        <RefreshControl
-          refreshing={isFetching && !isLoading}
-          onRefresh={refetchAll}
-          tintColor={primaryColor}
-        />
-      }
+      refreshControl={refreshControl}
     >
-      {/* Header */}
-      <View className="flex-row items-center justify-between px-1">
-        <View className="min-w-0 flex-1">
-          <Text className="text-[13px] text-muted-foreground">{greeting}</Text>
-          <Text className="text-[26px] font-bold tracking-tight text-foreground mt-0.5">
-            {firstName ? `Hey, ${firstName}` : "Hey there"}
-          </Text>
+      {header}
+
+      {isLoading ? (
+        <View className="items-center py-16">
+          <ActivityIndicator color={primaryColor} />
         </View>
-      </View>
-
-      {/* KPI row — Adherence and MRR have no endpoint behind them yet. */}
-      <View className="flex-row gap-x-2">
-        {[
-          { v: isLoading ? "—" : String(activeClients), l: "Active", tone: "" },
-          { v: "92%", l: "Adherence", tone: "text-success" },
-          { v: "$8.4k", l: "MRR", tone: "" },
-        ].map((k) => (
-          <Card key={k.l} className="flex-1 items-center justify-center py-4 px-1" glass>
-            <Text className={cn("text-[20px] font-black text-foreground", k.tone)}>{k.v}</Text>
-            <Text className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground mt-1">
-              {k.l}
-            </Text>
-          </Card>
-        ))}
-      </View>
-
-      {/* Triage */}
-      <View>
-        <SectionTitle
-          title="Needs you now"
-          action={
-            <Text className="text-[12px] text-muted-foreground bg-secondary/80 px-2 py-0.5 rounded-full font-semibold">
-              {triage.length}
-            </Text>
-          }
-        />
-        <View className="gap-y-3">
-          {triage.map((t) => {
-            const isDarkTone = t.tone === "primary" || t.tone === "ink";
-            // Tone gradients: primary/ink are dark surfaces (need light text),
-            // sun is a light surface (needs its dark -ink text). Using
-            // text-foreground here reads dark-on-dark on primary/ink in light mode.
-            const titleColor = isDarkTone ? "text-white" : "text-sun-ink";
-            return (
-              <Card
-                key={t.title}
-                tone={t.tone}
-                glass
-                className="flex-row items-center gap-x-4 p-4"
-              >
-                <View
-                  className={cn(
-                    "h-12 w-12 shrink-0 rounded-2xl justify-center items-center",
-                    isDarkTone ? "bg-white/15" : "bg-black/10",
-                  )}
-                >
-                  <Icon
-                    name={t.icon}
-                    size={20}
-                    color={isDarkTone ? "#ffffff" : "--sun-ink"}
-                  />
+      ) : (
+        <>
+          {/* Stat tiles */}
+          <View className="flex-row gap-2.25">
+            <StatTile
+              value={overview ? String(overview.roster.active) : null}
+              label="Active"
+            />
+            <StatTile
+              // null means no sessions were scheduled — not 0% adherence.
+              value={
+                overview && overview.sessionAdherencePct !== null
+                  ? formatPctShort(overview.sessionAdherencePct)
+                  : null
+              }
+              label="Adherence"
+              tone="success"
+              // The API has no per-day adherence series, so this traces the
+              // week's logged volume — the only daily shape it does return.
+              sparkline={byDay.map((day) => day.volume)}
+            />
+            <StatTile label="MRR" className="flex-[1.25]">
+              {mrrLines.length > 0 ? (
+                <View className="relative gap-0.5">
+                  {/* A map keyed by ISO 4217, not a total: there is no FX rate
+                      in the system, so one line each. Summing invents a number. */}
+                  {mrrLines.map((line) => (
+                    <Text
+                      key={line}
+                      className="text-[13.5px] font-semibold text-foreground"
+                    >
+                      {line}
+                    </Text>
+                  ))}
                 </View>
-                <View className="min-w-0 flex-1">
-                  <Text className={cn("text-[14.5px] font-bold", titleColor)} numberOfLines={1}>
-                    {t.title}
-                  </Text>
-                  <Text className={cn("text-[12px] opacity-80 mt-0.5", titleColor)} numberOfLines={1}>
-                    {t.sub}
-                  </Text>
-                </View>
-                <Pressable
-                  className={cn(
-                    "shrink-0 rounded-full px-3 py-1.5 active:opacity-85",
-                    t.tone === "primary" || t.tone === "ink"
-                      ? "bg-white"
-                      : "bg-ink",
-                  )}
-                >
-                  <Text
-                    className={cn(
-                      "text-[12px] font-semibold",
-                      t.tone === "primary" || t.tone === "ink"
-                        ? "text-ink"
-                        : "text-ink-foreground",
-                    )}
-                  >
-                    {t.cta}
-                  </Text>
-                </Pressable>
-              </Card>
-            );
-          })}
-        </View>
-      </View>
-
-      {/* AI suggestion — the assistant is async job-ticket based (docs/06) and
-          isn't wired yet, so this copy is still illustrative. */}
-      <Card tone="lilac" glass className="p-4">
-        <View className="flex-row items-start gap-x-3">
-          <View className="h-10 w-10 shrink-0 bg-lilac-ink rounded-2xl justify-center items-center">
-            <Icon name="sparkles" size={20} color="--lilac" />
-          </View>
-          <View className="min-w-0 flex-1">
-            <Text className="text-[11px] font-bold uppercase tracking-[0.14em] text-lilac-ink opacity-70">
-              AI insight
-            </Text>
-            <Text className="mt-1 text-[14.5px] font-semibold leading-snug text-lilac-ink">
-              Mia{"'"}s adherence dropped 18% — suggest swapping Wednesday HIIT for steady-state cardio?
-            </Text>
-            <View className="mt-3 flex-row gap-x-2">
-              <Pressable className="bg-lilac-ink rounded-full px-3 py-1.5 active:opacity-85">
-                <Text className="text-[11.5px] font-bold text-lilac">
-                  Draft message
-                </Text>
-              </Pressable>
-              <Pressable className="bg-background/60 rounded-full px-3 py-1.5 active:opacity-85">
-                <Text className="text-[11.5px] font-bold text-foreground">
-                  Dismiss
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Card>
-
-      {/* Activity feed */}
-      <View>
-        <SectionTitle
-          title="Today's activity"
-          action={<Icon name="chevron-right" size={16} color="--muted-foreground" className="opacity-80" />}
-        />
-        <Card className="p-2">
-          {feed.length === 0 && (
-            <View className="items-center gap-1 py-8">
-              <Text className="text-[14px] font-semibold text-foreground">
-                {isLoading ? "Loading activity…" : "No activity yet"}
-              </Text>
-              {!isLoading && (
-                <Text className="text-[12px] text-muted-foreground">
-                  Client messages will show up here.
+              ) : (
+                <Text className="relative text-[19px] font-bold leading-none text-muted-foreground">
+                  —
                 </Text>
               )}
-            </View>
-          )}
-          {feed.map((f, i) => {
-            const colors = colorMap[f.color] || { bg: "bg-muted", text: "text-muted-foreground" };
-            return (
-              <Pressable
-                key={f.key}
-                className={cn(
-                  "flex-row w-full items-center gap-x-3 rounded-2xl p-3 active:bg-secondary/60",
-                  i !== feed.length - 1 && "border-b border-border/50"
-                )}
-              >
-                <View className={cn("h-11 w-11 shrink-0 rounded-full justify-center items-center", colors.bg)}>
-                  <Text className={cn("text-[15px] font-bold", colors.text)}>{initials(f.name)}</Text>
-                </View>
-                <View className="min-w-0 flex-1">
-                  <Text className="text-[14px] font-semibold text-foreground">{f.name}</Text>
-                  <Text className="text-[12px] text-muted-foreground mt-0.5" numberOfLines={1}>
-                    {f.action}
-                  </Text>
-                </View>
-                <Text className="shrink-0 text-[11px] text-muted-foreground">{f.time}</Text>
-              </Pressable>
-            );
-          })}
-        </Card>
-      </View>
+            </StatTile>
+          </View>
 
-      {/* Weekly perf — no aggregate sessions/adherence endpoint exists yet. */}
-      <Card tone="ink" className="p-5" glass>
-        <View className="flex-row items-center justify-between">
-          <View>
-            <Text className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-foreground/60">
-              This week
-            </Text>
-            <Text className="mt-1 text-[20px] font-bold text-ink-foreground">112 sessions logged</Text>
-          </View>
-          <View className="flex-row items-center gap-x-1 rounded-full bg-success/20 px-3 py-1">
-            <Icon name="trending-up" size={13} color="--success" />
-            <Text className="text-[12px] font-bold text-success">+14%</Text>
-          </View>
-        </View>
-        <View className="mt-8 flex-row items-end justify-between px-1">
-          {[50, 70, 48, 85, 90, 75, 110].map((h, i) => (
-            <View key={i} className="items-center flex-1">
-              <LinearGradient
-                colors={[primaryColor, peachColor]}
-                start={{ x: 0, y: 1 }}
-                end={{ x: 0, y: 0 }}
-                style={{
-                  width: 28,
-                  height: h,
-                  borderTopLeftRadius: 14,
-                  borderTopRightRadius: 14,
-                  overflow: "hidden",
-                }}
+          {/* Roster strip */}
+          {roster.length > 0 && overview ? (
+            <View className="flex-row items-center gap-3 px-0.5">
+              <AvatarStack
+                people={roster}
+                max={3}
+                total={overview.roster.total}
               />
-              <Text className="mt-2.5 text-center text-[10px] font-bold text-ink-foreground/50">
-                {["S", "M", "T", "W", "T", "F", "S"][i]}
+              <Text
+                className="text-[12.5px] text-muted-foreground"
+                numberOfLines={1}
+              >
+                <Text className="font-semibold text-foreground">
+                  {overview.roster.active} active
+                </Text>
+                {` · ${overview.roster.paused} paused`}
               </Text>
             </View>
-          ))}
-        </View>
-      </Card>
+          ) : null}
+
+          {/* Needs you now */}
+          <View className="gap-2.5">
+            <View className="flex-row items-center justify-between">
+              <Text className="text-[17px] font-semibold tracking-[-0.01em] text-foreground">
+                Needs you now
+              </Text>
+              {badgeTotal !== null ? (
+                <View className="h-6 min-w-6 items-center justify-center rounded-full bg-secondary px-2">
+                  <Text className="text-xs font-bold text-secondary-foreground">
+                    {badgeTotal}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+
+            {queues.allClear ? (
+              <Surface
+                radius="md"
+                glass
+                className="flex-row items-center gap-3 px-3.25 py-3"
+              >
+                <View className="h-7.5 w-7.5 shrink-0 items-center justify-center rounded-full bg-success/15">
+                  <Icon name="check" size={15} color="--success" />
+                </View>
+                <View className="min-w-0 flex-1">
+                  <Text className="text-[14.5px] font-semibold leading-tight text-foreground">
+                    Nothing needs you
+                  </Text>
+                  <Text
+                    className="mt-0.5 text-xs text-muted-foreground"
+                    numberOfLines={2}
+                  >
+                    {`Nobody silent past ${DEFAULT_RISK_THRESHOLD_DAYS} days, no check-ins waiting, nothing ending in ${DEFAULT_ENDING_HORIZON_DAYS} days`}
+                  </Text>
+                </View>
+              </Surface>
+            ) : (
+              <>
+                {/* Rendered in the order received — the API sorts them. */}
+                {queues.rows.map((row, i) => (
+                  <AttentionRow
+                    key={row.key}
+                    tone={row.tone}
+                    fromVar={row.fromVar}
+                    icon={row.icon}
+                    count={row.count}
+                    bubbleClassName={row.bubbleClassName}
+                    bubbleTextClassName={row.bubbleTextClassName}
+                    title={row.title}
+                    subtitle={row.subtitle}
+                    actionLabel={row.actionLabel}
+                    emphasis={i === 0}
+                    onPress={() => onRowAction(row)}
+                  />
+                ))}
+                {queues.collapsed.map((line) => (
+                  <View
+                    key={line.key}
+                    className="flex-row items-center gap-2 px-0.5 py-1"
+                  >
+                    <Icon name="clock" size={13} color="--muted-foreground" />
+                    <Text className="text-[12.5px] text-muted-foreground">
+                      {line.label}
+                    </Text>
+                  </View>
+                ))}
+              </>
+            )}
+          </View>
+
+          {/* AI insight */}
+          {showInsight ? (
+            <InsightCard
+              body={insight.body}
+              onDraft={() => openClient(insight.membershipId)}
+              onDismiss={() => dismiss(insight.key)}
+            />
+          ) : null}
+
+          {/* Today's activity */}
+          <View className="gap-2.5">
+            <View className="flex-row items-center justify-between">
+              <Text className="text-[17px] font-semibold tracking-[-0.01em] text-foreground">
+                Today&apos;s activity
+              </Text>
+              <Pressable
+                onPress={() => router.push("/(coach)/activity")}
+                hitSlop={HIT_SLOP}
+                className="active:opacity-70"
+              >
+                <Text className="text-[12.5px] font-semibold text-primary">
+                  See all
+                </Text>
+              </Pressable>
+            </View>
+
+            <Surface radius="lg">
+              {activity.length === 0 ? (
+                <View className="items-center gap-1 py-8">
+                  <Text className="text-sm font-semibold text-foreground">
+                    No activity yet
+                  </Text>
+                  <Text className="text-xs text-muted-foreground">
+                    Logged workouts and meals show up here.
+                  </Text>
+                </View>
+              ) : (
+                // Order is the API's — by when it was logged, never by
+                // trainingDate, which many rows share.
+                activity.map((row, i) => (
+                  <ActivityRow
+                    key={row.id}
+                    row={row}
+                    divided={i > 0}
+                    onPress={() => openClient(row.membershipId)}
+                  />
+                ))
+              )}
+            </Surface>
+          </View>
+
+          {/* This week */}
+          {overview ? (
+            <Surface radius="lg" className="gap-3.5 p-3.75">
+              <View className="flex-row items-start justify-between">
+                <View className="min-w-0 flex-1 gap-1">
+                  <Text className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    {weekLabel ? `This week · ${weekLabel}` : "This week"}
+                  </Text>
+                  <Text className="text-[22px] font-bold leading-none tracking-[-0.02em] text-foreground">
+                    {overview.thisWeek.volume}
+                    <Text className="text-sm font-normal text-muted-foreground">
+                      {" "}
+                      sessions
+                    </Text>
+                  </Text>
+                </View>
+                {/* Hidden entirely when null — there was no prior week to
+                    compare, which is not the same as no change. */}
+                {overview.thisWeek.changePct !== null ? (
+                  <View className="rounded-[14px] bg-success/12 px-2.5 py-1">
+                    <Text className="text-xs font-semibold text-success">
+                      {overview.thisWeek.changePct > 0 ? "+" : ""}
+                      {formatPctShort(overview.thisWeek.changePct)}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+
+              <WeekVolumeChart
+                byDay={byDay}
+                todayWeekday={todayWeekdayMondayBased()}
+              />
+            </Surface>
+          ) : null}
+        </>
+      )}
     </ScrollView>
   );
 }

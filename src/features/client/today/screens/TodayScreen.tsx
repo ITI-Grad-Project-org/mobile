@@ -12,6 +12,7 @@ import {
 import { yogaExercises } from "@/lib/data";
 import { plannedExerciseInfo } from "@/lib/plannedExercise";
 import { resolveCoachFields } from "@/lib/coach";
+import { selectActiveProgram } from "@/features/shared/plans/lib/activeProgram";
 import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import { todayIso as localTodayIso } from "@/shared/utils/date";
 import {secondNameOf } from "@/shared/utils/name";
@@ -63,10 +64,14 @@ export function TodayScreen() {
     { skip: !tenantId }
   );
 
-  const rawPrograms = (myProgramsData as any)?.data || myProgramsData || [];
-  const programs = Array.isArray(rawPrograms) ? rawPrograms : [];
   const activeProgram = (currentProgData as any)?.data || currentProgData;
-  const publishedProgram = programs.length > 0 ? programs[0] : activeProgram;
+
+  // The programs list is unordered and carries finished and not-yet-started
+  // blocks too, so today's plan is picked by its schedule — see lib/activeProgram.
+  const publishedProgram = useMemo(() => {
+    const raw = (myProgramsData as any)?.data || myProgramsData || [];
+    return selectActiveProgram(Array.isArray(raw) ? raw : [], activeProgram);
+  }, [myProgramsData, activeProgram]);
 
   const { data: fullProgramData } = useGetMyProgramQuery(
     { tenantId: tenantId ?? "", programId: publishedProgram?.id || "" },
@@ -162,17 +167,19 @@ export function TodayScreen() {
   }, [realDay, activeProgram, fullProgram, calendarItems]);
 
   const displayMeta = useMemo(() => {
+    // Name the program that is actually rendered, not whatever /current said.
+    const programName = publishedProgram?.name || activeProgram?.name;
     if (realDay?.name) {
       return {
         title: realDay.name,
-        subtitle: `TODAY · ${activeProgram?.name || "PRESCRIBED WORKOUT"}`,
+        subtitle: `TODAY · ${programName || "PRESCRIBED WORKOUT"}`,
         tone: realDay.isRestDay ? ("sky" as const) : ("mint" as const),
         mins: realDay.estimatedMinutes || 45,
       };
     }
-    if (activeProgram?.name) {
+    if (programName) {
       return {
-        title: activeProgram.name,
+        title: programName,
         subtitle: "CURRENT ACTIVE PROGRAM",
         tone: "mint" as const,
         mins: 45,
@@ -184,7 +191,7 @@ export function TodayScreen() {
       tone: "mint" as const,
       mins: 0,
     };
-  }, [realDay, activeProgram]);
+  }, [realDay, activeProgram, publishedProgram]);
 
   const [done, setDone] = useState<Record<string, boolean>>({});
   const [open, setOpen] = useState<any | null>(null);

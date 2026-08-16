@@ -25,7 +25,6 @@ export function UpcomingDayRow({ entry, onPress }: RowProps) {
 
   return (
     <Card
-      glass
       interactive
       onPress={onPress}
       accessibilityRole="button"
@@ -76,7 +75,6 @@ export function CompletedDayRow({ entry, onPress }: RowProps) {
 
   return (
     <Card
-      glass
       interactive
       onPress={onPress}
       accessibilityRole="button"

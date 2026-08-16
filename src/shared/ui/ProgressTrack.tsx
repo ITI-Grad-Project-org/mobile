@@ -29,11 +29,49 @@ const FILL_WIDTHS = [
   "w-full",
 ] as const;
 
+/** Height twin of FILL_WIDTHS, for charts that grow upward inside a fixed track. */
+const FILL_HEIGHTS = [
+  "h-0",
+  "h-[5%]",
+  "h-[10%]",
+  "h-[15%]",
+  "h-[20%]",
+  "h-[25%]",
+  "h-[30%]",
+  "h-[35%]",
+  "h-[40%]",
+  "h-[45%]",
+  "h-[50%]",
+  "h-[55%]",
+  "h-[60%]",
+  "h-[65%]",
+  "h-[70%]",
+  "h-[75%]",
+  "h-[80%]",
+  "h-[85%]",
+  "h-[90%]",
+  "h-[95%]",
+  "h-full",
+] as const;
+
+/** A 0–1 ratio as a twentieth, clamped. Both tables are indexed by this. */
+function quantiseStep(ratio: number): number {
+  if (!Number.isFinite(ratio) || ratio <= 0) return 0;
+  return Math.max(0, Math.min(20, Math.round(Math.min(1, ratio) * 20)));
+}
+
 /** The class for a 0–1 ratio, clamped. Exported for callers that draw their own track. */
 export function fillWidthClass(ratio: number): string {
-  if (!Number.isFinite(ratio) || ratio <= 0) return FILL_WIDTHS[0];
-  const step = Math.round(Math.min(1, ratio) * 20);
-  return FILL_WIDTHS[Math.max(0, Math.min(20, step))];
+  return FILL_WIDTHS[quantiseStep(ratio)];
+}
+
+/**
+ * The height class for a 0–1 ratio, clamped. Percentages resolve against a
+ * parent with a definite height, so the caller must give the track one
+ * (e.g. `h-[78px]`).
+ */
+export function fillHeightClass(ratio: number): string {
+  return FILL_HEIGHTS[quantiseStep(ratio)];
 }
 
 interface ProgressTrackProps {

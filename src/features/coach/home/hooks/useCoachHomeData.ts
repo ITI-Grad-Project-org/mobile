@@ -1,43 +1,24 @@
-import { useGetConversationsQuery } from "@/api/endpoints/chat.endpoints";
 import { useGetClientsQuery } from "@/api/endpoints/clients.endpoints";
 import { useGetCoachProfileQuery } from "@/api/endpoints/profile.endpoints";
-import { useListProgramsQuery } from "@/api/endpoints/programs.endpoints";
-import { clientName, formatThreadTime } from "@/features/shared/messaging/format";
-import type { ConversationSummary } from "@/features/shared/messaging/types";
 import { resolveCoachFields } from "@/lib/coach";
 import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
-import { addIsoDays, todayIso } from "@/shared/utils/date";
+import type { StackPerson } from "@/shared/ui/AvatarStack";
 import { useCallback, useMemo } from "react";
-
-/** Avatar tints for the activity feed, cycled by position. */
-const FEED_COLORS = ["mint", "lilac", "sky", "peach"] as const;
-
-/** Newest-first activity rows shown under "Today's activity". */
-export interface FeedItem {
-  key: string;
-  name: string;
-  action: string;
-  time: string;
-  color: (typeof FEED_COLORS)[number];
-}
 
 export interface CoachHomeData {
   /** "Friday morning" — device clock, not the server. */
   greeting: string;
   /** First name for the header; empty when the profile hasn't loaded. */
   firstName: string;
-  /** Full name, used for the monogram fallback. */
-  fullName: string;
-  avatarUrl?: string;
-  activeClients: number;
-  /** Threads with at least one message the coach hasn't read. */
-  unreadThreads: number;
-  /** Up to three client names behind those unread threads. */
-  unreadNames: string[];
-  plansEndingSoon: number;
-  feed: FeedItem[];
+  /** Faces for the roster strip, in the order the client list returned them. */
+  roster: StackPerson[];
+  /**
+   * membershipId -> the client's USER id. /analytics/* speaks in memberships,
+   * but /(coach)/chat/[id] wants the user id (see InboxScreen), so every deep
+   * link off an attention row has to come through here.
+   */
+  clientUserIds: Map<string, string>;
   isLoading: boolean;
-  /** True while any query is in flight, including background refetches. */
   isFetching: boolean;
   isError: boolean;
   refetchAll: () => void;
@@ -49,45 +30,29 @@ function partOfDay(hour: number): string {
   return "evening";
 }
 
-/**
- * The programs list is typed `any[]` and the DTOs only guarantee `startDate` +
- * `durationWeeks` — there is no `endDate` field — so derive the end day and
- * skip anything missing either part rather than assuming a shape.
- */
-function endsWithinAWeek(program: any, today: string, weekOut: string): boolean {
-  const startDate = program?.startDate;
-  const durationWeeks = Number(program?.durationWeeks);
-  if (typeof startDate !== "string" || !Number.isFinite(durationWeeks)) return false;
-
-  const end = addIsoDays(startDate.slice(0, 10), Math.round(durationWeeks * 7));
-  if (!end) return false;
-  return end >= today && end <= weekOut;
-}
-
-function lastMessageAt(c: ConversationSummary): number {
-  const iso = c.lastMessage?.createdAt;
-  const ms = iso ? new Date(iso).getTime() : NaN;
-  return Number.isNaN(ms) ? 0 : ms;
+/** The client list is typed `any[]` and nests the user under `client` on some
+ *  shapes, so read both spellings rather than assuming one. */
+function nameOf(row: any): string {
+  const user = row?.client ?? row;
+  const first = user?.firstName ?? row?.firstName ?? "";
+  const last = user?.lastName ?? row?.lastName ?? "";
+  const joined = `${first} ${last}`.trim();
+  return joined || user?.name || row?.name || user?.email || row?.email || "Client";
 }
 
 /**
- * Everything the coach Home screen shows that the API can actually answer.
- *
- * There is no dashboard/aggregate endpoint, so each number is composed here
- * from the same per-resource queries the Clients and Inbox screens already use
- * — which is what keeps the counts consistent across those screens.
+ * Identity and roster for the coach Home screen — the parts /analytics/*
+ * doesn't answer. Every number on the screen comes from the analytics
+ * endpoints instead (see useCoachHomeAnalytics); this hook is down to the
+ * greeting, the avatars, and the membership -> user id lookup.
  */
 export function useCoachHomeData(): CoachHomeData {
   const { tenantId } = useActiveTenant();
   const skip = { skip: !tenantId };
 
   const profile = useGetCoachProfileQuery(undefined, skip);
+  // Usually already cached by the Clients tab.
   const clients = useGetClientsQuery({ tenantId: tenantId ?? "" }, skip);
-  const conversations = useGetConversationsQuery({ tenantId: tenantId ?? "" }, skip);
-  const programs = useListProgramsQuery(
-    { tenantId: tenantId ?? "", status: "published" },
-    skip
-  );
 
   const coach = useMemo(() => resolveCoachFields(profile.data), [profile.data]);
 
@@ -97,44 +62,30 @@ export function useCoachHomeData(): CoachHomeData {
     return `${weekday} ${partOfDay(now.getHours())}`;
   }, []);
 
-  const threads = useMemo(() => conversations.data ?? [], [conversations.data]);
+  const roster = useMemo<StackPerson[]>(
+    () =>
+      (clients.data ?? []).map((row: any, i: number) => ({
+        id: String(row?.membershipId ?? row?.id ?? i),
+        name: nameOf(row),
+        avatarUrl: row?.client?.avatarUrl ?? row?.avatarUrl ?? row?.avatar,
+      })),
+    [clients.data]
+  );
 
-  const unread = useMemo(() => threads.filter((c) => (c.unreadCount || 0) > 0), [threads]);
-
-  const unreadNames = useMemo(() => unread.slice(0, 3).map(clientName), [unread]);
-
-  const plansEndingSoon = useMemo(() => {
-    const today = todayIso();
-    const weekOut = addIsoDays(today, 7) ?? today;
-    return (programs.data ?? []).filter((p) => endsWithinAWeek(p, today, weekOut)).length;
-  }, [programs.data]);
-
-  const feed = useMemo<FeedItem[]>(() => {
-    // Messages are the only per-client activity the API exposes to a coach —
-    // there is no coach-visible workout/check-in feed endpoint yet.
-    return threads
-      .filter((c) => c.lastMessage)
-      .slice()
-      .sort((a, b) => lastMessageAt(b) - lastMessageAt(a))
-      .slice(0, 4)
-      .map((c, i) => ({
-        key: c.clientId,
-        name: clientName(c),
-        action:
-          c.lastMessage!.senderType === "coach"
-            ? `You: ${c.lastMessage!.body}`
-            : c.lastMessage!.body,
-        time: formatThreadTime(c.lastMessage!.createdAt),
-        color: FEED_COLORS[i % FEED_COLORS.length],
-      }));
-  }, [threads]);
+  const clientUserIds = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const row of (clients.data ?? []) as any[]) {
+      const membershipId = row?.membershipId ?? row?.id;
+      const userId = row?.client?.id ?? row?.clientId ?? row?.userId;
+      if (membershipId && userId) map.set(String(membershipId), String(userId));
+    }
+    return map;
+  }, [clients.data]);
 
   const refetchAll = useCallback(() => {
     if (!tenantId) return;
     profile.refetch();
     clients.refetch();
-    conversations.refetch();
-    programs.refetch();
     // Refetch identities are stable per query, so this only re-creates when the
     // tenant changes — which is exactly when the caches change too.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -143,25 +94,11 @@ export function useCoachHomeData(): CoachHomeData {
   return {
     greeting,
     firstName: coach.firstName ?? "",
-    fullName: coach.name ?? "",
-    avatarUrl: coach.avatarUrl,
-    activeClients: (clients.data ?? []).length,
-    unreadThreads: unread.length,
-    unreadNames,
-    plansEndingSoon,
-    feed,
-    // No tenant yet = the queries are skipped, so every count below is a
-    // placeholder zero, not an answer. Report that as loading rather than
-    // letting the KPI row claim the coach has 0 clients.
-    isLoading:
-      !tenantId ||
-      profile.isLoading ||
-      clients.isLoading ||
-      conversations.isLoading ||
-      programs.isLoading,
-    isFetching:
-      profile.isFetching || clients.isFetching || conversations.isFetching || programs.isFetching,
-    isError: profile.isError || clients.isError || conversations.isError || programs.isError,
+    roster,
+    clientUserIds,
+    isLoading: !tenantId || profile.isLoading || clients.isLoading,
+    isFetching: profile.isFetching || clients.isFetching,
+    isError: profile.isError || clients.isError,
     refetchAll,
   };
 }

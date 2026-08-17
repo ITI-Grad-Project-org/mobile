@@ -45,7 +45,13 @@ import {
   useElapsedSeconds,
   useRestTimer,
 } from "../hooks/useRestTimer";
-import { formatWeight, fromKg, useWeightUnit, type WeightUnit } from "../lib/units";
+import {
+  MIN_WEIGHT,
+  formatWeight,
+  fromKg,
+  useWeightUnit,
+  type WeightUnit,
+} from "../lib/units";
 
 /** Past this much horizontal travel the card commits to the next exercise. */
 const SWIPE_THRESHOLD = 55;
@@ -62,6 +68,7 @@ interface NormalizedSet {
   target: string;
   serverDraft: SetDraft;
   serverLogged: boolean;
+  serverSkipped: boolean;
 }
 
 interface NormalizedExercise {
@@ -183,6 +190,7 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
   // the fallback for anything the client hasn't touched this session.
   const [draftOverrides, setDraftOverrides] = useState<Record<string, SetDraft>>({});
   const [loggedOverrides, setLoggedOverrides] = useState<Record<string, boolean>>({});
+  const [skippedOverrides, setSkippedOverrides] = useState<Record<string, boolean>>({});
 
   const { tenantId } = useActiveTenant();
   const insets = useSafeAreaInsets();
@@ -288,17 +296,27 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
         const prescribedReps =
           prescribed?.repsMin ?? prescribed?.repsMax ?? prescribed?.reps ?? null;
 
+        const serverLogged = set?.outcome === "completed" || set?.outcome === "partial";
+        const serverDraft = draftFromKg(
+          loggedWeight ?? (isLoggedSet(set) ? set?.weightKg : null) ?? prescribed?.weightKg ?? null,
+          loggedReps ?? (isLoggedSet(set) ? set?.reps : null) ?? prescribedReps,
+          unit
+        );
+        // Nothing below one plate ever reaches the stepper: a missing weight, a
+        // prescribed 0, or a stored value under the floor all start at MIN_WEIGHT,
+        // which is also as low as the stepper itself goes.
+        if (serverDraft.weight === null || serverDraft.weight < MIN_WEIGHT[unit]) {
+          serverDraft.weight = MIN_WEIGHT[unit];
+        }
+
         return {
           id: set?.id || `${item?.id}-set-${setIndex}`,
           setType: set?.setType || prescribed?.setType || "working",
           isExtra,
           target: setTarget(prescribed, unit),
-          serverDraft: draftFromKg(
-            loggedWeight ?? (isLoggedSet(set) ? set?.weightKg : null) ?? prescribed?.weightKg ?? null,
-            loggedReps ?? (isLoggedSet(set) ? set?.reps : null) ?? prescribedReps,
-            unit
-          ),
-          serverLogged: set?.outcome === "completed" || set?.outcome === "partial",
+          serverDraft,
+          serverLogged,
+          serverSkipped: set?.outcome === "skipped",
         };
       });
 
@@ -342,21 +360,31 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
     (set: NormalizedSet) => loggedOverrides[set.id] ?? set.serverLogged,
     [loggedOverrides]
   );
+  const isSetSkipped = useCallback(
+    (set: NormalizedSet) => skippedOverrides[set.id] ?? set.serverSkipped,
+    [skippedOverrides]
+  );
+  /** Logged or skipped — either way the client is done with the set. */
+  const isSetResolved = useCallback(
+    (set: NormalizedSet) => isSetLogged(set) || isSetSkipped(set),
+    [isSetLogged, isSetSkipped]
+  );
 
   const railSegments = useMemo(
     () =>
       exercises.map((exercise) => ({
         label: exercise.name,
         progress: exercise.sets.length
-          ? exercise.sets.filter(isSetLogged).length / exercise.sets.length
+          ? exercise.sets.filter(isSetResolved).length / exercise.sets.length
           : 0,
       })),
-    [exercises, isSetLogged]
+    [exercises, isSetResolved]
   );
 
   const loggedCount = activeExercise?.sets.filter(isSetLogged).length ?? 0;
+  const skippedCount = activeExercise?.sets.filter(isSetSkipped).length ?? 0;
   const totalSets = activeExercise?.sets.length ?? 0;
-  const allLogged = totalSets > 0 && loggedCount === totalSets;
+  const allLogged = totalSets > 0 && loggedCount + skippedCount === totalSets;
   const isLastExercise = clampedIndex >= exercises.length - 1;
 
   // Mirror per-exercise completion into the map the Today checklist reads, so a
@@ -374,14 +402,17 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
     // client made by hand on Today just by opening this screen.
     const updates: Record<string, boolean> = {};
     exercises.forEach((exercise) => {
-      if (exercise.sets.length === 0 || !exercise.sets.every(isSetLogged)) return;
+      // Every set resolved, and at least one actually performed — an exercise
+      // whose sets were all skipped is finished, not done.
+      if (exercise.sets.length === 0 || !exercise.sets.every(isSetResolved)) return;
+      if (!exercise.sets.some(isSetLogged)) return;
       exercise.progressIds.forEach((id) => {
         updates[id] = true;
       });
     });
     if (Object.keys(updates).length === 0) return;
     mergeDayProgress(progressKey, updates);
-  }, [exercises, isSetLogged, progressKey, dayIso]);
+  }, [exercises, isSetLogged, isSetResolved, progressKey, dayIso]);
 
   const exerciseVolume = useMemo(() => {
     if (!activeExercise) return 0;
@@ -490,6 +521,7 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
 
     // Optimistic: paint the completed state and start resting immediately.
     setLoggedOverrides((prev) => ({ ...prev, [set.id]: true }));
+    setSkippedOverrides((prev) => ({ ...prev, [set.id]: false }));
     setDraftOverrides((prev) => ({ ...prev, [set.id]: draft }));
     setSaveError(null);
     rest.start(activeExercise?.restSeconds ?? DEFAULT_REST_SECONDS);
@@ -508,6 +540,38 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
     } catch (err: any) {
       setLoggedOverrides((prev) => ({ ...prev, [set.id]: wasLogged }));
       setSaveError(err?.data?.message || "Couldn't save that set. It stays unlogged.");
+    }
+  };
+
+  /**
+   * Reports a prescribed set as not performed:
+   * PATCH /client/me/training/logs/{logId}/sets/{loggedSetId} with
+   * `outcome: "skipped"` — no reps or weight, since none were done.
+   */
+  const handleToggleSkipSet = async (set: NormalizedSet) => {
+    const wasSkipped = isSetSkipped(set);
+
+    if (wasSkipped) {
+      // Same as un-logging: `outcome` is required and has no empty state, so
+      // this only reopens the row locally until the client logs or skips it.
+      setSkippedOverrides((prev) => ({ ...prev, [set.id]: false }));
+      return;
+    }
+
+    setSkippedOverrides((prev) => ({ ...prev, [set.id]: true }));
+    setLoggedOverrides((prev) => ({ ...prev, [set.id]: false }));
+    setSaveError(null);
+
+    if (!logId) return;
+    try {
+      await logSet({
+        logId,
+        loggedSetId: set.id,
+        body: { outcome: "skipped" },
+      }).unwrap();
+    } catch (err: any) {
+      setSkippedOverrides((prev) => ({ ...prev, [set.id]: wasSkipped }));
+      setSaveError(err?.data?.message || "Couldn't skip that set. It stays open.");
     }
   };
 
@@ -738,12 +802,15 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
                 target={set.target}
                 draft={draftFor(set)}
                 isLogged={isSetLogged(set)}
+                isSkipped={isSetSkipped(set)}
                 unit={unit}
                 disabled={isLocked}
                 onChange={(draft) =>
                   setDraftOverrides((prev) => ({ ...prev, [set.id]: draft }))
                 }
                 onToggleLogged={() => handleToggleSet(set)}
+                // Extra sets are removed, not skipped — they were never prescribed.
+                onToggleSkipped={set.isExtra ? undefined : () => handleToggleSkipSet(set)}
                 onRemove={set.isExtra ? () => handleRemoveSet(set.id) : undefined}
               />
             ))}
@@ -840,7 +907,9 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
 
             <View className="flex-row items-center gap-2">
               <Text className="flex-1 text-[12px] text-muted-foreground">
-                {loggedCount} of {totalSets} sets logged · swipe to change exercise
+                {loggedCount} of {totalSets} sets logged
+                {skippedCount > 0 ? ` · ${skippedCount} skipped` : ""} · swipe to change
+                exercise
               </Text>
               <Pressable
                 onPress={handleSkipWorkout}

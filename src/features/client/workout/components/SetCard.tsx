@@ -3,6 +3,7 @@ import { Icon } from "@/shared/ui/Icon";
 import { Pressable, Text, View } from "@/tw";
 import { Stepper } from "./Stepper";
 import {
+  MIN_WEIGHT,
   WEIGHT_STEP,
   formatWeight,
   fromKg,
@@ -34,10 +35,13 @@ interface SetCardProps {
   target: string;
   draft: SetDraft;
   isLogged: boolean;
+  /** Reported to the server as `outcome: "skipped"` — the set was not performed. */
+  isSkipped?: boolean;
   unit: WeightUnit;
   disabled?: boolean;
   onChange: (draft: SetDraft) => void;
   onToggleLogged: () => void;
+  onToggleSkipped?: () => void;
   onRemove?: () => void;
 }
 
@@ -48,20 +52,25 @@ export function SetCard({
   target,
   draft,
   isLogged,
+  isSkipped,
   unit,
   disabled,
   onChange,
   onToggleLogged,
+  onToggleSkipped,
   onRemove,
 }: SetCardProps) {
   const typeLabel = SET_TYPE_LABEL[isExtra ? "extra" : setType] ?? SET_TYPE_LABEL.working;
   const canConfirm = draft.weight !== null && draft.reps !== null;
+  // A skipped set has no numbers to edit or confirm until it is un-skipped.
+  const inputsDisabled = disabled || isSkipped;
 
   return (
     <View
       className={cn(
         "rounded-lg border p-3.5 gap-y-3",
         isLogged ? "border-primary bg-primary/10" : "border-border bg-card",
+        isSkipped && "border-border bg-secondary/40 opacity-60",
         disabled && !isLogged && "opacity-70"
       )}
     >
@@ -93,6 +102,27 @@ export function SetCard({
         <Text className="flex-1 text-right text-[12px] text-muted-foreground" numberOfLines={1}>
           {target}
         </Text>
+        {/* Skipping is only offered while the set is still open — a logged set is
+            un-logged first, so the two states can never disagree. */}
+        {onToggleSkipped && !disabled && !isLogged ? (
+          <Pressable
+            onPress={onToggleSkipped}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityState={{ selected: Boolean(isSkipped) }}
+            accessibilityLabel={
+              isSkipped ? `Un-skip set ${setNumber}` : `Skip set ${setNumber}`
+            }
+            className={cn(
+              "rounded-full px-2 py-0.5 active:opacity-60",
+              isSkipped ? "bg-foreground/10" : "bg-secondary"
+            )}
+          >
+            <Text className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {isSkipped ? "Skipped" : "Skip"}
+            </Text>
+          </Pressable>
+        ) : null}
         {onRemove && !disabled ? (
           <Pressable
             onPress={onRemove}
@@ -113,9 +143,12 @@ export function SetCard({
           value={draft.weight}
           unit={unit}
           step={WEIGHT_STEP[unit]}
-          fallback={WEIGHT_STEP[unit]}
+          // The floor, not just the starting point: 2.5 kg / 5 lb is as low as
+          // the stepper goes — 0 is not a weight anyone logs.
+          min={MIN_WEIGHT[unit]}
+          fallback={MIN_WEIGHT[unit]}
           format={formatWeight}
-          disabled={disabled}
+          disabled={inputsDisabled}
           tone={isLogged ? "done" : "default"}
           onChange={(weight) => onChange({ ...draft, weight })}
         />
@@ -127,13 +160,13 @@ export function SetCard({
           min={1}
           max={999}
           fallback={1}
-          disabled={disabled}
+          disabled={inputsDisabled}
           tone={isLogged ? "done" : "default"}
           onChange={(reps) => onChange({ ...draft, reps })}
         />
         <Pressable
           onPress={onToggleLogged}
-          disabled={disabled || (!isLogged && !canConfirm)}
+          disabled={inputsDisabled || (!isLogged && !canConfirm)}
           accessibilityRole="button"
           accessibilityState={{ checked: isLogged }}
           accessibilityLabel={
@@ -144,7 +177,7 @@ export function SetCard({
             isLogged
               ? "border-primary bg-primary"
               : "border-border bg-secondary",
-            (disabled || (!isLogged && !canConfirm)) && "opacity-40"
+            (inputsDisabled || (!isLogged && !canConfirm)) && "opacity-40"
           )}
         >
           <Icon name="check" size={20} color={isLogged ? "--ink" : "--muted-foreground"} />

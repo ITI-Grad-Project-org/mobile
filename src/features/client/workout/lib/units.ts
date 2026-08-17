@@ -13,6 +13,13 @@ const KG_PER_LB = 0.45359237;
 /** Step size used by the weight stepper: 2.5 kg / 5 lb. */
 export const WEIGHT_STEP: Record<WeightUnit, number> = { kg: 2.5, lb: 5 };
 
+/**
+ * The lowest weight the stepper will show, and where it starts when neither the
+ * client nor the coach put a number on the set. One plate, not 0 — a set logged
+ * at 0 kg isn't a real entry.
+ */
+export const MIN_WEIGHT: Record<WeightUnit, number> = { kg: 2.5, lb: 5 };
+
 export function useWeightUnit(): WeightUnit {
   // TODO: read from the client profile once the API exposes a unit preference.
   return "kg";

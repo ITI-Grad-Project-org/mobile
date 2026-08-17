@@ -5,23 +5,22 @@ import { Text, View, useCSSVariable } from "@/tw";
 import { LinearGradient } from "expo-linear-gradient";
 import { StyleSheet } from "react-native";
 
-/** 1 = Monday … 7 = Sunday. */
-const LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
+import { weekdayLetter } from "../lib/format";
 
 export interface WeekActivityDay {
-  /** 1 = Monday … 7 = Sunday. */
-  weekday: number;
+  /** YYYY-MM-DD, the client's local training day. */
+  date: string;
   count: number;
 }
 
 interface WeekActivityChartProps {
-  /** Seven entries, Monday first — rendered in the order received. */
+  /** One entry per day in the window, oldest first — rendered in order. */
   byDay: WeekActivityDay[];
-  /** Today's Monday-based weekday, or null when the window isn't this week. */
-  todayWeekday: number | null;
+  /** Today's date as YYYY-MM-DD; the matching column is emphasised. */
+  today: string;
 }
 
-export function WeekActivityChart({ byDay, todayWeekday }: WeekActivityChartProps) {
+export function WeekActivityChart({ byDay, today }: WeekActivityChartProps) {
   const lilac = useCSSVariable("--lilac") as string | undefined;
   const lilacBright = useCSSVariable("--lilac-bright") as string | undefined;
 
@@ -31,12 +30,14 @@ export function WeekActivityChart({ byDay, todayWeekday }: WeekActivityChartProp
 
   return (
     <View className="h-26 flex-row items-end gap-1.75">
-      {byDay.map((day, i) => {
-        const isToday = todayWeekday !== null && day.weekday === todayWeekday;
-        const letter = LETTERS[day.weekday - 1] ?? LETTERS[i] ?? "";
+      {byDay.map((day) => {
+        // The window rolls, so the last column is today and the letters start
+        // on whatever weekday is six days back — they're read off each date
+        // rather than assumed to run Monday-first.
+        const isToday = day.date === today;
 
         return (
-          <View key={day.weekday} className="flex-1 items-center justify-end gap-1.5">
+          <View key={day.date} className="flex-1 items-center justify-end gap-1.5">
             <View className="h-19.5 w-full justify-end">
               {day.count > 0 && max > 0 ? (
                 <View
@@ -65,7 +66,7 @@ export function WeekActivityChart({ byDay, todayWeekday }: WeekActivityChartProp
                 isToday ? "font-semibold text-foreground" : "text-muted-foreground"
               )}
             >
-              {letter}
+              {weekdayLetter(day.date)}
             </Text>
           </View>
         );

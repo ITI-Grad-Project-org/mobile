@@ -18,6 +18,7 @@ import { useClientAvatars } from "../hooks/useClientAvatars";
 import { useCoachHomeData } from "../hooks/useCoachHomeData";
 import { useDismissedInsights } from "../hooks/useDismissedInsights";
 import { useRosterCheckins } from "../hooks/useRosterCheckins";
+import { useWeekActivity } from "../hooks/useWeekActivity";
 import {
   buildInsight,
   buildQueues,
@@ -28,8 +29,7 @@ import {
   DEFAULT_RISK_THRESHOLD_DAYS,
   formatMrrLines,
   formatPctShort,
-  todayWeekdayMondayBased,
-  weekLabelFrom,
+  rangeLabel,
 } from "../lib/format";
 
 const HIT_SLOP = { top: 8, bottom: 8, left: 6, right: 6 };
@@ -56,6 +56,7 @@ export function HomeScreen() {
     refetch,
   } = useCoachHomeAnalytics();
   const { dismiss, isDismissed } = useDismissedInsights();
+  const week = useWeekActivity();
   // Activity rows carry no avatar — only membershipId — so faces are looked up
   // from the client list this screen already fetches via useCoachHomeData.
   const avatars = useClientAvatars();
@@ -137,7 +138,9 @@ export function HomeScreen() {
     (row: AttentionRowModel) => {
       if (row.key === "atRisk") return openClient(row.membershipId);
       if (row.key === "checkins") return router.push("/(coach)/check-ins");
-      return router.push("/(coach)/(tabs)/plans");
+      // The whole ending-soon queue, not the Plans tab — the tab lists every
+      // plan and drops the end dates and completion that make this actionable.
+      return router.push("/(coach)/renewals");
     },
     [openClient]
   );
@@ -148,20 +151,13 @@ export function HomeScreen() {
   }, [refetch, refetchAll]);
 
   const mrrLines = formatMrrLines(overview?.mrr);
-  // thisWeek is derived from the WINDOW's end date, not from today. Home sends
-  // no window, so the end is today and "THIS WEEK" is honest — the moment a
-  // range picker lands here, this has to be labelled from that window instead.
-  const weekLabel = weekLabelFrom(todayIso());
+  // Labelled from the window the hook actually requested, never from today —
+  // the window rolls, so "last 7 days" is the honest heading and the dates
+  // stay correct if the range ever becomes user-selectable.
+  const weekLabel = rangeLabel(week.range);
+  // Still overview-derived, and still sessions: the Adherence tile's sparkline
+  // is a per-day shape, not the activity count the week card shows.
   const byDay = useMemo(() => overview?.thisWeek.byDay ?? [], [overview]);
-  const sessionsLogged = overview?.thisWeek.sessionsLogged ?? 0;
-  const weekChangePct = overview?.thisWeek.changePct ?? null;
-  // The chart speaks in `count`; the payload speaks in `sessions`. Mapped here
-  // rather than renaming the prop, since the bars are a generic per-weekday
-  // count and nothing about the component is session-specific.
-  const weekBars = useMemo(
-    () => byDay.map((day) => ({ weekday: day.weekday, count: day.sessions })),
-    [byDay]
-  );
   const showInsight = insight !== null && !isDismissed(insight.key);
 
   const refreshControl = (
@@ -412,52 +408,57 @@ export function HomeScreen() {
             </Surface>
           </View>
 
-          {/* This week — sessions the roster trained, straight off
-              overview.thisWeek. These are SESSION counts, not tonnage: the
-              endpoint has no volume figure. Counting /analytics/activity rows
-              instead would count set reports (many per session) and cap at the
-              endpoint's 200-row ceiling, so the number would be both inflated
-              and a floor. */}
+          {/* Last 7 days — how many activities the roster logged, counted from
+              the activity feed over a ROLLING window, because a Mon–Sun week
+              empties out every Monday morning and reads as a broken card.
+              Deliberately NOT overview.thisWeek, which
+              counts sessions: a session is a coarser unit than the individual
+              things clients log, so it under-reports what the roster actually
+              did. The cost is two extra requests and the 200-row ceiling the
+              caveat line below owns up to. */}
           <Surface radius="lg" className="gap-3.5 p-3.75">
             <View className="flex-row items-start justify-between">
               <View className="min-w-0 flex-1 gap-1">
                 <Text className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  {weekLabel ? `This week · ${weekLabel}` : "This week"}
+                  {weekLabel ? `Last 7 days · ${weekLabel}` : "Last 7 days"}
                 </Text>
                 <Text className="text-[22px] font-bold leading-none tracking-[-0.02em] text-foreground">
-                  {sessionsLogged}
+                  {week.capped ? `${week.total}+` : week.total}
                   <Text className="text-sm font-normal text-muted-foreground">
                     {" "}
-                    {sessionsLogged === 1 ? "session" : "sessions"}
+                    {week.total === 1 ? "activity" : "activities"}
                   </Text>
                 </Text>
               </View>
-              {/* Hidden entirely when null — no prior week or a zero baseline,
-                  neither of which is "no change". */}
-              {weekChangePct !== null ? (
+              {/* Hidden entirely when null — no prior week, a zero baseline, or
+                  a capped page, none of which are "no change". */}
+              {week.changePct !== null ? (
                 <View
                   className={cn(
                     "rounded-[14px] px-2.5 py-1",
-                    weekChangePct >= 0 ? "bg-success/12" : "bg-danger/12"
+                    week.changePct >= 0 ? "bg-success/12" : "bg-danger/12"
                   )}
                 >
                   <Text
                     className={cn(
                       "text-xs font-semibold",
-                      weekChangePct >= 0 ? "text-success" : "text-danger"
+                      week.changePct >= 0 ? "text-success" : "text-danger"
                     )}
                   >
-                    {weekChangePct > 0 ? "+" : ""}
-                    {formatPctShort(weekChangePct)}
+                    {week.changePct > 0 ? "+" : ""}
+                    {formatPctShort(week.changePct)}
                   </Text>
                 </View>
               ) : null}
             </View>
 
-            <WeekActivityChart
-              byDay={weekBars}
-              todayWeekday={todayWeekdayMondayBased()}
-            />
+            <WeekActivityChart byDay={week.byDay} today={todayIso()} />
+
+            {week.capped ? (
+              <Text className="text-[11px] text-muted-foreground">
+                Showing the first 200 activities in this window.
+              </Text>
+            ) : null}
           </Surface>
         </>
       )}

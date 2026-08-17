@@ -26,24 +26,61 @@ export function formatMrrLines(mrr: CurrencyAmounts | undefined): string[] {
   );
 }
 
+export interface WeekRange {
+  from: ISODate;
+  to: ISODate;
+}
+
+/** Local YYYY-MM-DD. Never toISOString(), which is UTC and flips the day early. */
+function isoOf(date: Date): ISODate {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+/** Local YYYY-MM-DD, `days` before today. */
+export function isoDaysAgo(days: number): ISODate {
+  const date = new Date();
+  date.setHours(12, 0, 0, 0);
+  date.setDate(date.getDate() - days);
+  return isoOf(date);
+}
+
 /**
- * "10–16 AUG" for the Mon–Sun week the window ENDS in. The card is labelled
- * from the window, never the literal words "this week", because a coach who
- * changes the range gets that week's numbers, not today's.
+ * A rolling window of `length` days ending `endDaysAgo` days before today.
+ *
+ * Rolling rather than Monday–Sunday: a calendar week reads as zero every Monday
+ * morning, which looks like a broken card rather than a fresh week. `rollingRange(0)`
+ * is the last 7 days including today; `rollingRange(7)` is the 7 before that,
+ * which is the only honest baseline to compare the first against.
  */
-export function weekLabelFrom(windowEnd: ISODate | undefined): string | null {
-  const end = parseIsoDate(windowEnd);
-  if (!end) return null;
+export function rollingRange(endDaysAgo = 0, length = 7): WeekRange {
+  return { from: isoDaysAgo(endDaysAgo + length - 1), to: isoDaysAgo(endDaysAgo) };
+}
 
-  // Monday-based: JS getDay() is 0=Sunday, so Sunday steps back a full 6.
-  const offsetToMonday = (end.getDay() + 6) % 7;
-  const monday = new Date(end);
-  monday.setDate(end.getDate() - offsetToMonday);
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
+/** Every date in a rolling window, oldest → newest. */
+export function rollingDates(endDaysAgo = 0, length = 7): ISODate[] {
+  return Array.from({ length }, (_, i) => isoDaysAgo(endDaysAgo + length - 1 - i));
+}
 
-  const month = sunday.toLocaleDateString(undefined, { month: "short" }).toUpperCase();
-  return `${monday.getDate()}–${sunday.getDate()} ${month}`;
+/** "11–17 AUG" for a window, spelling both months when it straddles one. */
+export function rangeLabel({ from, to }: WeekRange): string | null {
+  const start = parseIsoDate(from);
+  const end = parseIsoDate(to);
+  if (!start || !end) return null;
+
+  const endMonth = end.toLocaleDateString(undefined, { month: "short" }).toUpperCase();
+  if (start.getMonth() === end.getMonth()) {
+    return `${start.getDate()}–${end.getDate()} ${endMonth}`;
+  }
+  const startMonth = start.toLocaleDateString(undefined, { month: "short" }).toUpperCase();
+  return `${start.getDate()} ${startMonth} – ${end.getDate()} ${endMonth}`;
+}
+
+/** "M"/"T"/… for a YYYY-MM-DD date, for the chart's axis. */
+export function weekdayLetter(iso: string | undefined): string {
+  const date = parseIsoDate(iso);
+  if (!date) return "";
+  return date.toLocaleDateString(undefined, { weekday: "narrow" });
 }
 
 /** "14:32" / "Mon" / "3 Aug" depending on how far back the row is. */
@@ -102,12 +139,3 @@ function parseIsoDate(iso: string | undefined): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-/**
- * Today in the same base as Overview.thisWeek.byDay[].weekday (1 = Monday …
- * 7 = Sunday). The base is documented but unverified against a live response,
- * so WeekActivityChart buckets by date rather than trusting a weekday index.
- */
-export function todayWeekdayMondayBased(): number {
-  const day = new Date().getDay(); // 0 = Sunday
-  return day === 0 ? 7 : day;
-}

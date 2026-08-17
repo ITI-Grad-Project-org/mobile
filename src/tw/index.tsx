@@ -58,9 +58,13 @@ export const Text = (
 };
 Text.displayName = "CSS(Text)";
 
-// ScrollView
+// ScrollView. `ref` is declared explicitly: this is a plain function component,
+// so it isn't in ComponentProps, but React 19 passes ref through as an ordinary
+// prop and useCssElement spreads it onto the RN ScrollView underneath — which
+// is what a screen needs to call scrollTo().
 export const ScrollView = (
   props: React.ComponentProps<typeof RNScrollView> & {
+    ref?: React.Ref<RNScrollView>;
     className?: string;
     contentContainerClassName?: string;
   }

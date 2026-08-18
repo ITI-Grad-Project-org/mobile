@@ -135,7 +135,7 @@ export function ActivityScreen() {
       <ScrollView
         ref={scrollRef}
         className="flex-1"
-        contentContainerClassName="px-5 pt-4 pb-30"
+        contentContainerClassName="px-5 pt-4 pb-screen"
         showsVerticalScrollIndicator={false}
         onScroll={onScroll}
         scrollEventThrottle={32}

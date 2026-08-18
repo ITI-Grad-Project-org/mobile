@@ -290,3 +290,29 @@
     transform: scale(1) rotate(0deg);
   }
 }
+
+/* -------------------------------------------------------------------------
+   Bottom padding for scrollable screens.
+
+   The native tab bar OVERLAYS screen content on both platforms — on iOS a
+   translucent UITabBar, on Android a BottomNavigationView pinned at
+   Gravity.BOTTOM over a MATCH_PARENT content view (react-native-screens'
+   TabsContainer). So a tab screen has to pad its scroll content past the bar,
+   and the amount differs: iOS is a 49pt bar plus the 34pt home indicator,
+   while Android's Material bar is shorter and absorbs the gesture inset into
+   its own height.
+
+   Pushed stack screens have NO tab bar over them — they only need breathing
+   room past the gesture bar. Use pb-tabbar inside (tabs), pb-screen outside.
+   Tune the numbers here, never per screen.
+   ------------------------------------------------------------------------- */
+@utility pb-tabbar {
+  padding-bottom: 120px;
+  @media android {
+    padding-bottom: 48px;
+  }
+}
+
+@utility pb-screen {
+  padding-bottom: 32px;
+}

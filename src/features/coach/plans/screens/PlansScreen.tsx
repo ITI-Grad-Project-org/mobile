@@ -127,7 +127,7 @@ export function PlansScreen() {
         data={plans}
         keyExtractor={(plan) => plan.id}
         renderItem={renderItem}
-        contentContainerClassName="px-5 pt-3.5 pb-[110px] gap-3"
+        contentContainerClassName="px-5 pt-3.5 pb-tabbar gap-3"
         ListFooterComponent={<View className={insets.bottom > 0 ? "h-8.5" : "h-0"} />}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"

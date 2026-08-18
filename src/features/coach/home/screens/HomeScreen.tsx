@@ -183,7 +183,7 @@ export function HomeScreen() {
     return (
       <ScrollView
         className="flex-1 bg-background"
-        contentContainerClassName="gap-y-5 px-5 pt-5 pb-30"
+        contentContainerClassName="gap-y-5 px-5 pt-5 pb-tabbar"
         showsVerticalScrollIndicator={false}
         refreshControl={refreshControl}
       >
@@ -213,7 +213,7 @@ export function HomeScreen() {
   return (
     <ScrollView
       className="flex-1 bg-background"
-      contentContainerClassName="gap-y-5 px-5 pt-5 pb-30"
+      contentContainerClassName="gap-y-5 px-5 pt-5 pb-tabbar"
       showsVerticalScrollIndicator={false}
       refreshControl={refreshControl}
     >

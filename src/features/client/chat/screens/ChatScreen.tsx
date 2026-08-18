@@ -102,7 +102,9 @@ function ChatThread({
       keyboardVerticalOffset={90}
       style={{ flex: 1 }}
     >
-      <View className="flex-1" style={{ paddingTop: insets.top + 8 }}>
+      {/* No status-bar inset here: AppHeader already sits above this screen and
+          consumes insets.top, so adding it again double-counts the notch. */}
+      <View className="flex-1 pt-2">
         {/* Chat header — clean, integrated */}
         <View className="mb-3 flex-row items-center gap-3 rounded-lg border border-border/50 bg-card p-4 shadow-soft">
           {canGoBack ? (

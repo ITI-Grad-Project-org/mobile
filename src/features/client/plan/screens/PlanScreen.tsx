@@ -247,7 +247,7 @@ export function PlanScreen() {
   return (
     <ScrollView
       className="flex-1 bg-background"
-      contentContainerClassName="gap-y-5 pt-5 pb-30"
+      contentContainerClassName="gap-y-5 pt-5 pb-tabbar"
       showsVerticalScrollIndicator={false}
     >
       {/* Header */}

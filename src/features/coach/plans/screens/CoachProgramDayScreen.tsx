@@ -63,7 +63,7 @@ export function CoachProgramDayScreen({ programId, programDayId }: CoachProgramD
   return (
     <ScrollView
       className="flex-1 bg-background"
-      contentContainerClassName="pb-20"
+      contentContainerClassName="pb-screen"
       showsVerticalScrollIndicator={false}
     >
       <PlanDetailHeader

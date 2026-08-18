@@ -117,7 +117,7 @@ export function ProgramDetailsScreen({ programId }: ProgramDetailsScreenProps) {
   return (
     <ScrollView
       className="flex-1 bg-background"
-      contentContainerClassName="pb-20"
+      contentContainerClassName="pb-screen"
       showsVerticalScrollIndicator={false}
     >
       {/* Sits under the client layout's AppHeader, so no top inset here. */}

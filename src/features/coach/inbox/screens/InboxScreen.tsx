@@ -54,7 +54,7 @@ export function InboxScreen() {
     <View className="flex-1 bg-background">
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-y-4 pt-5 pb-30"
+        contentContainerClassName="gap-y-4 pt-5 pb-tabbar"
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >

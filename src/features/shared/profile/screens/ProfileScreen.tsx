@@ -187,7 +187,7 @@ function CoachProfile() {
 
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-y-5 px-4 pt-5 pb-30"
+        contentContainerClassName="gap-y-5 px-4 pt-5 pb-screen"
         showsVerticalScrollIndicator={false}
       >
         {/* Identity */}
@@ -615,7 +615,7 @@ function ClientProfile() {
 
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-y-5 px-4 pt-5 pb-30"
+        contentContainerClassName="gap-y-5 px-4 pt-5 pb-screen"
         showsVerticalScrollIndicator={false}
       >
         {/* Identity */}

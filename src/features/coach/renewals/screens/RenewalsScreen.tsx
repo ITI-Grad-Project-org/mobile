@@ -197,7 +197,7 @@ export function RenewalsScreen() {
   return (
     <ScrollView
       className="flex-1 bg-background"
-      contentContainerClassName="gap-y-4 px-5 pt-4 pb-30"
+      contentContainerClassName="gap-y-4 px-5 pt-4 pb-screen"
       showsVerticalScrollIndicator={false}
       refreshControl={
         <RefreshControl

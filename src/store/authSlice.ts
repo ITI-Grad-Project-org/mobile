@@ -44,14 +44,23 @@ const authSlice = createSlice({
 export const { setAuth, clearAuth, setLoading } = authSlice.actions;
 export default authSlice.reducer;
 
-export const saveTokens = async (accessToken: string, refreshToken: string, persona: 'coach' | 'customer') => {
+export const saveTokens = async (
+  accessToken: string,
+  refreshToken: string,
+  persona: 'coach' | 'customer',
+  email?: string
+) => {
   await SecureStore.setItemAsync('accessToken', accessToken);
   await SecureStore.setItemAsync('refreshToken', refreshToken);
   await SecureStore.setItemAsync('persona', persona);
+  if (email) {
+    await SecureStore.setItemAsync('userEmail', email.toLowerCase().trim());
+  }
 };
 
 export const clearTokens = async () => {
   await SecureStore.deleteItemAsync('accessToken');
   await SecureStore.deleteItemAsync('refreshToken');
   await SecureStore.deleteItemAsync('persona');
+  await SecureStore.deleteItemAsync('userEmail');
 };

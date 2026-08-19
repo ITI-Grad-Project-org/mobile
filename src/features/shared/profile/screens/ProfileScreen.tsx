@@ -535,6 +535,7 @@ function ClientProfile() {
 
   const resetAndLeave = async () => {
     await clearTokens();
+    await resetProfile();
     // The chat socket authenticates with its own copy of the token.
     disconnectChatSocket();
     // Leaving for the login screen is the root layout's job: it reacts to

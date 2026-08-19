@@ -66,9 +66,11 @@ const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQue
       url.includes('/auth/login') ||
       url.includes('/auth/register') ||
       url.includes('/auth/refresh') ||
+      url.includes('/auth/google') ||
       url.includes('/auth/customer/login') ||
       url.includes('/auth/customer/register') ||
-      url.includes('/auth/customer/refresh');
+      url.includes('/auth/customer/refresh') ||
+      url.includes('/auth/customer/google');
 
     if (result.error?.status === 401 && !isAuthRequest) {
       // Shared with the native file uploader so concurrent 401s from a request

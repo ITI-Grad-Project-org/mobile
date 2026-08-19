@@ -63,9 +63,19 @@ export function VerifyScreen() {
         });
         return;
       }
-      router.replace(
-        (await hasOnboarded()) ? "/(client)/(tabs)/today" : "/(onboarding)/onboarding"
-      );
+      const onboarded = await hasOnboarded(params.email);
+      if (onboarded) {
+        router.replace("/(setup)/client-profile");
+      } else {
+        router.replace({
+          pathname: "/(onboarding)/onboarding",
+          params: {
+            email: params.email ?? "",
+            fname: params.fname ?? "",
+            lname: params.lname ?? "",
+          },
+        });
+      }
     }, 600);
   };
 

@@ -34,20 +34,69 @@ const QUEUE_KEYS = {
   ],
 };
 
+/** Where a last-activity instant hides when the payload sends one. */
+const LAST_ACTIVITY_KEYS = [
+  "lastActivityAt",
+  "last_activity_at",
+  "lastActiveAt",
+  "lastLoggedAt",
+  "lastSeenAt",
+  "lastActivityDate",
+  "silentSince",
+  "since",
+];
+
+/** Join-date spellings — only read for a neverActive row, where the silence is
+ *  counted from when they joined rather than from an activity they never had. */
+const JOINED_KEYS = ["joinedAt", "joined_at", "startedAt", "memberSince", "createdAt"];
+
+/** Whole days between an instant (timestamp or YYYY-MM-DD) and now, floored at
+ *  0. null when there is nothing parseable to measure from. */
+function daysBetween(iso: string | undefined): number | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  return Math.max(0, Math.floor((Date.now() - date.getTime()) / 86_400_000));
+}
+
 export function normalizeAttention(raw: unknown): Attention | undefined {
   if (raw === undefined || raw === null) return undefined;
 
   const atRisk = pickList(raw, QUEUE_KEYS.atRisk).map((item) => {
     const row = asRecord(item) ?? {};
+    const neverActive = pickBool(row, ["neverActive", "never_active", "hasNeverLogged"]);
+    // The instant the silence is measured from: the last activity normally,
+    // the join date for someone who never started. Read even when a count came
+    // back, since the detail screen dates the row from it.
+    const silentSince = pick(row, [
+      ...LAST_ACTIVITY_KEYS,
+      ...(neverActive ? JOINED_KEYS : []),
+    ]);
+    const counted = pickNumber(row, [
+      "daysSilent",
+      "silentDays",
+      "daysSinceLastActivity",
+      "days_since_last_activity",
+      "daysSinceActivity",
+      "daysInactive",
+      "inactiveDays",
+      "daysSinceLastLog",
+      "daysSinceJoin",
+      "daysSinceJoined",
+      "days",
+    ]);
     return {
       membershipId:
         pick(row, ["membershipId", "membership.id", "clientMembershipId", "id"]) ?? "",
       clientName: nameFrom(row),
-      daysSilent:
-        pickNumber(row, ["daysSilent", "silentDays", "daysSinceLastActivity", "days"]) ?? 0,
+      // A count if one was sent, else derived from the timestamp, else null.
+      // NOT `?? 0`: reaching this queue means silence past the threshold, so a
+      // rendered "0 days" is a missing field masquerading as a measurement.
+      daysSilent: counted ?? daysBetween(silentSince),
+      silentSince,
       // Counted from the join date rather than a last activity — the copy has
       // to change, so a missing flag must default to the safer wording.
-      neverActive: pickBool(row, ["neverActive", "never_active", "hasNeverLogged"]),
+      neverActive,
     };
   });
 

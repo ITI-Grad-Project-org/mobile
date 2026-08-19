@@ -169,13 +169,15 @@ export function HomeScreen() {
 
   const onRowAction = useCallback(
     (row: AttentionRowModel) => {
-      if (row.key === "atRisk") return openClient(row.membershipId);
+      // The whole quiet queue, not just the worst client's chat — a row that
+      // says "and 3 others have gone quiet" has to open all four.
+      if (row.key === "atRisk") return router.push("/(coach)/at-risk");
       if (row.key === "checkins") return router.push("/(coach)/check-ins");
       // The whole ending-soon queue, not the Plans tab — the tab lists every
       // plan and drops the end dates and completion that make this actionable.
       return router.push("/(coach)/renewals");
     },
-    [openClient]
+    []
   );
 
   const onRefresh = useCallback(() => {

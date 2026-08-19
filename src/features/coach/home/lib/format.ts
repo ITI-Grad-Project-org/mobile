@@ -116,6 +116,40 @@ export function daysSince(iso: string | undefined): number | null {
   return Math.max(0, Math.floor((Date.now() - date.getTime()) / 86_400_000));
 }
 
+/**
+ * "11 days" / "1 day" — the length of a silence, or null when it isn't known.
+ *
+ * Callers must handle the null rather than substituting 0: an at-risk row is
+ * one the server put PAST the threshold, so "0 days" can only ever be a field
+ * that didn't arrive. See AtRiskClient.daysSilent.
+ */
+export function silenceLength(days: number | null | undefined): string | null {
+  if (days === null || days === undefined) return null;
+  return `${days} ${pluralise(days, "day")}`;
+}
+
+/** "today" / "yesterday" / "11 days ago". null when the count is unknown. */
+export function daysAgoLabel(days: number | null | undefined): string | null {
+  if (days === null || days === undefined) return null;
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  return `${days} days ago`;
+}
+
+/** The at-risk headline: "hasn't logged in 11 days" / "joined 3 days ago",
+ *  degrading to a wording that claims no number when there isn't one. */
+export function silenceHeadline(client: {
+  daysSilent: number | null;
+  neverActive: boolean;
+}): string {
+  const ago = daysAgoLabel(client.daysSilent);
+  if (client.neverActive) {
+    return ago ? `joined ${ago} and hasn't started` : "hasn't started yet";
+  }
+  const length = silenceLength(client.daysSilent);
+  return length ? `hasn't logged in ${length}` : "hasn't logged recently";
+}
+
 export function initialsOf(name: string | undefined): string {
   if (!name) return DASH;
   const parts = name.trim().split(/\s+/).slice(0, 2);

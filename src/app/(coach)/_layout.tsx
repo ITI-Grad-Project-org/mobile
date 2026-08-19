@@ -11,6 +11,7 @@ export default function CoachLayout() {
         <Stack.Screen name="chat/[id]" />
         <Stack.Screen name="activity" />
         <Stack.Screen name="renewals" />
+        <Stack.Screen name="at-risk" />
         <Stack.Screen name="check-ins/index" />
         <Stack.Screen name="check-ins/[clientId]" />
         <Stack.Screen name="plans/training/[programId]/index" />

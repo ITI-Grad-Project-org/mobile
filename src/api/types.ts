@@ -806,7 +806,17 @@ export interface Overview {
 export interface AtRiskClient {
   membershipId: string;
   clientName: string;
-  daysSilent: number;
+  /**
+   * Whole days of silence. `null` means the payload carried no usable count
+   * and no timestamp to derive one from — the row still belongs in the queue,
+   * it just can't be numbered. Never coerce it to 0: a client can only reach
+   * this list by being silent PAST the threshold, so "0 days" is always a
+   * missing field being rendered as a fact.
+   */
+  daysSilent: number | null;
+  /** The instant `daysSilent` was measured from — the last activity, or the
+   *  join date when `neverActive`. Absent when the API sent only a count. */
+  silentSince?: string;
   /** Counted from the join date, not from a last activity: word these rows
    *  "hasn't started yet", not "gone quiet for 9 days". */
   neverActive: boolean;

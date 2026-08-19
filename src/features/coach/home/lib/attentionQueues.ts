@@ -7,6 +7,8 @@ import {
   DEFAULT_RISK_THRESHOLD_DAYS,
   daysSince,
   formatPctShort,
+  silenceHeadline,
+  silenceLength,
   formatShortDate,
   pluralise,
 } from "./format";
@@ -83,10 +85,10 @@ export function buildQueues(
     const others = atRisk.length - 1;
 
     // neverActive counts from the join date, not from a last activity, so
-    // "gone quiet 9 days" would be a lie about someone who never started.
-    const lead = worst.neverActive
-      ? `${worst.clientName} hasn't started yet`
-      : `${worst.clientName} hasn't logged in ${worst.daysSilent} ${pluralise(worst.daysSilent, "day")}`;
+    // "gone quiet 9 days" would be a lie about someone who never started —
+    // and an unknown count drops the number entirely rather than saying 0.
+    const lead = `${worst.clientName} ${silenceHeadline(worst)}`;
+    const joinedAgo = silenceLength(worst.daysSilent);
 
     rows.push({
       key: "atRisk",
@@ -99,7 +101,9 @@ export function buildQueues(
           ? `${worst.clientName} and ${others} ${pluralise(others, "other")} have gone quiet`
           : lead,
       subtitle: worst.neverActive
-        ? `Joined ${worst.daysSilent} ${pluralise(worst.daysSilent, "day")} ago`
+        ? joinedAgo
+          ? `Joined ${joinedAgo} ago · nothing logged yet`
+          : "Nothing logged since joining"
         : `Attrition risk · silent past ${DEFAULT_RISK_THRESHOLD_DAYS} days`,
       actionLabel: "Reach out",
       membershipId: worst.membershipId,
@@ -176,6 +180,20 @@ export interface InsightModel {
  * endpoint (v1 excludes agentic AI), so this states a number the API actually
  * returned rather than inventing a claim about a named client.
  */
+/** The insight line for the worst at-risk row. Split out because every branch
+ *  has to survive an unknown day count without inventing "0 days". */
+function buildAtRiskInsightBody(worst: Attention["atRisk"][number]): string {
+  const length = silenceLength(worst.daysSilent);
+  if (worst.neverActive) {
+    const joined = length ? `joined ${length} ago and ` : "";
+    return `${worst.clientName} ${joined}still hasn't logged anything. A first message is usually what starts them.`;
+  }
+  const silence = length
+    ? `has been silent ${length} — the longest on your roster`
+    : "has gone quiet — the longest silence on your roster";
+  return `${worst.clientName} ${silence}. Worth reaching out before it becomes a cancellation.`;
+}
+
 export function buildInsight(attention: Attention | undefined): InsightModel | null {
   if (!attention) return null;
 
@@ -184,9 +202,7 @@ export function buildInsight(attention: Attention | undefined): InsightModel | n
     return {
       key: `atRisk:${worst.membershipId}`,
       membershipId: worst.membershipId,
-      body: worst.neverActive
-        ? `${worst.clientName} joined ${worst.daysSilent} ${pluralise(worst.daysSilent, "day")} ago and still hasn't logged anything. A first message is usually what starts them.`
-        : `${worst.clientName} has been silent ${worst.daysSilent} ${pluralise(worst.daysSilent, "day")} — the longest on your roster. Worth reaching out before it becomes a cancellation.`,
+      body: buildAtRiskInsightBody(worst),
     };
   }
 

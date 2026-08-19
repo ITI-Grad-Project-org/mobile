@@ -369,7 +369,7 @@ export function ClientIntakeScreen() {
           ))}
         </ScrollView>
 
-        <View className="border-t border-border/60 px-5 pt-3">
+        <View className="border-t border-border/60 px-5 pb-4 pt-3">
           <Pressable
             disabled={!ready || isSubmitting}
             onPress={handleSubmit}

@@ -226,7 +226,7 @@ export function SignupFlow({
         </ScrollView>
 
         {/* Footer */}
-        <View className="border-t border-border/60 px-4 pt-3">
+        <View className="border-t border-border/60 px-4 pb-4 pt-3">
           {saveError ? (
             <Text className="mb-2 text-center text-[12px] font-medium text-destructive">
               {saveError}

@@ -6,6 +6,7 @@ import {
   useUpdateClientProfileMutation,
 } from "@/api/endpoints/profile.endpoints";
 import { SignupFlow, type ProfileData } from "@/features/shared/setup";
+import { markProfileComplete } from "@/shared/hooks/useProfileSetup";
 import { View } from "@/tw";
 import { CLIENT_STEPS } from "../config";
 import { clientDataToDto, clientProfileToData } from "../mapping";
@@ -35,6 +36,7 @@ export function ClientProfileScreen() {
           lname: params.lname ?? data.lname,
         });
     await updateClient(dto).unwrap();
+    await markProfileComplete(data);
   };
 
   if (isEdit && isLoading) {

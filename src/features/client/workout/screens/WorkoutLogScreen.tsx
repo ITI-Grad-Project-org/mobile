@@ -23,8 +23,12 @@ import {
 import { Pressable, ScrollView, Text, View } from "@/tw";
 import { Animated } from "@/tw/animated";
 import { router } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, useWindowDimensions } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  ScrollView as RNScrollView,
+  useWindowDimensions,
+} from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -185,6 +189,7 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
   const [completeError, setCompleteError] = useState<string | null>(null);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const setsScrollRef = useRef<RNScrollView>(null);
 
   // Local overrides so a tap on the check lands instantly; the server value is
   // the fallback for anything the client hasn't touched this session.
@@ -350,6 +355,11 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
   }, [rawExercises, prescribedExercises, unit]);
 
   const clampedIndex = Math.min(activeIndex, Math.max(0, exercises.length - 1));
+
+  // A new exercise starts at set 1 — don't inherit the previous one's scroll offset.
+  useEffect(() => {
+    setsScrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [clampedIndex]);
   const activeExercise = exercises[clampedIndex];
 
   const draftFor = useCallback(
@@ -789,6 +799,7 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
 
           {/* Sets */}
           <ScrollView
+            ref={setsScrollRef}
             className="flex-1"
             contentContainerClassName="px-4 pb-4 gap-y-2.5"
             showsVerticalScrollIndicator={false}

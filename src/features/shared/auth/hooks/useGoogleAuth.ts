@@ -11,6 +11,13 @@ const WEB_CLIENT_ID =
   process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
   '191655688249-38mu3ochcungpot9oldojiet5ebi97e9.apps.googleusercontent.com';
 
+// iOS needs its own OAuth client id — the native SDK cannot derive it from the
+// web client id, and we ship no GoogleService-Info.plist. Must stay in sync with
+// the `iosUrlScheme` configured for the google-signin plugin in app.json.
+const IOS_CLIENT_ID =
+  process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ||
+  '191655688249-k4b8cfd3li7sjidfmn1sf69ucraml06m.apps.googleusercontent.com';
+
 /**
  * Thin wrapper around `@react-native-google-signin/google-signin` that
  * configures the SDK once and exposes a single `signInWithGoogle()` function
@@ -21,7 +28,10 @@ export function useGoogleAuth() {
 
   useEffect(() => {
     if (!configured.current) {
-      GoogleSignin.configure({ webClientId: WEB_CLIENT_ID });
+      GoogleSignin.configure({
+        webClientId: WEB_CLIENT_ID,
+        iosClientId: IOS_CLIENT_ID,
+      });
       configured.current = true;
     }
   }, []);

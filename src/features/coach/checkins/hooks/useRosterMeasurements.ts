@@ -40,6 +40,41 @@ export interface RosterMeasurementsOptions {
   maxClients?: number;
 }
 
+/**
+ * The client list is typed `any[]` and nests the user under `client` on some
+ * shapes, so both spellings are read rather than one being assumed.
+ */
+export function rosterClientName(row: any): string {
+  const user = row?.client ?? row;
+  const first = user?.firstName ?? row?.firstName ?? "";
+  const last = user?.lastName ?? row?.lastName ?? "";
+  const joined = `${first} ${last}`.trim();
+  return joined || user?.name || row?.name || user?.email || row?.email || "Client";
+}
+
+/**
+ * Client-list rows -> the pair of ids every per-client read needs.
+ *
+ * Rows missing either id are dropped: /client/{clientId}/measurements 404s on a
+ * membershipId, and /analytics/clients/{membershipId} 404s on a user id, so a
+ * half-identified row can't be fetched either way.
+ */
+export function toRosterClients(rows: any[]): RosterClient[] {
+  const targets: RosterClient[] = [];
+  for (const row of rows) {
+    const membershipId = row?.membershipId ?? row?.id;
+    const clientId = row?.client?.id ?? row?.clientId ?? row?.userId;
+    if (!membershipId || !clientId) continue;
+    targets.push({
+      clientId: String(clientId),
+      membershipId: String(membershipId),
+      name: rosterClientName(row),
+      avatarUrl: row?.client?.avatarUrl ?? row?.avatarUrl ?? row?.avatar,
+    });
+  }
+  return targets;
+}
+
 const DEFAULT_MAX_CLIENTS = 30;
 /** Stable identity, so a disabled hook doesn't re-trigger downstream memos. */
 const NONE: ClientMeasurements[] = [];

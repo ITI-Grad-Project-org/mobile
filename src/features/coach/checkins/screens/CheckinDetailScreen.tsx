@@ -13,7 +13,7 @@ import { Icon } from "@/shared/ui/Icon";
 import { MetricGrid } from "@/shared/ui/MetricGrid";
 import { Surface } from "@/shared/ui/Surface";
 import WeightChart from "@/shared/ui/WeightChart";
-import { ScrollView, Text, View, useCSSVariable } from "@/tw";
+import { Pressable, ScrollView, Text, View, useCSSVariable } from "@/tw";
 import { Image } from "@/tw/image";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMemo } from "react";
@@ -21,6 +21,8 @@ import { ActivityIndicator } from "react-native";
 
 import { CheckinEntryRow } from "../components/CheckinEntryRow";
 import { StrengthProgressCard } from "../components/StrengthProgressCard";
+import { useCheckinReviews } from "../hooks/useCheckinReviews";
+import { sfx } from "@/lib/sfx";
 
 /** Whole history for one client — a single client can't flood one screen. */
 const HISTORY_LIMIT = 50;
@@ -87,184 +89,254 @@ export function CheckinDetailScreen() {
   const weightGood = weight?.delta !== undefined && weight.delta < 0;
   const busy = measurements.isLoading;
 
+  // Reviewing from here means "I've read this client's history up to the newest
+  // entry" — the same watermark the list screen writes. Device-local: the API
+  // has no review state (see useCheckinReviews).
+  const reviews = useCheckinReviews();
+  const latestAt = stats.latest?.measuredAt;
+  const reviewed = !!clientId && !!latestAt && reviews.isReviewed(clientId, latestAt);
+
+  const markReviewed = () => {
+    if (!clientId || !latestAt) return;
+    reviews.markReviewed(clientId, latestAt);
+    sfx.success();
+  };
+
   return (
-    <ScrollView
-      className="flex-1 bg-background"
-      contentContainerClassName="gap-y-4 px-5 pt-4 pb-screen"
-      showsVerticalScrollIndicator={false}
-    >
-      <View className="flex-row items-center gap-2">
-        <GlassButton
-          onPress={() => router.back()}
-          className="h-9 w-9 items-center justify-center rounded-full active:opacity-70"
-        >
-          <Icon name="chevron-left" size={20} color="--foreground" />
-        </GlassButton>
-
-        {avatarUrl ? (
-          <Image
-            source={{ uri: avatarUrl }}
-            className="h-9 w-9 shrink-0 overflow-hidden rounded-full object-cover"
-          />
-        ) : (
-          <View className="h-9 w-9 shrink-0 items-center justify-center rounded-full bg-secondary">
-            <Text className="text-[12px] font-semibold text-secondary-foreground">
-              {initialsOf(name ?? "")}
-            </Text>
-          </View>
-        )}
-
-        <View className="min-w-0 flex-1">
-          <Text
-            className="font-display text-[20px] font-bold leading-[1.1] tracking-[-0.02em] text-foreground"
-            numberOfLines={1}
-          >
-            {name || "Client"}
-          </Text>
-          {!busy && stats.hasData ? (
-            <Text className="mt-0.5 text-[12.5px] text-muted-foreground">
-              {stats.series.length} check-{stats.series.length === 1 ? "in" : "ins"}
-              {stats.latest ? ` · last ${formatShortDate(stats.latest.measuredAt)}` : ""}
-            </Text>
-          ) : null}
-        </View>
-
-        {clientId ? (
+    <View className="flex-1 bg-background">
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="gap-y-4 px-5 pt-4 pb-6"
+        showsVerticalScrollIndicator={false}
+      >
+        <View className="flex-row items-center gap-2">
           <GlassButton
-            onPress={() =>
-              router.push({ pathname: "/(coach)/chat/[id]", params: { id: clientId } })
-            }
+            onPress={() => router.back()}
             className="h-9 w-9 items-center justify-center rounded-full active:opacity-70"
           >
-            <Icon name="message-square" size={18} color="--foreground" />
+            <Icon name="chevron-left" size={20} color="--foreground" />
           </GlassButton>
-        ) : null}
-      </View>
 
-      {busy ? (
-        <View className="items-center py-16">
-          <ActivityIndicator color={primaryColor} />
+          {avatarUrl ? (
+            <Image
+              source={{ uri: avatarUrl }}
+              className="h-9 w-9 shrink-0 overflow-hidden rounded-full object-cover"
+            />
+          ) : (
+            <View className="h-9 w-9 shrink-0 items-center justify-center rounded-full bg-secondary">
+              <Text className="text-[12px] font-semibold text-secondary-foreground">
+                {initialsOf(name ?? "")}
+              </Text>
+            </View>
+          )}
+
+          <View className="min-w-0 flex-1">
+            <Text
+              className="font-display text-[20px] font-bold leading-[1.1] tracking-[-0.02em] text-foreground"
+              numberOfLines={1}
+            >
+              {name || "Client"}
+            </Text>
+            {!busy && stats.hasData ? (
+              <Text className="mt-0.5 text-[12.5px] text-muted-foreground">
+                {stats.series.length} check-{stats.series.length === 1 ? "in" : "ins"}
+                {stats.latest ? ` · last ${formatShortDate(stats.latest.measuredAt)}` : ""}
+              </Text>
+            ) : null}
+          </View>
+
+          {clientId ? (
+            <GlassButton
+              onPress={() =>
+                router.push({ pathname: "/(coach)/chat/[id]", params: { id: clientId } })
+              }
+              className="h-9 w-9 items-center justify-center rounded-full active:opacity-70"
+            >
+              <Icon name="message-square" size={18} color="--foreground" />
+            </GlassButton>
+          ) : null}
         </View>
-      ) : !stats.hasData ? (
-        <Surface radius="lg" className="items-center gap-1 py-10">
-          <Text className="text-sm font-semibold text-foreground">No check-ins yet</Text>
-          <Text className="text-xs text-muted-foreground">
-            This client hasn&apos;t logged any measurements.
-          </Text>
-        </Surface>
-      ) : (
-        <>
-          {/* Weight — the headline metric, with the trend behind it. Same
-              `Card glass` treatment as the client's Progress screen, so the
-              chart reads identically on both sides. */}
-          <Card glass>
-            <View className="flex-row items-start justify-between">
-              <View>
-                <Text className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  Weight
-                </Text>
-                <View className="mt-1 flex-row items-baseline gap-2">
-                  <Text className="text-4xl font-black text-foreground">
-                    {weight?.value ?? "—"}
+
+        {busy ? (
+          <View className="items-center py-16">
+            <ActivityIndicator color={primaryColor} />
+          </View>
+        ) : !stats.hasData ? (
+          <Surface radius="lg" className="items-center gap-1 py-10">
+            <Text className="text-sm font-semibold text-foreground">No check-ins yet</Text>
+            <Text className="text-xs text-muted-foreground">
+              This client hasn&apos;t logged any measurements.
+            </Text>
+          </Surface>
+        ) : (
+          <>
+            {/* Weight — the headline metric, with the trend behind it. Same
+                `Card glass` treatment as the client's Progress screen, so the
+                chart reads identically on both sides. */}
+            <Card glass>
+              <View className="flex-row items-start justify-between">
+                <View>
+                  <Text className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    Weight
                   </Text>
-                  <Text className="text-base font-medium text-muted-foreground">kg</Text>
+                  <View className="mt-1 flex-row items-baseline gap-2">
+                    <Text className="text-4xl font-black text-foreground">
+                      {weight?.value ?? "—"}
+                    </Text>
+                    <Text className="text-base font-medium text-muted-foreground">kg</Text>
+                  </View>
                 </View>
-              </View>
-              {weight?.delta !== undefined && weight.delta !== 0 ? (
-                <View
-                  className={cn(
-                    "flex-row items-center gap-1 rounded-full px-2.5 py-1",
-                    weightGood ? "bg-mint" : "bg-peach"
-                  )}
-                >
-                  <Icon
-                    name={weight.delta < 0 ? "trending-down" : "trending-up"}
-                    size={14}
-                    color={weightGood ? "--mint-ink" : "--peach-ink"}
-                  />
-                  <Text
+                {weight?.delta !== undefined && weight.delta !== 0 ? (
+                  <View
                     className={cn(
-                      "text-[12px] font-semibold",
-                      weightGood ? "text-mint-ink" : "text-peach-ink"
+                      "flex-row items-center gap-1 rounded-full px-2.5 py-1",
+                      weightGood ? "bg-mint" : "bg-peach"
                     )}
                   >
-                    {formatDelta(weight.delta)} kg
-                  </Text>
+                    <Icon
+                      name={weight.delta < 0 ? "trending-down" : "trending-up"}
+                      size={14}
+                      color={weightGood ? "--mint-ink" : "--peach-ink"}
+                    />
+                    <Text
+                      className={cn(
+                        "text-[12px] font-semibold",
+                        weightGood ? "text-mint-ink" : "text-peach-ink"
+                      )}
+                    >
+                      {formatDelta(weight.delta)} kg
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+
+              {chart ? (
+                <View className="mt-4 h-32 w-full">
+                  <WeightChart
+                    weightData={stats.weightSeries}
+                    min={chart.min}
+                    range={chart.range}
+                    primaryColor={primaryColor}
+                  />
+                  <View className="mt-1 flex-row justify-between">
+                    <Text className="text-[10px] font-medium text-muted-foreground">
+                      {formatShortDate(stats.series[0].measuredAt)}
+                    </Text>
+                    <Text className="text-[10px] font-medium text-muted-foreground">
+                      {formatShortDate(stats.series[stats.series.length - 1].measuredAt)}
+                    </Text>
+                  </View>
                 </View>
               ) : null}
-            </View>
+            </Card>
 
-            {chart ? (
-              <View className="mt-4 h-32 w-full">
-                <WeightChart
-                  weightData={stats.weightSeries}
-                  min={chart.min}
-                  range={chart.range}
-                  primaryColor={primaryColor}
-                />
-                <View className="mt-1 flex-row justify-between">
-                  <Text className="text-[10px] font-medium text-muted-foreground">
-                    {formatShortDate(stats.series[0].measuredAt)}
-                  </Text>
-                  <Text className="text-[10px] font-medium text-muted-foreground">
-                    {formatShortDate(stats.series[stats.series.length - 1].measuredAt)}
-                  </Text>
-                </View>
-              </View>
+            {/* The same four body metrics the client sees on their own Progress
+                screen, read the same way — so coach and client are never looking
+                at differently-derived numbers for the same check-in. */}
+            <MetricGrid metrics={stats.metrics} />
+
+            {/* Strength is analytics-side and keyed by membershipId, so it can be
+                absent on a row that only carried a client id. */}
+            {membershipId && !progress.isLoading ? (
+              <StrengthProgressCard strength={progress.data?.strength ?? []} />
             ) : null}
-          </Card>
 
-          {/* The same four body metrics the client sees on their own Progress
-              screen, read the same way — so coach and client are never looking
-              at differently-derived numbers for the same check-in. */}
-          <MetricGrid metrics={stats.metrics} />
+            {/* Photos on the latest check-in, when the client attached any. */}
+            {stats.latestPhotos.length > 0 ? (
+              <Surface radius="lg" className="gap-3 p-3.75">
+                <Text className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Latest photos
+                </Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View className="flex-row gap-2">
+                    {stats.latestPhotos.map((uri) => (
+                      <Image
+                        key={uri}
+                        source={{ uri }}
+                        className="h-40 w-28 overflow-hidden rounded-xl object-cover"
+                      />
+                    ))}
+                  </View>
+                </ScrollView>
+              </Surface>
+            ) : null}
 
-          {/* Strength is analytics-side and keyed by membershipId, so it can be
-              absent on a row that only carried a client id. */}
-          {membershipId && !progress.isLoading ? (
-            <StrengthProgressCard strength={progress.data?.strength ?? []} />
-          ) : null}
-
-          {/* Photos on the latest check-in, when the client attached any. */}
-          {stats.latestPhotos.length > 0 ? (
-            <Surface radius="lg" className="gap-3 p-3.75">
-              <Text className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                Latest photos
-              </Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View className="flex-row gap-2">
-                  {stats.latestPhotos.map((uri) => (
-                    <Image
-                      key={uri}
-                      source={{ uri }}
-                      className="h-40 w-28 overflow-hidden rounded-xl object-cover"
-                    />
-                  ))}
-                </View>
-              </ScrollView>
+            {/* Full history, newest first. Each row carries the one before it so
+                the deltas read as "since last check-in". */}
+            <Surface radius="lg">
+              <View className="px-3.5 pt-3.5">
+                <Text className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  History
+                </Text>
+              </View>
+              {history.map((entry, i) => (
+                <CheckinEntryRow
+                  key={entry.id}
+                  entry={entry}
+                  previous={history[i + 1]}
+                  latest={i === 0}
+                  divided={i > 0}
+                />
+              ))}
             </Surface>
-          ) : null}
+          </>
+        )}
+      </ScrollView>
 
-          {/* Full history, newest first. Each row carries the one before it so
-              the deltas read as "since last check-in". */}
-          <Surface radius="lg">
-            <View className="px-3.5 pt-3.5">
-              <Text className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                History
-              </Text>
+      {/* Outside the ScrollView so the decision is always one tap away — this
+          screen is long, and the coach reaches it from a review queue. */}
+      {!busy && stats.hasData && latestAt ? (
+        <View className="border-t border-border bg-background px-5 pb-8 pt-3">
+          {reviewed ? (
+            <View className="flex-row items-center justify-center gap-2 py-1.5">
+              <Icon name="check" size={15} color="--success" />
+              <Text className="text-[13.5px] font-semibold text-success">Reviewed</Text>
+              <Text className="text-[13px] text-muted-foreground">·</Text>
+              <Pressable
+                onPress={() => clientId && reviews.restore(clientId, null)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                className="active:opacity-70"
+              >
+                <Text className="text-[13px] font-medium text-muted-foreground">
+                  Mark unread
+                </Text>
+              </Pressable>
             </View>
-            {history.map((entry, i) => (
-              <CheckinEntryRow
-                key={entry.id}
-                entry={entry}
-                previous={history[i + 1]}
-                latest={i === 0}
-                divided={i > 0}
-              />
-            ))}
-          </Surface>
-        </>
-      )}
-    </ScrollView>
+          ) : (
+            <View className="flex-row items-center gap-2.5">
+              <Pressable
+                onPress={() => {
+                  markReviewed();
+                  router.back();
+                }}
+                className="flex-1 flex-row items-center justify-center gap-2 rounded-2xl bg-primary py-3.5 active:opacity-85"
+              >
+                <Icon name="check" size={16} color="--primary-foreground" />
+                <Text className="text-[14px] font-semibold text-primary-foreground">
+                  Mark reviewed
+                </Text>
+              </Pressable>
+
+              {/* The only version of "reviewed" the client can actually see —
+                  everything else is device-local, so this is what closes the
+                  loop for them. */}
+              <Pressable
+                onPress={() => {
+                  markReviewed();
+                  router.push({
+                    pathname: "/(coach)/chat/[id]",
+                    params: { id: clientId },
+                  });
+                }}
+                className="flex-row items-center justify-center gap-2 rounded-2xl border border-border px-4 py-3.5 active:opacity-70"
+              >
+                <Icon name="message-square" size={16} color="--foreground" />
+                <Text className="text-[14px] font-semibold text-foreground">Reply</Text>
+              </Pressable>
+            </View>
+          )}
+        </View>
+      ) : null}
+    </View>
   );
 }

@@ -118,17 +118,15 @@ export function buildQueues(
       count: checkins.length,
       bubbleClassName: "bg-info-tint",
       bubbleTextClassName: "text-info",
-      // Measurements carry no "reviewed" flag, so a derived row can only claim
-      // the check-in happened — not that it is still unanswered.
-      title: usedFallbackCheckins
-        ? `${checkins.length} recent ${pluralise(checkins.length, "check-in")}`
-        : `${checkins.length} ${pluralise(checkins.length, "check-in")} waiting`,
+      // Both queues are filtered by the coach's own review state before they
+      // get here (see useRosterCheckins / HomeScreen), so a derived row can
+      // claim the check-in is still unreviewed rather than only that it
+      // happened — the server flag it lacks is no longer what decides this.
+      title: `${checkins.length} ${pluralise(checkins.length, "check-in")} to review`,
       subtitle:
         waiting === null
           ? oldest.clientName
-          : usedFallbackCheckins
-            ? `${oldest.clientName} · checked in ${waiting} ${pluralise(waiting, "day")} ago`
-            : `${oldest.clientName} · oldest waiting ${waiting} ${pluralise(waiting, "day")}`,
+          : `${oldest.clientName} · oldest waiting ${waiting} ${pluralise(waiting, "day")}`,
       actionLabel: "Review",
       membershipId: oldest.membershipId,
     });

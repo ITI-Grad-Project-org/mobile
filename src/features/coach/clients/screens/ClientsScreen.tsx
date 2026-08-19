@@ -1,14 +1,20 @@
 import { useGetClientsQuery } from "@/api/endpoints/clients.endpoints";
 import { useListInvitationsQuery } from "@/api/endpoints/invitations.endpoints";
 import { useListTenantJoinRequestsQuery } from "@/api/endpoints/joinRequests.endpoints";
+import { useCheckinReviews } from "@/features/coach/checkins/hooks/useCheckinReviews";
+import {
+  toRosterClients,
+  useRosterMeasurements,
+} from "@/features/coach/checkins/hooks/useRosterMeasurements";
 import { cn } from "@/lib/utils";
 import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import { Card } from "@/shared/ui/Card";
 import { Icon } from "@/shared/ui/Icon";
+import { relativeDayLabel } from "@/shared/utils/date";
 import { Pressable, ScrollView, Text, TextInput, View } from "@/tw";
 import { Image } from "@/tw/image";
 import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ActivityIndicator } from "react-native";
 
 import { ClientDetailSheet } from "../components/ClientDetailSheet";
@@ -46,6 +52,29 @@ export function ClientsScreen() {
     { tenantId: tenantId! },
     { skip: !tenantId }
   );
+
+  // Latest check-in per client, so a card can say when this client last
+  // reported in. One row each — a separate cache entry from the Check-ins
+  // screen's full history, which is the cheaper of the two to keep warm here.
+  const rosterTargets = useMemo(() => toRosterClients((clients ?? []) as any[]), [clients]);
+  const { data: rosterCheckins } = useRosterMeasurements(rosterTargets, {
+    enabled: !!tenantId && rosterTargets.length > 0,
+    limit: 1,
+  });
+  const reviews = useCheckinReviews();
+
+  const latestCheckins = useMemo(() => {
+    const map = new Map<string, { measuredAt: string; unread: boolean }>();
+    for (const row of rosterCheckins) {
+      const latest = row.measurements[0];
+      if (!latest) continue;
+      map.set(row.client.clientId, {
+        measuredAt: latest.measuredAt,
+        unread: !reviews.isReviewed(row.client.clientId, latest.measuredAt),
+      });
+    }
+    return map;
+  }, [rosterCheckins, reviews]);
 
   const pendingInvitations = (invitations || []).filter(
     (inv: any) => (inv?.status ?? "pending") === "pending"
@@ -235,6 +264,10 @@ export function ClientsScreen() {
                     const email = cObj.email || c.email || "";
                     const avatarUrl = cObj.avatarUrl || c.avatarUrl || c.avatar;
                     const status = c.status || c.membershipStatus || "Active";
+                    // Measurements are keyed by the client's USER id — a
+                    // membershipId here just misses the map.
+                    const clientUserId = String(cObj.id ?? c.clientId ?? c.userId ?? "");
+                    const checkin = latestCheckins.get(clientUserId);
 
                     return (
                       <Card
@@ -262,11 +295,38 @@ export function ClientsScreen() {
                             >
                               {fullName}
                             </Text>
+                            {/* An unreviewed check-in is the one thing on this
+                                card that wants the coach to do something. */}
+                            {checkin?.unread ? (
+                              <View className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                            ) : null}
                           </View>
 
                           <Text className="text-[12px] text-muted-foreground mt-0.5" numberOfLines={1}>
                             {email || status}
                           </Text>
+
+                          {checkin ? (
+                            <View className="mt-1 flex-row items-center gap-x-1">
+                              <Icon
+                                name="ruler"
+                                size={11}
+                                color={checkin.unread ? "--primary" : "--muted-foreground"}
+                              />
+                              <Text
+                                className={cn(
+                                  "text-[11.5px]",
+                                  checkin.unread
+                                    ? "font-semibold text-primary"
+                                    : "text-muted-foreground"
+                                )}
+                                numberOfLines={1}
+                              >
+                                {checkin.unread ? "New check-in · " : "Checked in "}
+                                {relativeDayLabel(checkin.measuredAt)}
+                              </Text>
+                            </View>
+                          ) : null}
                         </View>
 
                         <View className="shrink-0 items-end justify-center">

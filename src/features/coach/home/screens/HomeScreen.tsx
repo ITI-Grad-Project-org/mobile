@@ -17,6 +17,8 @@ import { useCoachHomeAnalytics } from "../hooks/useCoachHomeAnalytics";
 import { useClientAvatars } from "../hooks/useClientAvatars";
 import { useCoachHomeData } from "../hooks/useCoachHomeData";
 import { useDismissedInsights } from "../hooks/useDismissedInsights";
+import { useCheckinReviews } from "@/features/coach/checkins/hooks/useCheckinReviews";
+
 import { useRosterCheckins } from "../hooks/useRosterCheckins";
 import { useWeekActivity } from "../hooks/useWeekActivity";
 import {
@@ -61,19 +63,43 @@ export function HomeScreen() {
   // from the client list this screen already fetches via useCoachHomeData.
   const avatars = useClientAvatars();
 
+  // Check-ins the coach has already marked reviewed drop out of the queue, the
+  // insight line and the badge — otherwise Home keeps asking for something the
+  // Check-ins tab says is done. Review state is device-local and keyed by the
+  // client's USER id, so an analytics row has to be resolved through
+  // clientUserIds; a row whose membership can't be resolved stays visible
+  // rather than being hidden on a guess.
+  const reviews = useCheckinReviews();
+  const attentionQueue = useMemo(() => {
+    if (!attention || attention.checkinsAwaitingReview.length === 0) return attention;
+    const remaining = attention.checkinsAwaitingReview.filter((row) => {
+      const clientId = clientUserIds.get(row.membershipId);
+      return !clientId || !reviews.isReviewed(clientId, row.submittedAt);
+    });
+    return remaining.length === attention.checkinsAwaitingReview.length
+      ? attention
+      : { ...attention, checkinsAwaitingReview: remaining };
+  }, [attention, clientUserIds, reviews]);
+
+  /** Analytics rows hidden as reviewed — the overview count doesn't know. */
+  const reviewedHidden = attention
+    ? attention.checkinsAwaitingReview.length -
+      (attentionQueue?.checkinsAwaitingReview.length ?? 0)
+    : 0;
+
   // The check-in entity /analytics/attention reports on doesn't exist in
   // core-api — a client check-in is a measurement — so the queue is rebuilt
   // from the coach-side measurement reads whenever analytics returns none.
   const fallbackCheckins = useRosterCheckins(
     checkinTargets,
-    attention !== undefined && attention.checkinsAwaitingReview.length === 0
+    attentionQueue !== undefined && attentionQueue.checkinsAwaitingReview.length === 0
   );
 
   const queues = useMemo(
-    () => buildQueues(attention, { fallbackCheckins }),
-    [attention, fallbackCheckins]
+    () => buildQueues(attentionQueue, { fallbackCheckins }),
+    [attentionQueue, fallbackCheckins]
   );
-  const insight = useMemo(() => buildInsight(attention), [attention]);
+  const insight = useMemo(() => buildInsight(attentionQueue), [attentionQueue]);
 
   const counts = overview?.attentionCounts;
   // The badge comes from overview, never from the list lengths: the counts are
@@ -84,15 +110,22 @@ export function HomeScreen() {
   // Summed defensively because attentionCounts has no response schema either —
   // a key spelled differently would otherwise make the whole sum NaN and put
   // "NaN" in the badge.
+  //
+  // Rows hidden as reviewed come off the count too — it was computed server-side
+  // and knows nothing about them. Clamped at 0: the count and the list are two
+  // reads, so the count can lag behind what was hidden.
   const countedTotal = counts
-    ? [counts.atRisk, counts.checkinsAwaitingReview, counts.programsEndingSoon]
-        .filter((n) => typeof n === "number" && Number.isFinite(n))
-        .reduce((sum, n) => sum + n, 0)
+    ? Math.max(
+        0,
+        [counts.atRisk, counts.checkinsAwaitingReview, counts.programsEndingSoon]
+          .filter((n) => typeof n === "number" && Number.isFinite(n))
+          .reduce((sum, n) => sum + n, 0) - reviewedHidden
+      )
     : null;
-  const listTotal = attention
-    ? attention.atRisk.length +
-      attention.checkinsAwaitingReview.length +
-      attention.programsEndingSoon.length
+  const listTotal = attentionQueue
+    ? attentionQueue.atRisk.length +
+      attentionQueue.checkinsAwaitingReview.length +
+      attentionQueue.programsEndingSoon.length
     : null;
   // Prefer the counts; fall back to the lists rather than showing nothing when
   // the counts are absent. Measurement-derived check-ins are added on top,

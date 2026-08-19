@@ -21,6 +21,31 @@ export function todayIso(): string {
 }
 
 /**
+ * Whole local calendar days between `iso` and today. Negative for a future
+ * date, null when the string isn't a date. Both sides are anchored at midday so
+ * a DST shift can't round the difference to the wrong day.
+ */
+export function daysSinceIso(iso: string): number | null {
+  const parts = iso.slice(0, 10).split("-").map(Number);
+  if (parts.length !== 3 || parts.some(Number.isNaN)) return null;
+  const then = new Date(parts[0], parts[1] - 1, parts[2], 12).getTime();
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12).getTime();
+  return Math.round((today - then) / 86_400_000);
+}
+
+/** "today" · "yesterday" · "5d ago" · "3w ago" · "2mo ago". */
+export function relativeDayLabel(iso: string): string {
+  const days = daysSinceIso(iso);
+  if (days === null) return iso.slice(0, 10);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 14) return `${days}d ago`;
+  if (days < 60) return `${Math.round(days / 7)}w ago`;
+  return `${Math.round(days / 30)}mo ago`;
+}
+
+/**
  * "YYYY-MM-DD" `days` after the given one. Built from local Date parts so month
  * ends and DST shifts land on the right calendar day.
  */

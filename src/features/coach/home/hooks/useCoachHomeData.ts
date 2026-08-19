@@ -5,6 +5,11 @@ import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import type { StackPerson } from "@/shared/ui/AvatarStack";
 import { useCallback, useMemo } from "react";
 
+import {
+  rosterClientName,
+  toRosterClients,
+} from "@/features/coach/checkins/hooks/useRosterMeasurements";
+
 import type { RosterClient } from "./useRosterCheckins";
 
 export interface CoachHomeData {
@@ -52,16 +57,6 @@ function partOfDay(hour: number): string {
   return "evening";
 }
 
-/** The client list is typed `any[]` and nests the user under `client` on some
- *  shapes, so read both spellings rather than assuming one. */
-function nameOf(row: any): string {
-  const user = row?.client ?? row;
-  const first = user?.firstName ?? row?.firstName ?? "";
-  const last = user?.lastName ?? row?.lastName ?? "";
-  const joined = `${first} ${last}`.trim();
-  return joined || user?.name || row?.name || user?.email || row?.email || "Client";
-}
-
 /**
  * Identity and roster for the coach Home screen — the parts /analytics/*
  * doesn't answer. Every number on the screen comes from the analytics
@@ -88,7 +83,7 @@ export function useCoachHomeData(): CoachHomeData {
     () =>
       (clients.data ?? []).map((row: any, i: number) => ({
         id: String(row?.membershipId ?? row?.id ?? i),
-        name: nameOf(row),
+        name: rosterClientName(row),
         avatarUrl: row?.client?.avatarUrl ?? row?.avatarUrl ?? row?.avatar,
       })),
     [clients.data]
@@ -98,20 +93,7 @@ export function useCoachHomeData(): CoachHomeData {
     const rows = (clients.data ?? []) as any[];
     describeRosterShape(rows);
 
-    const targets: RosterClient[] = [];
-    for (const row of rows) {
-      const membershipId = row?.membershipId ?? row?.id;
-      const clientId = row?.client?.id ?? row?.clientId ?? row?.userId;
-      if (membershipId && clientId) {
-        targets.push({
-          clientId: String(clientId),
-          membershipId: String(membershipId),
-          name: nameOf(row),
-          avatarUrl: row?.client?.avatarUrl ?? row?.avatarUrl ?? row?.avatar,
-        });
-      }
-    }
-    return targets;
+    return toRosterClients(rows);
   }, [clients.data]);
 
   const clientUserIds = useMemo(() => {

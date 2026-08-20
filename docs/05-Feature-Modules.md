@@ -108,13 +108,13 @@ Spec §2D.
 
 ## Module: `assistant` (AI) — *Coach UI: AI tab · Client UI: from Today/Plan*
 
-Spec §2E, §7. The differentiator. Full detail in [doc 06](06-ai-assistant-integration.md). Summary:
+Spec §2E, §7. The differentiator. Full detail in [doc 06](06-Ai-Integration.md). Summary:
 
-- **Client mode:** 24/7 Q&A grounded in the coach's per-tenant RAG knowledge base. Reachable from the client's **Today**/**Plan** screens (no dedicated client AI tab in the current layout — see the note in [doc 01](01-architecture.md) if you'd rather add one).
-- **Coach mode (AI tab):** draft a plan, summarize client progress, suggest adjustments.
-- **Knowledge base management:** upload/curate the tenant's AI content. **Coach only** — lives in the AI tab. Upload via the file-system upload API.
-- **Delivery:** async job-ticket — request returns a `jobId`, answer arrives via poll/push. The chat UI must handle the pending state gracefully.
-- **Not for unaffiliated users:** there's no KB to ground against before a membership exists.
+- **Client mode:** 24/7 Q&A grounded in the coach's per-tenant RAG knowledge base. **Both UIs have a dedicated AI tab** (this doc previously said the client reached it from Today/Plan — that is not the current layout).
+- **Coach mode (AI tab):** ask about the library and corpus, or scope a question to one client's intake and check-ins by sending that client's `membershipId`. Retrieval covers **at most one client at a time** — roster-wide questions are not answerable by the assistant.
+- **Knowledge base management:** upload/curate the tenant's AI content. **Coach only** — lives in the AI tab. Upload via the file-system upload API. Not yet built.
+- **Delivery:** async over **socket.io** on the default namespace — `ai.requested` → `ai.accepted` (carries the `requestId`) → `ai.completed`, seconds apart. Not a REST job-ticket. Nothing is persisted, so a dropped socket loses the answer for good. The chat UI must show the pending state and fail pending asks on disconnect.
+- **Not for unaffiliated users:** there's no KB to ground against before a membership exists, and the gateway rejects a tenant-less token at handshake. The client AI tab is hidden until they join a coach.
 
 ---
 

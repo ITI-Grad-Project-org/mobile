@@ -7,6 +7,7 @@ import activeTenantReducer from './activeTenantSlice';
 import membershipsReducer from './membershipsSlice';
 import chatUiReducer from './chatUiSlice';
 import checkinReviewsReducer from './checkinReviewsSlice';
+import assistantReducer from './assistantSlice';
 import { baseApi } from '@/api/baseApi';
 
 export const store = configureStore({
@@ -16,6 +17,7 @@ export const store = configureStore({
     memberships: membershipsReducer,
     chatUi: chatUiReducer,
     checkinReviews: checkinReviewsReducer,
+    assistant: assistantReducer,
     [baseApi.reducerPath]: baseApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>

@@ -15,7 +15,7 @@ This is the engineering documentation for the CoachHub React Native app — a mu
 | [`docs/03-expo-ui-guide.md`](docs/03-expo-ui-guide.md) | How to use `@expo/ui`, when to reach for it vs RN+NativeWind, universal vs platform components |
 | [`docs/04-state-management.md`](docs/04-state-management.md) | Redux Toolkit + RTK Query patterns, the tenant-scoped store, normalized memberships |
 | [`docs/05-feature-modules.md`](docs/05-feature-modules.md) | How each v1 feature maps to a module: CRM, programming, check-ins, messaging, AI |
-| [`docs/06-ai-assistant-integration.md`](docs/06-ai-assistant-integration.md) | The async job-ticket pattern, polling vs SSE, per-tenant RAG on the client side |
+| [`docs/06-Ai-Integration.md`](docs/06-Ai-Integration.md) | The socket.io assistant protocol, correlation and failure rules, per-tenant RAG on the client side |
 | [`docs/07-team-workflow.md`](docs/07-team-workflow.md) | Working with one teammate: git, branching, code ownership, conventions, PRs |
 | [`docs/08-agents-and-ai-tooling.md`](docs/08-agents-and-ai-tooling.md) | **`AGENTS.md` / `CLAUDE.md` strategy to save tokens and get the most from AI** |
 | [`docs/09-getting-started.md`](docs/09-getting-started.md) | First-run setup, dev build creation, environment, common commands |
@@ -31,5 +31,5 @@ UPLY mobile is a **development-build Expo app** (Expo Go is not an option — `@
 2. **Two UIs, chosen by role in the active tenant.** `owner` → Coach UI (Home · Clients · Plans · AI · Inbox · Profile); `client` → Client UI (Today · Plan · Progress · Messages · Profile). Only one is mounted at a time. Roles are only `owner` and `client` — **no assistant role.** See [architecture](docs/01-architecture.md).
 3. **Per-tenant, not global.** Every piece of business data (plans, logs, messages, AI calls) is scoped to the *currently active tenant*. The store keys memberships by `tenantId`. See [architecture](docs/01-architecture.md) and [state](docs/04-state-management.md).
 4. **The NativeWind / Reanimated version conflict is real and must be decided before you write UI.** See [tech-stack decisions](docs/02-tech-stack-decisions.md) — this is the single biggest setup risk.
-5. **The AI assistant is async (job-ticket).** No request blocks on the model. See [AI integration](docs/06-ai-assistant-integration.md).
+5. **The AI assistant is async over a socket.** `ai.requested` → `ai.accepted` → `ai.completed`, seconds apart; nothing is persisted. See [AI integration](docs/06-Ai-Integration.md).
 6. **RBAC is enforced server-side; the client only *reflects* it.** Never treat hidden UI as a security boundary. See [feature modules](docs/05-feature-modules.md).

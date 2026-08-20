@@ -158,7 +158,7 @@ When `setActiveTenant` fires:
 
 1. Update the slice.
 2. Optionally `dispatch(api.util.invalidateTags([...]))` for the tenant-scoped tags, or rely on the fact that the new `tenantId` arg produces different cache keys and triggers fresh fetches.
-3. Reset any in-progress AI job tickets tied to the old tenant (see [doc 06](06-ai-assistant-integration.md)).
+3. Reset the assistant thread and reconnect its socket (its JWT still names the old tenant) — `assistantSlice` resets on `setActiveTenant`; `useSwitchCoach` calls `reconnectAiSocket()`. See [doc 06](06-Ai-Integration.md).
 
 ## Optimistic updates (where they matter)
 

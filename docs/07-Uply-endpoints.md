@@ -31,9 +31,10 @@
 18. [Reviews](#15-reviews)
 19. [Upload](#16-upload--upload)
 20. [Health](#17-health)
-21. [Enum Reference](#enum-reference)
-22. [TypeScript Types](#typescript-types)
-23. [Integration Guide](#integration-guide)
+21. [WebSocket gateways](#18-websocket-gateways--not-rest)
+22. [Enum Reference](#enum-reference)
+23. [TypeScript Types](#typescript-types)
+24. [Integration Guide](#integration-guide)
 
 ---
 
@@ -747,6 +748,33 @@ Feeds: `avatarUrl`, `transformationPhotos[]`, `demoVideoUrl` / `demoGifUrl` / `t
 ## 17. Health
 
 `GET /health` → `200` `{ status: "ok", info: { database: { status: "up" } }, error, details }` · `503` when a dependency is down (the example shows Redis).
+
+---
+
+## 18. WebSocket gateways — not REST
+
+Two socket.io **v4** gateways sit outside this REST surface. Neither appears in the
+OpenAPI spec, and neither has a REST equivalent.
+
+| Purpose | Namespace | Client module |
+|---|---|---|
+| AI assistant | `/` (default) | `src/lib/aiSocket.ts` |
+| Coach ⇄ client messaging | `/chat` | `src/lib/chatSocket.ts` |
+
+Both authenticate with the **access** token via the handshake's `auth.token` (a refresh
+token is rejected; a query-string token is ignored). The AI gateway re-verifies on
+**every** message, so a 15-minute token expiry closes a live socket mid-session.
+
+**There is no `/assistant/*` REST route.** Any reference to `POST /assistant/ask` or
+`GET /assistant/jobs/{id}` is against a job-ticket design that was never built.
+
+The AI assistant chat is **not persisted anywhere** — no endpoint returns its history,
+and an answer in flight when the socket drops is permanently lost. Durable AI output is
+a different feature: plan suggestions, stored in `ai_plan_suggestions` and fetched over
+REST.
+
+Full event contract, correlation rules, and failure matrix: **[docs/06-Ai-Integration.md](06-Ai-Integration.md)**.
+Messaging: **[docs/10-chat-messaging.md](10-chat-messaging.md)**.
 
 ---
 

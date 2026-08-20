@@ -265,7 +265,7 @@ src/
 │       ├── profile/    #   ONE ProfileScreen rendered by both UIs
 │       ├── auth/       #   AuthScreen (role-agnostic)
 │       ├── messaging/  #   data layer only: api.ts + types.ts (no screens)
-│       └── assistant/  #   data layer only: api.ts + types.ts (no screens)
+│       └── assistant/  #   no screens: types.ts + useAiChat.ts (socket, no api.ts)
 │
 ├── shared/             # cross-cutting, non-feature code
 │   ├── ui/             # @expo/ui wrappers + NativeWind primitives
@@ -280,7 +280,8 @@ appears in both (messaging, AI) the two screens are genuinely different — the 
 inbox is a list of every client; the Client chat is a single thread with their coach.
 Forcing those into one folder would pretend they're one screen. So screens split by UI.
 `shared/` is reserved for code that is *literally reused*: a data layer both sides call
-(`shared/messaging`, `shared/assistant` — `api.ts`/`types.ts`, no screens), a screen that
+(`shared/messaging` — `api.ts`/`types.ts`; `shared/assistant` — `types.ts`/`useAiChat.ts`,
+socket-only so no `api.ts`; neither has screens), a screen that
 is genuinely identical for both roles (`shared/profile`), or role-agnostic flows (`auth`).
 (More in [doc 05](05-feature-modules.md).)
 

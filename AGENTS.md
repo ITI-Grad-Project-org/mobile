@@ -15,7 +15,10 @@ Stack: Expo SDK 56 (dev build, NOT Expo Go) · RN 0.85 · React 19.2 ·
   custom/brand UI = RN + NativeWind className. Styling does NOT cross a `Host`. See docs/03.
 - This is a DEVELOPMENT BUILD. Never write code that assumes Expo Go.
 - Tokens go in expo-secure-store, never AsyncStorage / never in Redux state.
-- The AI assistant is ASYNC (job-ticket: POST -> jobId -> poll). See docs/06.
+- The AI assistant is ASYNC over a SOCKET (socket.io v4, DEFAULT namespace; `ai.requested`
+  -> `ai.accepted` -> `ai.completed`). NOT a REST job-ticket, and NOT the `/chat` namespace.
+  It has no api.ts and no RTK Query endpoints — nothing is persisted server-side, so there
+  is no cache to populate. One un-acknowledged ask at a time. See docs/06.
 - v1 SCOPE ONLY. No push/SMS, no live Paymob payment, no scheduling, no nutrition,
   no agentic AI, no marketplace. Billing is concept-only (plan/tier model + gating). See docs/05.
 

@@ -1,15 +1,21 @@
-import { useActiveCoach } from "@/lib/role";
-import { Card } from "@/shared/ui/Card";
+import { MAX_PROMPT_LENGTH, useAiChat } from "@/features/shared/assistant";
+import { AiMarkdown } from "@/features/shared/assistant/components/AiMarkdown";
+import { AssistantComposer } from "@/features/shared/assistant/components/AssistantComposer";
+import { ThinkingLabel } from "@/features/shared/assistant/components/ThinkingLabel";
+import { useRole } from "@/lib/role";
+import { sfx } from "@/lib/sfx";
+import { cn } from "@/lib/utils";
 import { Icon, type IconName } from "@/shared/ui/Icon";
+import { Card } from "@/shared/ui/Card";
 import { SectionTitle } from "@/shared/ui/SectionTitle";
-import { Pressable, ScrollView, Text, TextInput, View, useCSSVariable } from "@/tw";
-import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
-import { useCallback, useState } from "react";
-import { Keyboard, KeyboardAvoidingView, Platform } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-// Apple Liquid Glass is iOS 26+ only — fall back to a Card elsewhere.
-const LIQUID_GLASS = isLiquidGlassAvailable();
+import { Pressable, Text, View } from "@/tw";
+import type { ToneName } from "@/tw/Tone";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Keyboard,
+  KeyboardAvoidingView,
+  ScrollView as RNScrollView,
+} from "react-native";
 
 interface Suggestion {
   icon: IconName;
@@ -25,127 +31,160 @@ const suggestions: Suggestion[] = [
 
 export function AssistantScreen() {
   const [input, setInput] = useState("");
-  const coach = useActiveCoach();
-  const insets = useSafeAreaInsets();
+  const scrollRef = useRef<RNScrollView>(null);
+  const { accent } = useRole();
 
-  const handleSuggestion = useCallback((text: string) => {
-    setInput(text);
-  }, []);
+  // No `membershipId` is ever sent from here: a client is always scoped to
+  // themselves, resolved server-side from their own token. The field would be
+  // ignored anyway.
+  const { thread, busy, send, stop } = useAiChat();
 
-  const handleSend = useCallback(() => {
-    if (!input.trim()) return;
-    // TODO: POST to async AI job-ticket endpoint (see docs/06)
-    Keyboard.dismiss();
-    setInput("");
-  }, [input]);
+  const glowTone: ToneName = accent === "orange" ? "primary" : "mint";
+  const hasChat = thread.length > 0;
 
-  const placeholderColor = useCSSVariable("--muted-foreground");
+  useEffect(() => {
+    const id = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
+    return () => clearTimeout(id);
+  }, [thread]);
+
+  const handleSend = useCallback(
+    (text: string) => {
+      const t = text.trim();
+      if (!t || busy || t.length > MAX_PROMPT_LENGTH) return;
+      sfx.send();
+      Keyboard.dismiss();
+      setInput("");
+      void send(t);
+    },
+    [busy, send]
+  );
 
   return (
-    <KeyboardAvoidingView
-      behavior="padding"
-      keyboardVerticalOffset={90}
-      style={{ flex: 1 }}
-    >
+    <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={90} style={{ flex: 1 }}>
       <View className="flex-1">
-        <ScrollView
-          className="flex-1 bg-background"
-          contentContainerClassName="gap-y-10 p-2 pt-5 pb-8"
+        <RNScrollView
+          ref={scrollRef}
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingTop: 20, paddingBottom: 16, rowGap: hasChat ? 8 : 40 }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          onContentSizeChange={() =>
+            hasChat && scrollRef.current?.scrollToEnd({ animated: true })
+          }
         >
-          {/* ── Header ────────────────────────────────────────────── */}
-          <View className="flex-row items-center gap-3 px-1">
-            <View className="h-11 w-11 items-center justify-center rounded-2xl bg-primary">
-              <Icon name="sparkles" size={20} color="--primary-foreground" />
-            </View>
-            <View>
-              <Text className="text-[24px] font-bold tracking-tight text-foreground">
-                Ask UPLY AI
-              </Text>
-              <Text className="text-[12.5px] text-muted-foreground">
-                Form tips, nutrition, recovery — anytime.
-              </Text>
-            </View>
-          </View>
-
-          {/* ── Coach heads-up card ────────────────────────────────── */}
-          <Card tone="ink" glass>
-            <Text className="text-[11px] font-semibold uppercase tracking-[4px] text-ink-foreground/60">
-              Coach{"'"}s heads-up
-            </Text>
-            <Text className="mt-2 text-[14px] leading-relaxed text-ink-foreground/90">
-              You crushed Day 4 — RPE was high on squats. The AI can suggest a
-              smarter warm-up and explain the form cue{" "}
-              {coach.name.split(" ")[0]} gave you.
-            </Text>
-          </Card>
-
-          {/* ── Suggestion chips ──────────────────────────────────── */}
-          <View>
-            <SectionTitle title="Try asking" />
-            <View className="gap-y-2">
-              {suggestions.map((s) => (
-                <Pressable
-                  key={s.text}
-                  onPress={() => handleSuggestion(s.text)}
-                  className="flex-row items-center gap-3 rounded-2xl bg-secondary/60 p-3 active:opacity-80"
-                >
-                  <View className="h-9 w-9 items-center justify-center rounded-xl bg-card">
-                    <Icon name={s.icon} size={16} color="--primary" />
-                  </View>
-                  <Text className="flex-1 text-[13.5px] font-medium text-foreground">
-                    {s.text}
+          {/* ── Empty state ─────────────────────────────────────── */}
+          {!hasChat && (
+            <>
+              <View className="flex-row items-center gap-3 px-1">
+                <View className="h-11 w-11 items-center justify-center rounded-2xl bg-primary">
+                  <Icon name="sparkles" size={20} color="--primary-foreground" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-[24px] font-bold tracking-tight text-foreground">
+                    Ask UPLY AI
                   </Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        </ScrollView>
+                  <Text className="text-[12.5px] text-muted-foreground">
+                    Form tips, nutrition, recovery — anytime.
+                  </Text>
+                </View>
+              </View>
 
-        {/* ── Input bar ─────────────────────────────────────────── */}
-        {(() => {
-          const inputRow = (
-            <View className="flex-row items-end gap-2">
-              <TextInput
-                value={input}
-                onChangeText={setInput}
-                placeholder="Ask anything about your training, nutrition, or recovery…"
-                placeholderTextColor={placeholderColor}
-                multiline
-                numberOfLines={3}
-                textAlignVertical="top"
-                className="flex-1 rounded-2xl bg-foreground/5 p-3 text-[13.5px] text-foreground"
-                style={Platform.OS === "ios" ? { minHeight: 72 } : { minHeight: 72 }}
-              />
-              <Pressable
-                onPress={handleSend}
-                className="h-11 w-11 items-center justify-center rounded-2xl bg-primary active:opacity-80"
+              <Card tone="ink" glass>
+                <Text className="text-[11px] font-semibold uppercase tracking-[4px] text-ink-foreground/60">
+                  Grounded in your plan
+                </Text>
+                <Text className="mt-2 text-[14px] leading-relaxed text-ink-foreground/90">
+                  Answers draw on your coach{"'"}s own methodology and material, plus your
+                  intake and check-ins — not generic internet advice.
+                </Text>
+              </Card>
+
+              <View>
+                <SectionTitle title="Try asking" />
+                <View className="gap-y-2">
+                  {suggestions.map((s) => (
+                    <Pressable
+                      key={s.text}
+                      onPress={() => handleSend(s.text)}
+                      disabled={busy}
+                      className={cn(
+                        "flex-row items-center gap-3 rounded-2xl bg-secondary/60 p-3 active:opacity-80",
+                        busy && "opacity-50"
+                      )}
+                    >
+                      <View className="h-9 w-9 items-center justify-center rounded-xl bg-card">
+                        <Icon name={s.icon} size={16} color="--primary" />
+                      </View>
+                      <Text className="flex-1 text-[13.5px] font-medium text-foreground">
+                        {s.text}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            </>
+          )}
+
+          {/* ── Thread ──────────────────────────────────────────── */}
+          {thread.map((m) => {
+            const isMe = m.role === "user";
+            const isThinking = m.state === "thinking" || m.state === "slow";
+            return (
+              <View
+                key={m.id}
+                className={cn("flex-row items-end", isMe ? "justify-end" : "justify-start")}
               >
-                <Icon name="send" size={16} color="--primary-foreground" />
-              </Pressable>
-            </View>
-          );
+                {!isMe && (
+                  <View className="mr-2 h-7 w-7 items-center justify-center rounded-full bg-primary">
+                    <Icon name="sparkles" size={14} color="--primary-foreground" />
+                  </View>
+                )}
+                {isThinking ? (
+                  <View className="rounded-3xl rounded-bl-md border border-border/30 bg-card px-4 py-3 shadow-soft">
+                    {/* `ai.timed_out` is advisory — the answer may still land. */}
+                    <ThinkingLabel slow={m.state === "slow"} />
+                  </View>
+                ) : (
+                  <View
+                    className={cn(
+                      "max-w-[80%] px-4 py-2.5",
+                      isMe
+                        ? "rounded-3xl rounded-br-md bg-primary"
+                        : m.state === "failed"
+                          ? "rounded-3xl rounded-bl-md border border-destructive/40 bg-destructive/10"
+                          : m.state === "stopped"
+                            ? "rounded-3xl rounded-bl-md border border-border/40 bg-secondary/50"
+                            : "rounded-3xl rounded-bl-md border border-border/30 bg-card shadow-soft"
+                    )}
+                  >
+                    {isMe || m.state === "failed" || m.state === "stopped" ? (
+                      <Text
+                        className={cn(
+                          "text-[14px] leading-snug",
+                          isMe ? "text-primary-foreground" : "text-foreground"
+                        )}
+                      >
+                        {m.text}
+                      </Text>
+                    ) : (
+                      <AiMarkdown text={m.text} />
+                    )}
+                  </View>
+                )}
+              </View>
+            );
+          })}
+        </RNScrollView>
 
-          return LIQUID_GLASS ? (
-            <GlassView
-              glassEffectStyle="regular"
-              isInteractive
-              style={{
-                padding: 12,
-                marginHorizontal: 8,
-                marginBottom: insets.bottom + 8,
-                borderRadius: 24,
-              }}
-            >
-              {inputRow}
-            </GlassView>
-          ) : (
-            <Card className="p-3 mx-2 mb-2">
-              {inputRow}
-            </Card>
-          );
-        })()}
+        <AssistantComposer
+          value={input}
+          onChangeText={setInput}
+          onSend={() => handleSend(input)}
+          onStop={stop}
+          busy={busy}
+          placeholder={busy ? "Thinking…" : "Ask UPLY AI"}
+          glowTone={glowTone}
+        />
       </View>
     </KeyboardAvoidingView>
   );

@@ -18,6 +18,7 @@ import {
   useGetCustomerMembershipsQuery,
 } from '@/api/endpoints/auth.endpoints';
 import { hasCompletedProfile } from '@/shared/hooks/useProfileSetup';
+import { useAiEvents } from '@/features/shared/assistant';
 import { useChatEvents } from '@/features/shared/messaging';
 
 SplashScreen.preventAutoHideAsync().catch(() => {
@@ -173,6 +174,11 @@ function AppContent() {
   // One app-wide chat socket. It lives here rather than on the chat screens so
   // inbox rows and tab badges stay live from any tab.
   useChatEvents();
+
+  // Likewise for the assistant, and for a sharper reason: an answer arrives
+  // seconds after the ask, and a reply whose socket handler was unmounted by a
+  // tab change is gone for good — rooms don't survive and nothing is persisted.
+  useAiEvents();
 
   useEffect(() => {
     if (!authRestored || isAuthenticated) return;

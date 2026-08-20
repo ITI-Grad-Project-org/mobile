@@ -1,10 +1,19 @@
 import { useUnreadCount } from "@/features/shared/messaging/useUnreadCount";
+import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import { useNativeTabsTheme } from "@/shared/hooks/useNativeTabsTheme";
 import { NativeTabs } from "expo-router/unstable-native-tabs";
 
 export default function ClientTabsLayout() {
   const theme = useNativeTabsTheme();
   const unread = useUnreadCount();
+  const { tenantId } = useActiveTenant();
+
+  // A client's token carries `tenantId: null` until they join a coach, and the
+  // AI gateway rejects such a token at handshake — the tenant is what scopes
+  // every knowledge-base lookup, so there is nothing to ground against. Showing
+  // the tab anyway yields an instant `ai.unauthorized` and a closed socket,
+  // which reads as a bug rather than as "not available yet".
+  const canUseAssistant = Boolean(tenantId);
 
   return (
     <NativeTabs {...theme}>
@@ -17,7 +26,7 @@ export default function ClientTabsLayout() {
         <NativeTabs.Trigger.Label>Plan</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="calendar" md="calendar_month" />
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="ai">
+      <NativeTabs.Trigger name="ai" hidden={!canUseAssistant}>
         <NativeTabs.Trigger.Label>AI</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="sparkles" md="star_shine" />
       </NativeTabs.Trigger>

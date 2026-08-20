@@ -4,6 +4,7 @@ import { router } from "expo-router";
 
 import { baseApi } from "@/api/baseApi";
 import { bumpTenantEpoch } from "@/api/tenantEpoch";
+import { reconnectAiSocket } from "@/lib/aiSocket";
 import { reconnectChatSocket } from "@/lib/chatSocket";
 import { useSwitchTenantMutation } from "@/api/endpoints/auth.endpoints";
 import { useAppDispatch, useAppSelector } from "@/store";
@@ -75,6 +76,12 @@ export function useSwitchCoach() {
         // data only comes good after a manual app restart).
         reconnectChatSocket().catch(() => {
           // REST still works; the socket retries on its own.
+        });
+        // Same for the assistant: its JWT still names the old coach, and every
+        // knowledge-base lookup is scoped from it. The thread itself is already
+        // wiped by assistantSlice's setActiveTenant reset.
+        reconnectAiSocket().catch(() => {
+          // Reconnects on its own on the next ask.
         });
 
         // Pushed screens carry the OLD tenant's ids in their route params

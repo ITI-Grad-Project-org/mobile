@@ -101,10 +101,15 @@ export function normalizeActivityRow(raw: unknown, index: number): ActivityRowVi
   const occurredAt = pick(row, ["occurredAt", "loggedAt", "createdAt", "timestamp", "at"]);
 
   return {
-    // The response has no id, so the key is composed. membershipId + the
-    // instant is unique in practice: one client can't log two things in the
-    // same millisecond. The index keeps it stable if either is ever missing.
-    id: pick(row, ["id", "eventId", "activityId"]) ?? `${membershipId ?? "row"}-${occurredAt ?? index}`,
+    // The response has no id, so the key is composed — and the index is always
+    // part of it. membershipId + instant is NOT unique: `occurredAt` is a
+    // second-precision timestamp, and one set-report writes several
+    // `workout_set_reported` rows sharing it, which collided into duplicate
+    // React keys. The list is mapped whole (never paged-and-concatenated), so
+    // the index is unique here and stable for a given response.
+    id:
+      pick(row, ["id", "eventId", "activityId"]) ??
+      `${membershipId ?? "row"}-${occurredAt ?? "na"}-${index}`,
     membershipId,
     clientName: nameFrom(row),
     type,

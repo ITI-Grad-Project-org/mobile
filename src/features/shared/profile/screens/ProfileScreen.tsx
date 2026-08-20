@@ -16,6 +16,7 @@ import {
 import { useGetPublicReviewsSummaryQuery } from "@/api/endpoints/reviews.endpoints";
 import { useGetTenantMeQuery } from "@/api/endpoints/tenant.endpoints";
 import { MeasurementsSummaryCard } from "@/features/client/progress";
+import { disconnectAiSocket } from "@/lib/aiSocket";
 import { disconnectChatSocket } from "@/lib/chatSocket";
 import { resolveCoachFields } from "@/lib/coach";
 import { cn } from "@/lib/utils";
@@ -102,8 +103,9 @@ function CoachProfile() {
   // account deletion.
   const resetAndLeave = async () => {
     await clearTokens();
-    // The chat socket authenticates with its own copy of the token.
+    // Both sockets authenticate with their own copy of the token.
     disconnectChatSocket();
+    disconnectAiSocket();
     dispatch(clearAuth());
     dispatch(clearChatUi());
     dispatch(clearActiveTenant());
@@ -536,8 +538,9 @@ function ClientProfile() {
   const resetAndLeave = async () => {
     await clearTokens();
     await resetProfile();
-    // The chat socket authenticates with its own copy of the token.
+    // Both sockets authenticate with their own copy of the token.
     disconnectChatSocket();
+    disconnectAiSocket();
     // Leaving for the login screen is the root layout's job: it reacts to
     // `isAuthenticated` going false and tears the signed-in stack down. Doing it
     // here too would queue a second POP_TO_TOP that lands after the stack is

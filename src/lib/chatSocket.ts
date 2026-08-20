@@ -1,8 +1,8 @@
+import { BASE_URL } from "@/api/config";
 import type { SocketAck } from "@/features/shared/messaging/types";
 import * as SecureStore from "expo-secure-store";
 import { io, type Socket } from "socket.io-client";
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || "https://api.74.162.148.3.nip.io";
 const NAMESPACE = "/chat";
 
 /** A dead socket never fires its ack, so emits need their own deadline. */

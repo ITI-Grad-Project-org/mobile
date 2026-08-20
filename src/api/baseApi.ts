@@ -2,6 +2,7 @@ import { clearActiveTenant } from '@/store/activeTenantSlice';
 import { clearAuth, clearTokens } from '@/store/authSlice';
 import { clearChatUi } from '@/store/chatUiSlice';
 import { clearMemberships } from '@/store/membershipsSlice';
+import { disconnectAiSocket } from '@/lib/aiSocket';
 import { disconnectChatSocket } from '@/lib/chatSocket';
 import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query';
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
@@ -39,8 +40,9 @@ function forceLogout(api: Parameters<BaseQueryFn>[1]) {
   }
 
   clearTokens();
-  // The chat socket holds its own copy of the now-dead token.
+  // Both sockets hold their own copy of the now-dead token.
   disconnectChatSocket();
+  disconnectAiSocket();
   api.dispatch(clearAuth());
   api.dispatch(clearChatUi());
   api.dispatch(clearActiveTenant());

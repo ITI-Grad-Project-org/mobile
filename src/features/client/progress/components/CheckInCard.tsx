@@ -3,7 +3,10 @@ import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import { Card } from "@/shared/ui/Card";
 import { Pressable, Text, View } from "@/tw";
 import { router } from "expo-router";
-import { deriveMeasurementStats } from "../lib/measurements";
+import {
+  deriveMeasurementStats,
+  MEASUREMENT_HISTORY_LIMIT,
+} from "../lib/measurements";
 
 const CADENCE_DAYS = 7;
 
@@ -38,7 +41,7 @@ export function CheckInCard() {
   const { tenantId } = useActiveTenant();
 
   const { data, isLoading } = useListMeasurementsQuery(
-    { tenantId: tenantId ?? "", limit: 100 },
+    { tenantId: tenantId ?? "", limit: MEASUREMENT_HISTORY_LIMIT },
     { skip: !tenantId }
   );
 

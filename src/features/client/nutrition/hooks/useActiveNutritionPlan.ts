@@ -6,6 +6,7 @@ import {
 } from "@/api/endpoints/nutrition.endpoints";
 import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import { todayIso } from "@/shared/utils/dayProgress";
+import { isPending } from "@/shared/utils/query";
 import { useMemo } from "react";
 import { calendarDayId, isConflict, pickActivePlan, unwrap, unwrapList } from "../data";
 
@@ -17,6 +18,8 @@ export interface ActiveNutritionPlan {
   /** Today's day id from the calendar — plan days often carry no dates. */
   todayDayId: string | null;
   isLoading: boolean;
+  /** A refresh is in flight over data that's already on screen. */
+  isFetching: boolean;
   isError: boolean;
   /** Two published plans cover today; distinct from "no plan" on purpose. */
   planConflict: boolean;
@@ -36,34 +39,40 @@ export function useActiveNutritionPlan(): ActiveNutritionPlan {
   // able to serve the previous coach's plan (name, targets, days) from cache.
   const { tenantId } = useActiveTenant();
 
+  const currentQuery = useGetCurrentNutritionPlanQuery(
+    { tenantId: tenantId ?? "" },
+    { skip: !tenantId }
+  );
   const {
     data: currentData,
     isLoading: isCurrentLoading,
     isError: isCurrentError,
     error: currentError,
     refetch: refetchCurrent,
-  } = useGetCurrentNutritionPlanQuery(
-    { tenantId: tenantId ?? "" },
-    { skip: !tenantId }
-  );
+  } = currentQuery;
 
   // A 409 on `current` means two published plans overlap today, so it is NOT a
   // fallback trigger — but a 404/no-plan is, and the list is also how a plan that
   // starts in the future gets found.
+  const plansQuery = useGetMyNutritionPlansQuery(
+    { tenantId: tenantId ?? "" },
+    { skip: !tenantId }
+  );
   const {
     data: plansData,
     isLoading: isPlansLoading,
     isError: isPlansError,
     refetch: refetchPlans,
-  } = useGetMyNutritionPlansQuery({ tenantId: tenantId ?? "" }, { skip: !tenantId });
+  } = plansQuery;
 
   // Plan days are relative to the plan's start and often carry no date, so the
   // calendar names today's day when it can. It is a hint, not the only source —
   // `normalizeDay` also derives dates from the plan's start.
-  const { data: calendarData } = useGetNutritionCalendarQuery(
+  const calendarQuery = useGetNutritionCalendarQuery(
     { tenantId: tenantId ?? "", from: iso, to: iso },
     { skip: !tenantId }
   );
+  const calendarData = calendarQuery.data;
   const todayDayId = useMemo(
     () => calendarDayId(unwrapList(calendarData)[0]),
     [calendarData]
@@ -79,14 +88,11 @@ export function useActiveNutritionPlan(): ActiveNutritionPlan {
 
   // The summary payload often omits weeks/days, so refetch the plan in full.
   // A failure here is not fatal — the summary payload is still a usable fallback.
-  const {
-    data: fullPlanData,
-    isLoading: isFullLoading,
-    refetch: refetchFull,
-  } = useGetMyNutritionPlanQuery(
+  const fullPlanQuery = useGetMyNutritionPlanQuery(
     { tenantId: tenantId ?? "", planId: summaryPlan?.id ?? "" },
     { skip: !tenantId || !summaryPlan?.id }
   );
+  const { data: fullPlanData, refetch: refetchFull } = fullPlanQuery;
 
   const plan = useMemo(
     () => unwrap(fullPlanData) ?? summaryPlan ?? null,
@@ -97,8 +103,16 @@ export function useActiveNutritionPlan(): ActiveNutritionPlan {
     plan,
     iso,
     todayDayId,
+    // isPending, not isLoading: the full-plan read is skipped until the summary
+    // names a plan, and RTK reports it neither loading nor loaded for the frame
+    // in between — long enough for the screen to flash its empty state.
     isLoading:
-      isCurrentLoading || isPlansLoading || (Boolean(summaryPlan?.id) && isFullLoading),
+      isCurrentLoading || isPlansLoading || isPending(fullPlanQuery, Boolean(summaryPlan?.id)),
+    isFetching:
+      currentQuery.isFetching ||
+      plansQuery.isFetching ||
+      calendarQuery.isFetching ||
+      fullPlanQuery.isFetching,
     isError: !planConflict && isPlansError && isCurrentError,
     planConflict,
     retry: () => {

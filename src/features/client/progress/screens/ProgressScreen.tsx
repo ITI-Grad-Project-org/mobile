@@ -1,7 +1,7 @@
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { router } from "expo-router";
 import React, { useState } from "react";
-import { ActivityIndicator } from "react-native";
+import { ActivityIndicator, RefreshControl } from "react-native";
 
 import { useListMeasurementsQuery } from "@/api/endpoints/measurements.endpoints";
 import type { Measurement } from "@/api/types";
@@ -14,7 +14,12 @@ import { Image } from "@/tw/image";
 import { Pressable, ScrollView, Text, useCSSVariable, View } from "@/tw";
 import { MeasurementActionsSheet } from "../components/MeasurementActionsSheet";
 import WeightChart from "@/shared/ui/WeightChart";
-import { deriveMeasurementStats, formatDelta, formatShortDate } from "../lib/measurements";
+import {
+  deriveMeasurementStats,
+  formatDelta,
+  formatShortDate,
+  MEASUREMENT_HISTORY_LIMIT,
+} from "../lib/measurements";
 
 const openForm = () => router.push("/(client)/measurement");
 
@@ -94,10 +99,11 @@ export function ProgressScreen() {
   const primaryColor = (useCSSVariable("--primary") as string) || "#e5673a";
   const [selected, setSelected] = useState<Measurement | null>(null);
 
-  const { data, isLoading, isError, error, refetch } = useListMeasurementsQuery(
-    { tenantId: tenantId ?? "", limit: 100 },
-    { skip: !tenantId }
-  );
+  const { data, isLoading, isFetching, isError, error, refetch } =
+    useListMeasurementsQuery(
+      { tenantId: tenantId ?? "", limit: MEASUREMENT_HISTORY_LIMIT },
+      { skip: !tenantId }
+    );
 
   // No active membership is not a failed request. The endpoint answers 400
   // ("Client has no active tenant selected") or 404 ("Active client membership
@@ -126,6 +132,14 @@ export function ProgressScreen() {
       className="flex-1 bg-background"
       contentContainerClassName="gap-y-5 pt-5 pb-tabbar"
       showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          // Never during the first load — the spinner below owns that.
+          refreshing={isFetching && !isLoading}
+          onRefresh={refetch}
+          tintColor={primaryColor}
+        />
+      }
     >
       <View className="flex-row items-start justify-between px-1">
         <View className="min-w-0 flex-1">

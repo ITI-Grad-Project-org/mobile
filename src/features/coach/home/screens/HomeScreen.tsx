@@ -17,6 +17,7 @@ import { useCoachHomeAnalytics } from "../hooks/useCoachHomeAnalytics";
 import { useClientAvatars } from "../hooks/useClientAvatars";
 import { useCoachHomeData } from "../hooks/useCoachHomeData";
 import { useDismissedInsights } from "../hooks/useDismissedInsights";
+import { useCoachReviews } from "@/features/coach/reviews";
 
 import { useRosterCheckins } from "../hooks/useRosterCheckins";
 import { useWeekActivity } from "../hooks/useWeekActivity";
@@ -80,9 +81,15 @@ export function HomeScreen() {
     [attention, checkins]
   );
 
+  // Reviews are their own resource — /analytics/attention knows nothing about
+  // them — so they reach the queue block as an option rather than through
+  // `attention`. "New" is the session's own watermark: nothing server-side
+  // records that a coach has read one. See seenReviews.
+  const reviews = useCoachReviews();
+  const { refetch: refetchReviews } = reviews;
   const queues = useMemo(
-    () => buildQueues(attentionQueue, { checkinsKnown }),
-    [attentionQueue, checkinsKnown]
+    () => buildQueues(attentionQueue, { checkinsKnown, newReviews: reviews.unseen }),
+    [attentionQueue, checkinsKnown, reviews.unseen]
   );
   const insight = useMemo(() => buildInsight(attentionQueue), [attentionQueue]);
 
@@ -98,15 +105,22 @@ export function HomeScreen() {
   // counts.checkinsAwaitingReview is deliberately NOT summed: it counts the
   // analytics check-in resource, which the badge would otherwise inflate with
   // reviews that are already done. The real number is the queue's own length.
+  //
+  // New reviews are added to BOTH sides: they're a row in the block, so the
+  // badge has to count them, and adding them to only one side would make the
+  // cross-check below fire on every new review.
   const countedTotal = counts
     ? [counts.atRisk, counts.programsEndingSoon]
         .filter((n) => typeof n === "number" && Number.isFinite(n))
-        .reduce((sum, n) => sum + n, 0) + checkins.length
+        .reduce((sum, n) => sum + n, 0) +
+      checkins.length +
+      reviews.unseen.length
     : null;
   const listTotal = attentionQueue
     ? attentionQueue.atRisk.length +
       attentionQueue.checkinsAwaitingReview.length +
-      attentionQueue.programsEndingSoon.length
+      attentionQueue.programsEndingSoon.length +
+      reviews.unseen.length
     : null;
   // Prefer the counts; fall back to the lists rather than showing nothing when
   // the counts are absent.
@@ -142,6 +156,8 @@ export function HomeScreen() {
       // says "and 3 others have gone quiet" has to open all four.
       if (row.key === "atRisk") return router.push("/(coach)/at-risk");
       if (row.key === "checkins") return router.push("/(coach)/check-ins");
+      // Opening the list is also what marks the new ones read.
+      if (row.key === "reviews") return router.push("/(coach)/reviews");
       // The whole ending-soon queue, not the Plans tab — the tab lists every
       // plan and drops the end dates and completion that make this actionable.
       return router.push("/(coach)/renewals");
@@ -152,9 +168,11 @@ export function HomeScreen() {
   const onRefresh = useCallback(() => {
     refetch();
     refetchAll();
-    // Not covered by either of the above: the check-in queue is its own read.
+    // Not covered by either of the above: the check-in queue and the reviews
+    // list are each their own read.
     refetchCheckins();
-  }, [refetch, refetchAll, refetchCheckins]);
+    refetchReviews();
+  }, [refetch, refetchAll, refetchCheckins, refetchReviews]);
 
   const mrrLines = formatMrrLines(overview?.mrr);
   // Labelled from the window the hook actually requested, never from today —

@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { Icon } from "@/shared/ui/Icon";
 import { Pressable, Text, TextInput, View, useCSSVariable } from "@/tw";
 
-import { StarRating } from "./StarRating";
+import { StarRating } from "@/shared/ui/StarRating";
 import { GlassButton } from "@/shared/ui/GlassButton";
 
 export function ReviewFormSheet({

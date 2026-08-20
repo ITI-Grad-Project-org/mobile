@@ -84,6 +84,10 @@
   /* Gradient start for the AI insight card; sits in the lilac hue family. */
   --color-indigo-tint: var(--indigo-tint);
 
+  /* Praise. The tint under a review row, in --sun's hue so the stars
+     (--sun-ink) sit in the same family as the fill they land on. */
+  --color-sun-tint: var(--sun-tint);
+
   /* Text that sits ON bg-lilac, and the saturated end-stop for the week bars. */
   --color-lilac-on: var(--lilac-on);
   --color-lilac-bright: var(--lilac-bright);
@@ -174,6 +178,8 @@
 
   --indigo-tint: oklch(0.955 0.03 295);
 
+  --sun-tint: oklch(0.965 0.04 92);
+
   /* --lilac is a pale fill in light mode, so what sits on it must be dark. */
   --lilac-on: oklch(0.3 0.13 295);
   --lilac-bright: oklch(0.62 0.17 295);
@@ -254,6 +260,8 @@
     --info-tint: oklch(0.3 0.06 240);
 
     --indigo-tint: oklch(0.275 0.05 295);
+
+    --sun-tint: oklch(0.285 0.045 92);
 
     /* --lilac is a dark fill in dark mode, so what sits on it must be light. */
     --lilac-on: oklch(0.97 0.02 295);

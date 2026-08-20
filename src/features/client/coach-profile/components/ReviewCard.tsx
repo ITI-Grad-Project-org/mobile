@@ -3,8 +3,8 @@ import { Icon, type IconName } from "@/shared/ui/Icon";
 import { Pressable, Text, View } from "@/tw";
 import { Image } from "@/tw/image";
 
-import { formatReviewDate, reviewAuthorName, reviewAvatarUrl } from "../lib/reviews";
-import { StarRating } from "./StarRating";
+import { formatReviewDate, reviewAuthorName, reviewAvatarUrl } from "@/features/shared/reviews/lib/reviews";
+import { StarRating } from "@/shared/ui/StarRating";
 
 export function ReviewCard({ review }: { review: Review }) {
   const date = formatReviewDate(review.updatedAt || review.createdAt);

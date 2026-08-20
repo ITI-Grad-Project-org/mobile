@@ -1,10 +1,12 @@
 import type { Attention } from "@/api/types";
+import type { CoachReview } from "@/features/shared/reviews/types";
 import type { IconName } from "@/shared/ui/Icon";
 
 import {
   DASH,
   DEFAULT_ENDING_HORIZON_DAYS,
   DEFAULT_RISK_THRESHOLD_DAYS,
+  daysAgoLabel,
   daysSince,
   formatPctShort,
   silenceHeadline,
@@ -13,7 +15,7 @@ import {
   pluralise,
 } from "./format";
 
-export type QueueKey = "atRisk" | "checkins" | "ending";
+export type QueueKey = "atRisk" | "checkins" | "ending" | "reviews";
 
 export interface AttentionRowModel {
   key: QueueKey;
@@ -46,6 +48,12 @@ export interface BuildQueuesOptions {
    * nothing — no row AND no "you're clear" line, since neither is known yet.
    */
   checkinsKnown?: boolean;
+  /**
+   * Reviews left recently and not yet read, newest first. Not part of
+   * /analytics/attention — reviews are their own resource, passed in by the
+   * caller (see useCoachReviews).
+   */
+  newReviews?: CoachReview[];
 }
 
 export interface QueueModel {
@@ -55,6 +63,18 @@ export interface QueueModel {
   collapsed: CollapsedLine[];
   /** Every queue empty — the whole block becomes a single all-clear row. */
   allClear: boolean;
+}
+
+/** "Sara Nabil · 5★ · yesterday", dropping whichever part didn't arrive. */
+function reviewSubtitle(review: CoachReview): string {
+  const when = daysAgoLabel(daysSince(review.writtenAt ?? undefined));
+  return [
+    review.clientName,
+    review.rating !== null ? `${review.rating}★` : null,
+    when,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 export function buildQueues(
@@ -162,7 +182,27 @@ export function buildQueues(
     });
   }
 
-  // An unknown check-in queue can't be declared clear.
+  const newReviews = options.newReviews ?? [];
+  if (newReviews.length > 0) {
+    const newest = newReviews[0];
+    rows.push({
+      key: "reviews",
+      tone: "neutral",
+      fromVar: "--sun-tint",
+      count: newReviews.length,
+      bubbleClassName: "bg-sun/25",
+      bubbleTextClassName: "text-sun-ink",
+      title: `${newReviews.length} new ${pluralise(newReviews.length, "review")}`,
+      subtitle: reviewSubtitle(newest),
+      actionLabel: "Read",
+    });
+  }
+  // Deliberately no collapsed line for reviews: the others are queues of work,
+  // and "no new reviews" is not a reassurance a coach needs — it would only
+  // dilute the three lines that say nothing is waiting on them.
+
+  // An unknown check-in queue can't be declared clear. Reviews are excluded
+  // from this test by construction: with none, they add no row.
   const allClear = rows.length === 0 && checkinsKnown;
   return { rows, collapsed: allClear ? [] : collapsed, allClear };
 }

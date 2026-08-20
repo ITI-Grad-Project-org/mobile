@@ -258,18 +258,31 @@ function CoachProfile() {
               of {roster.total} on roster
             </Text>
           </Card>
-          <Card tone="lilac" className="flex-1" glass>
+          {/* Tappable even at zero reviews: the screen behind it explains
+              where reviews come from, which is the useful answer to "why is
+              this empty?". */}
+          <Card
+            tone="lilac"
+            className="flex-1"
+            glass
+            interactive
+            onPress={() => router.push("/(coach)/reviews")}
+            accessibilityLabel="See your reviews"
+          >
             <Text className="text-lilac-ink/70 text-[11px] font-semibold uppercase tracking-wider">
               Rating
             </Text>
             <Text className="text-lilac-ink text-2xl font-black mt-1">
               {rating ?? "—"}
             </Text>
-            <Text className="text-lilac-ink/80 text-[11px]">
-              {reviewCount === 0
-                ? "No reviews yet"
-                : `${reviewCount} review${reviewCount === 1 ? "" : "s"}`}
-            </Text>
+            <View className="flex-row items-center gap-1">
+              <Text className="text-lilac-ink/80 text-[11px]">
+                {reviewCount === 0
+                  ? "No reviews yet"
+                  : `${reviewCount} review${reviewCount === 1 ? "" : "s"}`}
+              </Text>
+              <Icon name="chevron-right" size={11} color="--lilac-ink" />
+            </View>
           </Card>
         </View>
 

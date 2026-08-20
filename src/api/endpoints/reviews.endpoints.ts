@@ -3,7 +3,10 @@ import { CreateReviewDto, UpdateReviewDto } from '../types';
 
 export const reviewsEndpoints = baseApi.injectEndpoints({
   endpoints: (builder) => ({
-    getCoachReviews: builder.query<any[], { tenantId: string }>({
+    // `unknown`, not `any[]`: the endpoint documents no response body, so
+    // callers go through normalizeReviews rather than trusting a shape the
+    // API never promised. The list may also arrive inside an envelope.
+    getCoachReviews: builder.query<unknown, { tenantId: string }>({
       query: () => '/reviews/me',
       providesTags: (result, error, { tenantId }) => [
         { type: 'Reviews', id: `COACH-LIST-${tenantId}` },

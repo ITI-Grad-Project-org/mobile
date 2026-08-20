@@ -37,9 +37,9 @@ import { WithdrawRequestModal } from "@/features/client/match-coach/components/W
 import { ConfirmSheet } from "../components/ConfirmSheet";
 import { MyReviewCard, ReviewCard } from "../components/ReviewCard";
 import { ReviewFormSheet } from "../components/ReviewFormSheet";
-import { StarRating } from "../components/StarRating";
+import { StarRating } from "@/shared/ui/StarRating";
 import { TransformationGallery } from "../components/TransformationGallery";
-import { resolveSummary } from "../lib/reviews";
+import { resolveSummary } from "@/features/shared/reviews/lib/reviews";
 import { GlassButton } from "@/shared/ui/GlassButton";
 
 type ActionScope = "intake" | "review";

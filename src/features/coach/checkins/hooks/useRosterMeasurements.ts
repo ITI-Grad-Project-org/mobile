@@ -75,6 +75,23 @@ export function toRosterClients(rows: any[]): RosterClient[] {
   return targets;
 }
 
+let loggedMeasurementShape = false;
+
+/**
+ * Prints one coach-side measurement row once.
+ *
+ * Measurements have no response schema in the OpenAPI doc, so whether a row
+ * carries its own review state back (`reviewedAt`, `coachFeedback`, or some
+ * other spelling) is unverified — and useCheckinReviews has to fall back to
+ * inferring it from the pending list when it doesn't. This is how you find out.
+ */
+function describeMeasurementShape(rows: Measurement[]): void {
+  if (!__DEV__ || loggedMeasurementShape || rows.length === 0) return;
+  loggedMeasurementShape = true;
+  console.log("[measurement] row keys:", Object.keys(rows[0]).join(", "));
+  console.log("[measurement] first row:", JSON.stringify(rows[0], null, 2));
+}
+
 const DEFAULT_MAX_CLIENTS = 30;
 /** Stable identity, so a disabled hook doesn't re-trigger downstream memos. */
 const NONE: ClientMeasurements[] = [];
@@ -156,6 +173,7 @@ export function useRosterMeasurements(
           .filter((m) => typeof m?.measuredAt === "string")
           .slice()
           .sort(byNewest);
+        describeMeasurementShape(measurements);
         rows.push({ client: result.client, measurements });
       }
 

@@ -70,7 +70,7 @@ export function ClientsScreen() {
       if (!latest) continue;
       map.set(row.client.clientId, {
         measuredAt: latest.measuredAt,
-        unread: !reviews.isReviewed(row.client.clientId, latest.measuredAt),
+        unread: !reviews.isReviewed(latest),
       });
     }
     return map;

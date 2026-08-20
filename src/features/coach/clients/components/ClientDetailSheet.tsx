@@ -61,10 +61,14 @@ export function ClientDetailSheet({ client, tenantId, onClose }: ClientDetailShe
     [measurements.data]
   );
   const latestCheckin = checkins[0];
-  const checkinUnread =
-    !!clientUserId &&
-    !!latestCheckin &&
-    !reviews.isReviewed(clientUserId, latestCheckin.measuredAt);
+  // Only what this preview actually shows: marking is per measurement now, and
+  // the sheet is capped at CHECKIN_PREVIEW rows — anything older is the
+  // Check-ins screen's job.
+  const unreviewedCheckins = useMemo(
+    () => checkins.filter((entry) => !reviews.isReviewed(entry)),
+    [checkins, reviews]
+  );
+  const checkinUnread = !!latestCheckin && !reviews.isReviewed(latestCheckin);
 
   const [removeClient, { isLoading: isRemoving }] = useRemoveClientMutation();
   const [revokeInvitation, { isLoading: isRevoking }] = useRevokeInvitationMutation();
@@ -322,13 +326,17 @@ export function ClientDetailSheet({ client, tenantId, onClose }: ClientDetailShe
                     />
                   ))}
 
-                  {checkinUnread && latestCheckin ? (
+                  {checkinUnread && unreviewedCheckins.length > 0 ? (
                     <Pressable
-                      onPress={() => {
-                        reviews.markReviewed(clientUserId, latestCheckin.measuredAt);
-                        sfx.success();
+                      onPress={async () => {
+                        const result = await reviews.markReviewed(
+                          unreviewedCheckins.map((entry) => entry.id),
+                          { clientId: clientUserId }
+                        );
+                        if (result.reviewed > 0) sfx.success();
                       }}
-                      className="flex-row items-center justify-center gap-x-2 border-t border-border py-3 active:opacity-70"
+                      disabled={reviews.isMarking}
+                      className="flex-row items-center justify-center gap-x-2 border-t border-border py-3 active:opacity-70 disabled:opacity-50"
                     >
                       <Icon name="check" size={14} color="--primary" />
                       <Text className="text-[13px] font-semibold text-primary">

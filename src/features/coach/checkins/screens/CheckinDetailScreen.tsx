@@ -89,17 +89,25 @@ export function CheckinDetailScreen() {
   const weightGood = weight?.delta !== undefined && weight.delta < 0;
   const busy = measurements.isLoading;
 
-  // Reviewing from here means "I've read this client's history up to the newest
-  // entry" — the same watermark the list screen writes. Device-local: the API
-  // has no review state (see useCheckinReviews).
+  // Reviewing from here means "I've read this client's history" — the same
+  // per-measurement write the list screen makes, over every unread entry on
+  // this screen rather than just the newest, since they are all in front of the
+  // coach. Server state, and one-way: there is no un-review route.
   const reviews = useCheckinReviews();
-  const latestAt = stats.latest?.measuredAt;
-  const reviewed = !!clientId && !!latestAt && reviews.isReviewed(clientId, latestAt);
+  const unreviewed = useMemo(
+    () => history.filter((entry) => !reviews.isReviewed(entry)),
+    [history, reviews]
+  );
+  const reviewed = stats.hasData && unreviewed.length === 0;
 
-  const markReviewed = () => {
-    if (!clientId || !latestAt) return;
-    reviews.markReviewed(clientId, latestAt);
-    sfx.success();
+  const markReviewed = async () => {
+    if (!clientId || unreviewed.length === 0) return;
+    const result = await reviews.markReviewed(
+      unreviewed.map((entry) => entry.id),
+      { clientId }
+    );
+    if (result.reviewed > 0) sfx.success();
+    return result;
   };
 
   return (
@@ -285,31 +293,26 @@ export function CheckinDetailScreen() {
 
       {/* Outside the ScrollView so the decision is always one tap away — this
           screen is long, and the coach reaches it from a review queue. */}
-      {!busy && stats.hasData && latestAt ? (
+      {!busy && stats.hasData ? (
         <View className="border-t border-border bg-background px-5 pb-8 pt-3">
+          {/* No "mark unread" counterpart: the API has no un-review route. */}
           {reviewed ? (
             <View className="flex-row items-center justify-center gap-2 py-1.5">
               <Icon name="check" size={15} color="--success" />
               <Text className="text-[13.5px] font-semibold text-success">Reviewed</Text>
-              <Text className="text-[13px] text-muted-foreground">·</Text>
-              <Pressable
-                onPress={() => clientId && reviews.restore(clientId, null)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                className="active:opacity-70"
-              >
-                <Text className="text-[13px] font-medium text-muted-foreground">
-                  Mark unread
-                </Text>
-              </Pressable>
             </View>
           ) : (
             <View className="flex-row items-center gap-2.5">
+              {/* Awaited before leaving: the write is what the next screen
+                  reads its queue from, so navigating first would send the coach
+                  back to a list that still shows this client as unread. */}
               <Pressable
-                onPress={() => {
-                  markReviewed();
+                onPress={async () => {
+                  await markReviewed();
                   router.back();
                 }}
-                className="flex-1 flex-row items-center justify-center gap-2 rounded-2xl bg-primary py-3.5 active:opacity-85"
+                disabled={reviews.isMarking}
+                className="flex-1 flex-row items-center justify-center gap-2 rounded-2xl bg-primary py-3.5 active:opacity-85 disabled:opacity-50"
               >
                 <Icon name="check" size={16} color="--primary-foreground" />
                 <Text className="text-[14px] font-semibold text-primary-foreground">
@@ -317,18 +320,19 @@ export function CheckinDetailScreen() {
                 </Text>
               </Pressable>
 
-              {/* The only version of "reviewed" the client can actually see —
-                  everything else is device-local, so this is what closes the
-                  loop for them. */}
+              {/* Reviewing is silent to the client — the coachFeedback the
+                  review route accepts isn't collected here — so a reply is
+                  still what closes the loop for them. */}
               <Pressable
-                onPress={() => {
-                  markReviewed();
+                onPress={async () => {
+                  await markReviewed();
                   router.push({
                     pathname: "/(coach)/chat/[id]",
                     params: { id: clientId },
                   });
                 }}
-                className="flex-row items-center justify-center gap-2 rounded-2xl border border-border px-4 py-3.5 active:opacity-70"
+                disabled={reviews.isMarking}
+                className="flex-row items-center justify-center gap-2 rounded-2xl border border-border px-4 py-3.5 active:opacity-70 disabled:opacity-50"
               >
                 <Icon name="message-square" size={16} color="--foreground" />
                 <Text className="text-[14px] font-semibold text-foreground">Reply</Text>

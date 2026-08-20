@@ -1,4 +1,4 @@
-import type { Attention, CheckinAwaitingReview } from "@/api/types";
+import type { Attention } from "@/api/types";
 import type { IconName } from "@/shared/ui/Icon";
 
 import {
@@ -42,15 +42,13 @@ export interface CollapsedLine {
 
 export interface BuildQueuesOptions {
   /**
-   * Check-ins derived from measurements, used only when the analytics queue is
-   * empty. See useRosterCheckins for why this exists.
+   * False while the check-in queue is still loading. The queue then contributes
+   * nothing — no row AND no "you're clear" line, since neither is known yet.
    */
-  fallbackCheckins?: CheckinAwaitingReview[];
+  checkinsKnown?: boolean;
 }
 
 export interface QueueModel {
-  /** True when the check-ins row came from measurements, which changes its copy. */
-  usedFallbackCheckins: boolean;
   /** Non-empty queues, in the API's order. The first gets the filled pill. */
   rows: AttentionRowModel[];
   /** Empty queues as one-line reassurances, suppressed entirely when allClear. */
@@ -64,7 +62,7 @@ export function buildQueues(
   options: BuildQueuesOptions = {}
 ): QueueModel {
   if (!attention) {
-    return { rows: [], collapsed: [], allClear: false, usedFallbackCheckins: false };
+    return { rows: [], collapsed: [], allClear: false };
   }
 
   const rows: AttentionRowModel[] = [];
@@ -73,12 +71,10 @@ export function buildQueues(
   const atRisk = attention.atRisk ?? [];
   const ending = attention.programsEndingSoon ?? [];
 
-  // The analytics queue wins when it has anything; measurements only fill the
-  // gap left by the missing check-in resource.
-  const analyticsCheckins = attention.checkinsAwaitingReview ?? [];
-  const fallbackCheckins = options.fallbackCheckins ?? [];
-  const usedFallbackCheckins = analyticsCheckins.length === 0 && fallbackCheckins.length > 0;
-  const checkins = usedFallbackCheckins ? fallbackCheckins : analyticsCheckins;
+  // Already substituted by the caller for the measurement-derived queue — see
+  // useRosterCheckins. Analytics' own check-in rows never reach this function.
+  const checkins = attention.checkinsAwaitingReview ?? [];
+  const checkinsKnown = options.checkinsKnown ?? true;
 
   if (atRisk.length > 0) {
     const worst = atRisk[0];
@@ -112,7 +108,10 @@ export function buildQueues(
     collapsed.push({ key: "atRisk", label: "Nobody has gone quiet" });
   }
 
-  if (checkins.length > 0) {
+  if (!checkinsKnown) {
+    // Neither a row nor a reassurance: saying "no recent check-ins" before the
+    // queue has loaded is a claim, and it is wrong as often as it is right.
+  } else if (checkins.length > 0) {
     const oldest = checkins[0];
     const waiting = daysSince(oldest.submittedAt);
     rows.push({
@@ -122,10 +121,9 @@ export function buildQueues(
       count: checkins.length,
       bubbleClassName: "bg-info-tint",
       bubbleTextClassName: "text-info",
-      // Both queues are filtered by the coach's own review state before they
-      // get here (see useRosterCheckins / HomeScreen), so a derived row can
-      // claim the check-in is still unreviewed rather than only that it
-      // happened — the server flag it lacks is no longer what decides this.
+      // Every row here is a measurement the server still reports as unreviewed,
+      // so this can claim a review is due rather than only that a check-in
+      // arrived.
       title: `${checkins.length} ${pluralise(checkins.length, "check-in")} to review`,
       subtitle:
         waiting === null
@@ -164,8 +162,9 @@ export function buildQueues(
     });
   }
 
-  const allClear = rows.length === 0;
-  return { rows, collapsed: allClear ? [] : collapsed, allClear, usedFallbackCheckins };
+  // An unknown check-in queue can't be declared clear.
+  const allClear = rows.length === 0 && checkinsKnown;
+  return { rows, collapsed: allClear ? [] : collapsed, allClear };
 }
 
 export interface InsightModel {

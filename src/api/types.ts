@@ -281,10 +281,64 @@ export interface Measurement extends MeasurementFields {
   measuredAt: string; // YYYY-MM-DD
   createdAt?: string;
   photos?: string[]; // hosted URLs on the way back out
+  /** Present on coach-side reads; the client's own reads may omit it. */
+  tenantId?: string;
+  /**
+   * The membership the measurement belongs to — NOT the client's user id. It is
+   * what /analytics/* speaks, so it is the id a deep link off a check-in uses.
+   */
+  membershipId?: string;
+  /**
+   * Coach review state, written by PATCH /measurements/{id}/review. Confirmed
+   * on the wire 2026-08-20 — measurements have no response schema in the
+   * OpenAPI doc, so this was read off a live row.
+   *
+   * `reviewedAt` is the whole signal: non-null means reviewed. See
+   * useCheckinReviews.
+   */
+  reviewedAt?: string | null;
+  reviewedBy?: string | null;
+  coachFeedback?: string | null;
+}
+
+/**
+ * A row from GET /measurements/reviews/pending.
+ *
+ * VERIFIED against a live response (2026-08-20), and it is NOT the same
+ * serializer as the per-client reads: this one NESTS the client and omits
+ * `membershipId` and `tenantId` entirely. Resolve whose check-in it is through
+ * `client`, never through `membershipId` — that field is absent here.
+ */
+export interface PendingMeasurement extends Measurement {
+  client?: {
+    /** The client's USER id — matches RosterClient.clientId, not a membership. */
+    id?: string;
+    firstName?: string;
+    lastName?: string;
+    avatarUrl?: string;
+  };
+}
+
+/** Body of PATCH /measurements/{measurementId}/review. */
+export interface ReviewMeasurementDto {
+  /** Optional note back to the client; max 5000 chars server-side. */
+  coachFeedback?: string;
 }
 
 export interface ListMeasurementsResponse {
   docs: Measurement[];
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+}
+
+/** Same envelope as the measurement lists; `meta.total` is the tenant-wide
+ *  count of unreviewed check-ins, which the page itself can be capped below. */
+export interface ListPendingReviewsResponse {
+  docs: PendingMeasurement[];
   meta: {
     total: number;
     page: number;

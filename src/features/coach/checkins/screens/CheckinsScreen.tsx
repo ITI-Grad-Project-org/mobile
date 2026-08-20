@@ -21,8 +21,8 @@ import { GlassButton } from "@/shared/ui/GlassButton";
 /** Whole history per client, bounded so one long-standing client can't flood it. */
 const PER_CLIENT_LIMIT = 50;
 
-/** How long the undo bar stays up after a mark. */
-const UNDO_MS = 5000;
+/** How long the confirmation bar stays up after a mark. */
+const CONFIRM_MS = 4000;
 
 type Tab = "pending" | "reviewed" | "all";
 
@@ -55,9 +55,10 @@ function initialsOf(name: string): string {
  * no roster-wide endpoint, so this fans out per client; that is also why the
  * page is capped rather than paged.
  *
- * "Reviewed" is device-local (see useCheckinReviews): the API has no review
- * state to write to. Marking never deletes anything — it moves the card to the
- * Reviewed tab, which is why the filter exists at all.
+ * "Reviewed" is server state (see useCheckinReviews): marking PATCHes every
+ * unread check-in on the card. Nothing is deleted — the card moves to the
+ * Reviewed tab, which is why the filter exists at all. There is no un-review
+ * route, so the mark is one-way and there is nothing to undo with.
  */
 export function CheckinsScreen() {
   const primaryColor = (useCSSVariable("--primary") as string) || "#e5673a";
@@ -65,13 +66,10 @@ export function CheckinsScreen() {
   const reviews = useCheckinReviews();
 
   const [tab, setTab] = useState<Tab>("pending");
-  // The last mark, kept just long enough to offer an undo.
-  const [undo, setUndo] = useState<{
-    clientId: string;
-    name: string;
-    previous: string | undefined;
-  } | null>(null);
-  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The last mark, kept just long enough to confirm it — or to say it didn't
+  // land, which now matters: marking is a server write that can fail.
+  const [toast, setToast] = useState<{ name: string; failed: number } | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // No `from`: this screen is the history, so it deliberately drops the
   // 14-day window the Home queue uses.
@@ -82,7 +80,7 @@ export function CheckinsScreen() {
 
   useEffect(
     () => () => {
-      if (undoTimer.current) clearTimeout(undoTimer.current);
+      if (toastTimer.current) clearTimeout(toastTimer.current);
     },
     []
   );
@@ -93,9 +91,7 @@ export function CheckinsScreen() {
 
     for (const entry of data) {
       if (entry.measurements.length === 0) continue;
-      const pending = entry.measurements.filter(
-        (m) => !reviews.isReviewed(entry.client.clientId, m.measuredAt)
-      );
+      const pending = entry.measurements.filter((m) => !reviews.isReviewed(m));
       pendingCount += pending.length;
       has.push({
         client: entry.client,
@@ -142,26 +138,25 @@ export function CheckinsScreen() {
   );
 
   const markReviewed = useCallback(
-    (queue: ClientQueue) => {
-      const newest = queue.pending[0];
-      if (!newest) return;
-      const previous = reviews.markReviewed(queue.client.clientId, newest.measuredAt);
-      sfx.success();
-      if (undoTimer.current) clearTimeout(undoTimer.current);
-      setUndo({ clientId: queue.client.clientId, name: queue.client.name, previous });
-      undoTimer.current = setTimeout(() => setUndo(null), UNDO_MS);
+    async (queue: ClientQueue) => {
+      if (queue.pending.length === 0) return;
+      // The whole card at once: the button says "Mark N reviewed", and each of
+      // those N is its own measurement server-side.
+      const result = await reviews.markReviewed(
+        queue.pending.map((m) => m.id),
+        { clientId: queue.client.clientId }
+      );
+      if (result.reviewed > 0) sfx.success();
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+      setToast({ name: queue.client.name, failed: result.failed });
+      toastTimer.current = setTimeout(() => setToast(null), CONFIRM_MS);
     },
     [reviews]
   );
 
-  const applyUndo = useCallback(() => {
-    if (!undo) return;
-    reviews.restore(undo.clientId, undo.previous ?? null);
-    if (undoTimer.current) clearTimeout(undoTimer.current);
-    setUndo(null);
-  }, [undo, reviews]);
-
-  const busy = rosterLoading || isLoading || !reviews.hydrated;
+  // No wait on the review queue: each measurement carries its own review state,
+  // so the rows arrive already triaged.
+  const busy = rosterLoading || isLoading;
   const total = queues.reduce((sum, queue) => sum + queue.measurements.length, 0);
 
   return (
@@ -306,25 +301,18 @@ export function CheckinsScreen() {
                       );
                     })}
 
+                    {/* No "mark unread" counterpart: the API has no un-review
+                        route, so reviewing is a one-way write. */}
                     {caughtUp ? (
                       <View className="flex-row items-center justify-center gap-1.5 border-t border-border py-2.5">
                         <Icon name="check" size={12} color="--success" />
                         <Text className="text-[11.5px] font-medium text-success">Reviewed</Text>
-                        <Text className="text-[11.5px] text-muted-foreground">·</Text>
-                        <Pressable
-                          onPress={() => reviews.restore(client.clientId, null)}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                          className="active:opacity-70"
-                        >
-                          <Text className="text-[11.5px] font-medium text-muted-foreground">
-                            Mark unread
-                          </Text>
-                        </Pressable>
                       </View>
                     ) : (
                       <Pressable
-                        onPress={() => markReviewed(queue)}
-                        className="flex-row items-center justify-center gap-2 border-t border-border py-3 active:opacity-70"
+                        onPress={() => void markReviewed(queue)}
+                        disabled={reviews.isMarking}
+                        className="flex-row items-center justify-center gap-2 border-t border-border py-3 active:opacity-70 disabled:opacity-50"
                       >
                         <Icon name="check" size={14} color="--primary" />
                         <Text className="text-[13px] font-semibold text-primary">
@@ -360,8 +348,10 @@ export function CheckinsScreen() {
       </ScrollView>
 
       {/* Sits over the list rather than in it: the card it refers to has just
-          animated away, so an inline bar would land somewhere unrelated. */}
-      {undo ? (
+          animated away, so an inline bar would land somewhere unrelated. It
+          confirms rather than offering an undo — the mark cannot be taken back,
+          and it can partly fail, which is the case worth reporting. */}
+      {toast ? (
         <Animated.View
           className="absolute inset-x-5 bottom-8"
           layout={LinearTransition.duration(200)}
@@ -372,17 +362,16 @@ export function CheckinsScreen() {
             glass
             className="flex-row items-center gap-3 px-4 py-3 shadow-pop"
           >
-            <Icon name="check" size={14} color="--success" />
+            <Icon
+              name={toast.failed > 0 ? "alert-triangle" : "check"}
+              size={14}
+              color={toast.failed > 0 ? "--danger" : "--success"}
+            />
             <Text className="flex-1 text-[13px] text-foreground" numberOfLines={1}>
-              {undo.name} reviewed
+              {toast.failed > 0
+                ? `${toast.failed} check-in${toast.failed === 1 ? "" : "s"} couldn't be marked`
+                : `${toast.name} reviewed`}
             </Text>
-            <Pressable
-              onPress={applyUndo}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              className="active:opacity-70"
-            >
-              <Text className="text-[13px] font-semibold text-primary">Undo</Text>
-            </Pressable>
           </Surface>
         </Animated.View>
       ) : null}

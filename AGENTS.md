@@ -1,69 +1,105 @@
-# CoachHub Mobile — Agent Instructions
+# UPLY Mobile — Agent Instructions
 
-React Native client for a multi-tenant fitness-coaching SaaS.
-Stack: Expo SDK 56 (dev build, NOT Expo Go) · RN 0.85 · React 19.2 ·
-@expo/ui (SwiftUI/Compose) · NativeWind · Redux Toolkit + RTK Query · TypeScript strict.
+React Native client for a multi-tenant fitness-coaching SaaS. One app, two UIs.
+Stack: Expo SDK 56 (dev build, NOT Expo Go) · RN 0.85 · React 19.2 (React Compiler ON) ·
+@expo/ui (SwiftUI/Compose) · NativeWind v5 / Tailwind v4 · Redux Toolkit + RTK Query ·
+socket.io v4 · TypeScript strict.
+
+Deep docs live in `docs/01..13`, indexed by `docs/Readme.md`. **Open the relevant
+doc before working in that area.** Where a doc and the source disagree, the source
+wins — fix the doc in the same PR.
 
 ## Non-negotiable rules (get these wrong = architectural breakage)
-- PER-TENANT, NOT GLOBAL. A user has 0..N tenant memberships, a different role per tenant.
-  Never use a global `role` or global "my data". Read role/status from the ACTIVE membership.
-  Memberships are normalized by `tenantId`. See docs/01-architecture.md, docs/04-state-management.md.
-- Every server call is scoped to the active tenant via the `x-tenant-id` header in the base query.
-  Tag RTK Query cache by `tenantId`. Pass `tenantId` as a query arg so caches are per-tenant.
-- RBAC is enforced SERVER-SIDE. Hidden UI is NOT security. Gate UI with useRole(), never assume.
-- @expo/ui vs NativeWind boundary: native controls = @expo/ui + its modifiers;
-  custom/brand UI = RN + NativeWind className. Styling does NOT cross a `Host`. See docs/03.
-- This is a DEVELOPMENT BUILD. Never write code that assumes Expo Go.
+- PER-TENANT, NOT GLOBAL. A user has 0..N memberships, a different role per tenant.
+  Never a global `role` or global "my data" — read role/status from the ACTIVE
+  membership via useActiveTenant()/useRole(). Memberships are normalized by `tenantId`.
+- PERSONA != ROLE. `auth.persona` ('coach'|'customer') picks the API surface
+  (/auth/* vs /auth/customer/*). `role` ('owner'|'client') comes from the active
+  membership and picks the UI. Never gate UI on persona. See docs/01 §2.
+- THE JWT CARRIES THE TENANT. `x-tenant-id` is sent by baseApi but the server
+  resolves the tenant from the token. A tenant switch MUST persist the re-scoped
+  tokens, then resetApiState() — see useSwitchCoach. See docs/08.
+- `tenantId` in query args is a CACHE KEY, deliberately not forwarded as a param.
+  Every tenant-scoped endpoint takes it and tags by it. See docs/04 §8.
+- RBAC is enforced SERVER-SIDE. Hidden UI is NOT security.
 - Tokens go in expo-secure-store, never AsyncStorage / never in Redux state.
-- The AI assistant is ASYNC over a SOCKET (socket.io v4, DEFAULT namespace; `ai.requested`
-  -> `ai.accepted` -> `ai.completed`). NOT a REST job-ticket, and NOT the `/chat` namespace.
-  It has no api.ts and no RTK Query endpoints — nothing is persisted server-side, so there
-  is no cache to populate. One un-acknowledged ask at a time. See docs/06.
-- v1 SCOPE ONLY. No push/SMS, no live Paymob payment, no scheduling, no nutrition,
-  no agentic AI, no marketplace. Billing is concept-only (plan/tier model + gating). See docs/05.
+- @expo/ui vs NativeWind boundary: native controls = @expo/ui + its modifiers;
+  custom/brand UI = RN + NativeWind className. Styling does NOT cross a `Host`. docs/03.
+- IMPORT STYLED PRIMITIVES FROM `@/tw`, never `react-native` — bare RN components
+  silently ignore `className` (globalClassNamePolyfill is off). docs/11 §4.
+- The AI assistant is ASYNC over a SOCKET (socket.io v4, DEFAULT namespace;
+  `ai.requested` -> `ai.accepted` -> `ai.completed`). NOT REST, NOT the `/chat`
+  namespace. No api.ts, no RTK Query endpoints — nothing is persisted server-side.
+  One un-acknowledged ask at a time. Never persist the thread. See docs/06.
+- Chat is socket-first with a REST fallback on the `/chat` namespace. See docs/10.
+- `useChatEvents` and `useAiEvents` mount ONCE, in src/app/_layout.tsx — never in a
+  screen. A handler unmounted by a tab change loses the AI reply permanently.
+- This is a DEVELOPMENT BUILD. Never write code that assumes Expo Go.
 
 ## Versions / setup traps
-- NativeWind <-> Reanimated 4 <-> @expo/ui worklets must agree. Use `npx expo install` + `npx expo-doctor`
-  to resolve versions; never hand-pick. Prefer NativeWind for STATIC styling only; animate with
-  Reanimated 4 directly. See docs/02-tech-stack-decisions.md.
+- NativeWind <-> react-native-css <-> Reanimated 4 <-> react-native-worklets must agree.
+  Use `npx expo install` + `npx expo-doctor`; never hand-pick. `lightningcss` is pinned
+  to 1.30.1 in both `resolutions` and `overrides` — do not unpin.
+- NativeWind is for STATIC styling; animate with Reanimated 4 directly. docs/02.
 
 ## Two UIs
-- The app shows TWO interfaces, chosen by the user's role in the ACTIVE tenant:
-  role=owner -> Coach UI (route group app/(coach)/, tabs: Home/Clients/Plans/AI/Inbox/Profile)
-  role=client -> Client UI (route group app/(client)/, tabs: Today/Plan/Progress/Messages/Profile)
-- Only one group is mounted at a time. The root app/_layout.tsx redirects based on role
-  (owner -> /(coach)/home, client -> /(client)/today).
-- NOTE: coach has 6 tabs (over the native 5-item comfort limit) — see the six-tabs note in docs/01.
-- A user can be owner in one tenant and client in another (same login). Switching tenants can flip the UI.
-- There is NO assistant-coach role. Roles are only: owner, client.
+- role=owner  -> Coach UI  (src/app/(coach)/) tabs: Home · Clients · AI · Plans · Inbox
+- role=client -> Client UI (src/app/(client)/) tabs: Today · Plan · AI · Progress · Chat
+- FIVE tabs each. Profile is NOT a tab — it is behind the AppHeader avatar at
+  `/my-profile` (one screen, both personas). The client AI tab is hidden until the
+  client has joined a coach (a tenant-less token is rejected at handshake).
+- Only one group is mounted at a time. `src/app/index.tsx` is the redirect gate.
+- A user can be owner in one tenant and client in another. Switching can flip the UI.
+- Roles are only `owner` and `client`. There is NO assistant-coach role.
 
 ## Project map
-- Routes (thin): app/  — file-based Expo Router. Import nav from `expo-router`, NOT @react-navigation/*.
-  Groups: (auth), (onboarding), (coach), (client). Route files just import a screen from src/features.
-- Features: src/features/{coach,client,shared}/<name>/ = screens + components + hooks + api.ts (injectEndpoints).
-  Organized BY UI. `shared/` means shared CODE, not shared concept — three placement rules:
-  1. Single-UI screen -> under coach/ or client/, UNPREFIXED name (e.g. coach/home -> HomeScreen).
-  2. Same domain but a DIFFERENT screen per UI (assistant, messaging) -> screens split per UI
-     (coach/assistant + client/assistant; coach/inbox + client/chat); only their shared data layer
-     (api.ts/types.ts, NO screens) lives in shared/<domain>/.
-  3. Genuinely unifiable surface (profile) -> ONE screen in shared/, role-agnostic name, both routes render it.
-- Store: src/store/ (api.ts, activeTenantSlice, authSlice). Shared: src/shared/ (ui wrappers, hooks).
-- Deep docs live in docs/01..09. Open the relevant one before working in that area.
+- Routes (thin): `src/app/` — file-based Expo Router, typedRoutes on. Import nav from
+  `expo-router`, NOT @react-navigation/*. Groups: (auth), (onboarding), (setup),
+  (coach), (client). A route file imports a screen from a feature barrel and renders it.
+- Features: `src/features/{coach,client,shared}/<name>/` = screens/ components/ hooks/
+  lib/ + index.ts. Organized BY UI. `shared/` means shared CODE, not shared concept:
+  1. Single-UI screen -> coach/ or client/, UNPREFIXED name (coach/home -> HomeScreen).
+  2. Same domain, different screen per UI (assistant, messaging) -> split per UI; only
+     the shared data layer (hooks/types/cache, NO screens) lives in shared/<domain>/.
+  3. Genuinely identical surface (profile) -> ONE screen in shared/.
+- Data layer: `src/api/` — ONE `baseApi` (createApi) + 23 `endpoints/*.endpoints.ts`
+  modules that injectEndpoints. There is no per-feature api.ts. docs/09.
+- Store: `src/store/` — auth · activeTenant · memberships · chatUi · assistant + baseApi.
+- Design system: `src/global.css` (ALL tokens) + `src/tw/` wrappers +
+  `src/shared/ui/` recipes (Surface, Card, Icon, GlassButton). No inline hex. docs/11.
 
 ## Conventions
-- Components PascalCase; hooks useCamelCase; endpoints verbNoun (getClients, assignProgram).
-- Every data screen needs loading/error/empty states (shared components exist).
-- No `any` without a justifying comment. No console.log in commits.
+- Components PascalCase; hooks useCamelCase; endpoints verbNoun (getClients, publishProgram).
+- Import through `@/` and through feature barrels. No `../../..` chains.
+- Every data screen needs loading/error/empty states, and pull-to-refresh where data moves.
+- One hook per data-heavy screen returning { …data, isLoading, isFetching, isError, refetchAll }
+  (useCoachHomeData, useTodayData, useCoachPlans).
+- `pb-tabbar` inside (tabs), `pb-screen` on pushed screens. Never a magic padding value.
+- No `any` without a justifying comment — the justified case is an undocumented API
+  response, which then goes through a normalizer. No console.log in commits.
+- Comment WHY, not what. Most sharp edges here are recorded next to the code.
+
+## Scope notes
+- Nutrition IS built (client logging + coach plans). Training, measurements/check-ins,
+  reviews, directory/join-requests and analytics are built.
+- Plan AUTHORING lives in the web dashboard: the app reads plans and links out to
+  EXPO_PUBLIC_DASHBOARD_URL (empty = every such link hides). The builder endpoints
+  exist and are typed but are not surfaced in mobile UI.
+- Not in scope: push/SMS, live payment, scheduling, agentic AI, marketplace.
+- Client invitation routes are dormant behind `CLIENT_INVITATIONS_READY = false` —
+  they 401 server-side, and a 401 escalates to a full logout.
 
 ## Definition of done
-- Typed, role-gated correctly (check the access matrix), tenant-scoped calls,
-  works in dev build on BOTH iOS + Android, behind a reviewed PR.
-- Run `npm run typecheck` and `npm run lint` before declaring done.
+- Typed, role-gated via the active membership, tenant-scoped args + tags,
+  loading/error/empty handled, light AND dark checked, works in the dev build on
+  BOTH iOS + Android, behind a reviewed PR.
+- Run `npm run typecheck` and `npm run lint` before declaring done. There is no test suite.
 
 ## Commands
 - Start: `npx expo start --dev-client`   Typecheck: `npm run typecheck`   Lint: `npm run lint`
-- Doctor: `npx expo-doctor`   New dev build: via EAS (see docs/09-getting-started.md).
+- Doctor: `npx expo-doctor`   Native: `npx expo prebuild` + `npx expo run:ios|run:android`
+- Setup, env vars and troubleshooting: docs/12-getting-started.md.
 
 ## Expo Skills
-- Use Expo's official agent Skills for Expo-specific tasks (upgrading-expo, native UI, EAS, dev client).
-  Prefer them over ad-hoc instructions. For SDK upgrades use the `upgrading-expo` skill.
+- Use Expo's official agent Skills for Expo-specific tasks (upgrading-expo, native UI, EAS,
+  dev client). Prefer them over ad-hoc instructions. For SDK upgrades use `upgrading-expo`.

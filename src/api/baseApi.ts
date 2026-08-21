@@ -103,6 +103,13 @@ export const baseApi = createApi({
     'Measurements',
     'Invitations',
     'Reviews',
+    /**
+     * The public face of one coach: the directory row, the public profile and
+     * the rating aggregate. Separate from 'Reviews' because the client's own
+     * review is a member of the aggregate — writing it has to refresh the
+     * PUBLIC numbers, not just the client's own copy of the review.
+     */
+    'CoachProfile',
     'Memberships',
     'Directory',
     'JoinRequests',

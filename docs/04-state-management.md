@@ -1,182 +1,397 @@
-# 04 — State Management (Redux Toolkit + RTK Query)
+# 04 — State Management
 
-This is where the "per-tenant, not global" rule becomes concrete code. Read [doc 01](01-architecture.md) first.
+Redux Toolkit for client state, RTK Query for **all** server state. This is where
+"per-tenant, not global" stops being a principle and becomes code.
 
-## Store shape
+Read [`01-architecture.md`](01-architecture.md) first.
+
+---
+
+## 1. The store
+
+[`src/store/index.ts`](../src/store/index.ts):
 
 ```
 store
-├── auth            (slice)    token presence, current userId  [client state]
-├── activeTenant    (slice)    the tenantId currently in focus  [client state]
-├── memberships     (slice)    0..N memberships, normalized by tenantId  [client state]
-├── ui              (slice)    prefs, theme, transient flags  [client state]
-└── api             (RTK Query) ALL server data + cache  [server state]
+├── auth          slice   isAuthenticated · userId · persona · profileCompleted · loading
+├── activeTenant  slice   tenantId · switching
+├── memberships   slice   entity adapter, keyed by tenantId
+├── chatUi        slice   connected · typingByClientId · openClientId
+├── assistant     slice   thread · busy · connected · lastPrompt
+└── api           RTK Query — every server response and its cache
 ```
 
-The split to internalize: **client state** (small, local, synchronous) lives in slices; **server state** (everything fetched) lives in **one RTK Query `api`**. Don't duplicate server data into slices — read it from RTK Query hooks where you need it.
-
-## Memberships: normalized by `tenantId`
-
-The spec is explicit: memberships are normalized by `tenantId`. Use `createEntityAdapter`.
+The split to internalise: **client state** (small, local, synchronous) lives in
+slices; **server state** lives in the one `baseApi`. Never copy server data into a
+slice — read it from the query hook where you need it.
 
 ```ts
-// src/features/memberships/membershipsSlice.ts
-import { createEntityAdapter, createSlice } from '@reduxjs/toolkit';
+serializableCheck: false        // FormData bodies and Date objects flow through mutations
+```
 
-export type Role = 'owner' | 'client';   // coach (owner) or trainee (client) — no assistant role
-export type MembershipStatus = 'invited' | 'active' | 'paused' | 'removed';
+### App-focus refetching
 
-export interface Membership {
-  tenantId: string;          // <-- the entity id
-  tenantName: string;
-  role: Role;
-  status: MembershipStatus;
-  brand?: { logoUrl?: string; primaryColor?: string };
+RTK Query's `setupListeners` binds to DOM `window` focus events, which do not
+exist in React Native. The store rewires it to `AppState`:
+
+```ts
+setupListeners(store.dispatch, (dispatch, actions) => {
+  const sub = AppState.addEventListener('change', (s) =>
+    dispatch(s === 'active' ? actions.onFocus() : actions.onFocusLost()));
+  return () => sub.remove();
+});
+```
+
+This only **publishes the signal**. Nothing refetches unless an endpoint opts in
+with `refetchOnFocus` at its call site — so reopening the app is not an app-wide
+refetch storm.
+
+### Typed hooks
+
+```ts
+import { useAppDispatch, useAppSelector } from '@/store';
+```
+
+Always these two, never the untyped `useDispatch` / `useSelector`.
+
+---
+
+## 2. `auth` — presence, not credentials
+
+```ts
+interface AuthState {
+  isAuthenticated: boolean;
+  userId: string | null;
+  persona: 'coach' | 'customer' | null;
+  profileCompleted: boolean;
+  loading: boolean;          // true until restoreSession() finishes
 }
-
-const adapter = createEntityAdapter<Membership>({
-  selectId: (m) => m.tenantId,         // keyed by tenantId, per spec
-});
-
-const slice = createSlice({
-  name: 'memberships',
-  initialState: adapter.getInitialState(),
-  reducers: {
-    setMemberships: adapter.setAll,
-    upsertMembership: adapter.upsertOne,
-    removeMembership: adapter.removeOne,
-  },
-});
-
-export const { setMemberships, upsertMembership, removeMembership } = slice.actions;
-export const membershipsSelectors = adapter.getSelectors();
-export default slice.reducer;
 ```
 
-Now "what role am I in tenant X?" is a direct lookup, and a user with multiple coaches is modeled natively — no global role field anywhere.
-
-## Active tenant
+**Tokens are not in here and must never be.** The slice module also exports the
+two SecureStore helpers, which is the only sanctioned way to touch credentials:
 
 ```ts
-// src/features/../activeTenantSlice.ts
-import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-
-interface ActiveTenantState { tenantId: string | null; }
-const initialState: ActiveTenantState = { tenantId: null };
-
-const slice = createSlice({
-  name: 'activeTenant',
-  initialState,
-  reducers: {
-    setActiveTenant: (s, a: PayloadAction<string>) => { s.tenantId = a.value ?? a.payload; },
-    clearActiveTenant: (s) => { s.tenantId = null; },
-  },
-});
-export const { setActiveTenant, clearActiveTenant } = slice.actions;
-export default slice.reducer;
+saveTokens(accessToken, refreshToken, persona, email?)   // + userEmail, lowercased
+clearTokens()                                            // wipes all four keys
 ```
 
-Auto-select when there's exactly one membership; otherwise the user picks on the tenant-switcher screen.
+`loading` starts `true` and is cleared in `restoreSession`'s `finally` — including
+when there was no session, so a signed-out user never gets stuck on a spinner.
 
-### The `useActiveTenant` hook
+> `userId` is set to the literal `'restored-user'` on session restore. Nothing
+> reads it for identity; the real user comes from `/auth/me` or
+> `/auth/customer/me`. Don't start depending on it.
+
+---
+
+## 3. `activeTenant` — one tenant in focus
 
 ```ts
-// src/shared/hooks/useActiveTenant.ts
-export function useActiveTenant() {
-  const tenantId = useAppSelector((s) => s.activeTenant.tenantId);
-  const membership = useAppSelector((s) =>
-    tenantId ? membershipsSelectors.selectById(s.memberships, tenantId) : undefined
-  );
+interface ActiveTenantState {
+  tenantId: string | null;
+  switching: boolean;   // splash is held for the whole swap
+}
+```
+
+`switching` exists so no screen is ever painted half-switched: `useSwitchCoach`
+raises it *before* the first network call and lowers it in a `finally`, and the
+root layout renders `AnimatedSplash` over everything while it is true.
+
+`setActiveTenant` is also the **reset signal for the assistant** — see §6.
+
+---
+
+## 4. `memberships` — normalised by `tenantId`
+
+[`membershipsSlice.ts`](../src/store/membershipsSlice.ts) uses
+`createEntityAdapter`, with the entity `id` set to the `tenantId`:
+
+```ts
+function normalizeMembership(m: any): ReduxMembership {
+  const tenantId = m?.tenantId || m?.tenant?.id || m?.id || '';
   return {
+    ...m,
     tenantId,
-    membership,
-    role: membership?.role,
-    status: membership?.status,
+    tenantName: m?.tenantName || m?.tenant?.name || 'Coaching',
+    role:   m?.role   || 'client',
+    status: m?.status || 'active',
+    id: tenantId,                     // the adapter key
   };
 }
 ```
 
-`useRole()` and `useFeatureGate()` build on this. **All role/permission checks in the UI go through the active membership — never a global field.**
+The defensive key-walking is not paranoia: `GET /auth/customer/memberships` and
+the synthesised coach membership do not agree on shape, and rows without a
+resolvable `tenantId` are **dropped** rather than stored under `''`.
 
-## RTK Query: tenant-scoped from the base query
+Two sources write here, both from the root layout:
 
-Every server call is implicitly scoped to the active tenant. Two parts make this clean: inject the tenant header in the base query, and tag cache entries by tenant.
+- **coach** → one synthesised membership: `{ tenantId: coachMe.currentTenant.id,
+  role: 'owner', status: 'active' }`
+- **customer** → the array from `/auth/customer/memberships`, verbatim
 
-```ts
-// src/store/api.ts
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import * as SecureStore from 'expo-secure-store';
-import type { RootState } from './index';
-
-export const api = createApi({
-  reducerPath: 'api',
-  baseQuery: fetchBaseQuery({
-    baseUrl: process.env.EXPO_PUBLIC_API_URL,
-    prepareHeaders: async (headers, { getState }) => {
-      const token = await SecureStore.getItemAsync('accessToken');
-      if (token) headers.set('authorization', `Bearer ${token}`);
-      // Scope EVERY request to the active tenant:
-      const tenantId = (getState() as RootState).activeTenant.tenantId;
-      if (tenantId) headers.set('x-tenant-id', tenantId);
-      return headers;
-    },
-  }),
-  tagTypes: ['Client', 'Program', 'CheckIn', 'Message', 'Membership', 'KB', 'Analytics'],
-  endpoints: () => ({}),   // features inject their own
-});
-```
-
-Each feature injects endpoints and tags them by tenant so switching tenants invalidates cleanly:
+### Reading role and status
 
 ```ts
-// src/features/clients/api.ts
-import { api } from '../../store/api';
+// src/shared/hooks/useActiveTenant.ts
+const tenantId   = useAppSelector((s) => s.activeTenant.tenantId);
+const membership = useAppSelector((s) =>
+  tenantId ? membershipsSelectors.selectById(s.memberships, tenantId) : undefined);
 
-export const clientsApi = api.injectEndpoints({
-  endpoints: (build) => ({
-    getClients: build.query<Client[], { tenantId: string }>({
-      query: ({ tenantId }) => `clients`,  // header already carries tenantId
-      providesTags: (result, _e, { tenantId }) => [
-        { type: 'Client', id: `LIST-${tenantId}` },
-        ...(result ?? []).map((c) => ({ type: 'Client' as const, id: `${tenantId}:${c.id}` })),
-      ],
-    }),
-    // ...invite, archive, notes, etc.
-  }),
-});
-
-export const { useGetClientsQuery } = clientsApi;
+return { tenantId, membership, role: membership?.role ?? null,
+                               status: membership?.status ?? null };
 ```
 
-**Why tag by `tenantId`:** when the user switches from Coach A to Coach B, you invalidate `LIST-A`-tagged data so the UI doesn't briefly show the wrong tenant's clients. It also means a client viewing two coaches keeps two independent caches.
+`useRole()` builds `isCoach` / `isClient` on top. **Every role check in the UI goes
+through the active membership — never a global field, never `auth.persona`.**
 
-> Pass `tenantId` explicitly as a query arg even though the header carries it. The arg makes the cache key tenant-specific so RTK Query stores per-tenant results separately. The header is what the server actually reads.
+---
 
-## Switching tenants safely
+## 5. `chatUi` — transient chat state
 
-When `setActiveTenant` fires:
+```ts
+{ connected, typingByClientId: Record<string, boolean>, openClientId: string | null }
+```
 
-1. Update the slice.
-2. Optionally `dispatch(api.util.invalidateTags([...]))` for the tenant-scoped tags, or rely on the fact that the new `tenantId` arg produces different cache keys and triggers fresh fetches.
-3. Reset the assistant thread and reconnect its socket (its JWT still names the old tenant) — `assistantSlice` resets on `setActiveTenant`; `useSwitchCoach` calls `reconnectAiSocket()`. See [doc 06](06-Ai-Integration.md).
+Nothing here is persisted or fetched. `openClientId` is what stops the unread
+badge from incrementing for a thread the user is already looking at
+(`CLIENT_THREAD = 'me'` is the client's single thread). Losing the connection
+clears every typing flag, so an indicator can't hang.
 
-## Optimistic updates (where they matter)
+---
 
-Two flows benefit:
+## 6. `assistant` — an in-memory thread, deliberately
 
-- **Workout logging** — user logs a set; update the cache immediately, reconcile on response, roll back on failure. Critical for gym UX where the network is flaky.
-- **Messaging** — show the sent message instantly with a "sending" state.
+```ts
+{ thread: AiMessage[], busy: boolean, connected: boolean, lastPrompt: string | null }
+```
 
-Use RTK Query's `onQueryStarted` + `updateQueryData` for both. Keep optimistic patches tenant-scoped (they will be automatically, since cache keys include `tenantId`).
+It lives in Redux rather than screen state for two reasons: the thread survives a
+tab change (the AI screen unmounts while an answer is outstanding), and tenant
+isolation becomes one reducer instead of per-screen cleanup:
 
-## Auth state
+```ts
+extraReducers: (b) => b
+  .addCase(setActiveTenant, () => initialState)
+  .addCase(clearActiveTenant, () => initialState),
+```
 
-- Token **presence** and `userId` live in the `auth` slice (for routing decisions).
-- The token **value** lives in `expo-secure-store`, read in `prepareHeaders`. Never put the raw token in Redux state (it ends up in logs, devtools, and crash reports).
-- On sign-out: clear SecureStore, reset the slice, and `dispatch(api.util.resetApiState())` to wipe all cached tenant data.
+**Never persist this.** An answer grounded in Coach A's knowledge base must not be
+reachable after switching to Coach B.
 
-## Selectors & performance
+The reducers encode the protocol's correlation rules — `attachRequestId` finds the
+newest pending bubble rather than trusting a caller-supplied id, `failIfPending`
+refuses to overwrite a bubble that already resolved. Full protocol in
+[`06-Ai-Integration.md`](06-Ai-Integration.md).
 
-- Co-locate selectors with slices; memoize cross-slice derivations with `createSelector`.
-- For long lists (rosters, threads, exercise library) feed RTK Query results into **FlashList v2**.
-- Avoid selecting whole entities when you need one field — it causes needless re-renders.
+---
+
+## 7. RTK Query: one API, endpoints injected per domain
+
+[`src/api/baseApi.ts`](../src/api/baseApi.ts) declares the api, the tag types and
+the base query. Every domain module then does:
+
+```ts
+export const clientsEndpoints = baseApi.injectEndpoints({ endpoints: (b) => ({ … }) });
+export const { useGetClientsQuery } = clientsEndpoints;
+```
+
+23 modules live in `src/api/endpoints/`. There is exactly one `createApi` call in
+the codebase — see [`09-data-layer.md`](09-data-layer.md) for the full catalogue.
+
+### `prepareHeaders`
+
+```ts
+const token = await SecureStore.getItemAsync('accessToken');
+if (token) headers.set('authorization', `Bearer ${token}`);
+const tenantId = state.activeTenant.tenantId;
+if (tenantId) headers.set('x-tenant-id', tenantId);
+```
+
+> **The header is belt-and-braces, not the mechanism.** The server resolves the
+> tenant from the JWT. That is why a tenant switch must persist re-scoped tokens
+> — see [`08-auth-and-tenancy.md`](08-auth-and-tenancy.md).
+
+---
+
+## 8. `tenantId` in query args is a cache key
+
+Nearly every endpoint takes `tenantId` in its args and then **throws it away**
+before building the request:
+
+```ts
+listPrograms: builder.query<any[], ListProgramsQuery & { tenantId: string }>({
+  query: ({ tenantId, ...params }) => ({ url: P, params }),   // tenantId not sent
+  providesTags: (r, e, { tenantId }) => [
+    'Programs',
+    { type: 'Programs', id: `LIST-${tenantId}` },
+  ],
+}),
+```
+
+Why bother:
+
+- RTK Query keys a cache entry by its serialised args, so `tenantId` gives **two
+  tenants two independent caches**.
+- It makes tags tenant-specific, so an invalidation can't reach across tenants.
+- The plain `'Programs'` tag is kept alongside because mutations often only know a
+  `programId` and still need to invalidate the lists.
+
+**Rule: if an endpoint returns tenant-scoped data, it takes `tenantId` in its
+args.** No exceptions — even when the URL already identifies the resource.
+
+---
+
+## 9. The tag catalogue
+
+Declared in `baseApi.tagTypes`:
+
+| Tag | Provided by | Invalidated by |
+| --- | --- | --- |
+| `Me` | `/auth/me`, `/coaches/me`, `/clients/me` | profile + media mutations |
+| `Tenant` | `/tenant/me`, `/tenant/{id}` | tenant create, logo update |
+| `Memberships` | `/auth/customer/memberships` | tenant create, onboarding confirm |
+| `Clients` | `/client`, `/client/{id}` | remove client, approve join request |
+| `Intake` | `/client/me/intake` | intake writes |
+| `Invitations` | `/invitation`, `/client/me/invitations` | create/revoke/decline |
+| `JoinRequests` | both sides | create/withdraw/approve/reject |
+| `Directory` · `CoachProfile` | directory + public profile | **review writes** |
+| `Reviews` | `/reviews/me`, client's own review | review writes |
+| `Measurements` | client history, coach reads, pending queue | create/update/delete/review |
+| `Exercises` · `Foods` · `Meals` | the per-tenant libraries | library CRUD |
+| `Programs` · `Program` | coach + client program reads | program lifecycle, workout completion |
+| `Calendar` · `TrainingDay` · `WorkoutLog` | client training | set logging, skip, complete |
+| `NutritionPlans` · `NutritionPlan` · `NutritionCalendar` · `NutritionDay` · `NutritionLog` | nutrition | meal outcomes, food logs, complete |
+| `Activity` | `/client/me/activity` heat-map | **set/meal outcome mutations**, not completion |
+| `Analytics` | every `/analytics/*` route | program create/publish/reschedule/cancel |
+| `Conversations` · `Messages` | chat REST | patched directly by socket handlers |
+
+### Two tag conventions worth copying
+
+**`CoachProfile` is separate from `Reviews` on purpose.** A client's own review is
+a member of the public aggregate, so writing it must refresh the *public* numbers
+(directory row, public profile, rating summary) — not just the client's own copy.
+
+**`Activity` is invalidated by outcomes, not completions.** The heat-map moves when
+a set or meal outcome is recorded, which can happen while a workout is still
+`in_progress`. `/complete` invalidates it too, but only as a cheap safety net for
+activity recorded on another device.
+
+---
+
+## 10. Cache-key patterns in use
+
+| Pattern | Meaning |
+| --- | --- |
+| `{ type: 'X', id: \`LIST-${tenantId}\` }` | the tenant's collection |
+| `{ type: 'X', id: \`${tenantId}:${entityId}\` }` | one entity, tenant-namespaced |
+| `{ type: 'Measurements', id: \`PENDING-${tenantId}\` }` | the coach's review queue |
+| `{ type: 'Measurements', id: \`CLIENT-${tenantId}:${clientId}\` }` | one client's history, coach-side |
+| `{ type: 'Invitations', id: 'MINE' }` | the client's own feed — spans tenants, so **not** tenant-keyed |
+| `{ type: 'Analytics', id: \`OVERVIEW-${tenantId}-${from}-${to}\` }` | windowed analytics |
+| `{ type: 'Analytics', id: \`LIST-${tenantId}\` }` | the blast-radius tag every analytics query also provides |
+
+`'MINE'` is the exception that proves the rule: `/client/me/invitations` and
+`/client/me/join-requests` answer across **all** of the client's tenants, so
+keying them by the active tenant would be wrong.
+
+---
+
+## 11. Cache lifetimes
+
+Analytics is derived data that moves whenever any client logs anything, so those
+endpoints set explicit `keepUnusedDataFor`:
+
+| Endpoint | Seconds | Why |
+| --- | --- | --- |
+| `getAnalyticsActivity` | 30 | the most volatile feed |
+| `overview` · `attention` · `roster` · `adherence` · `clientProgress` | 60 | dashboard reads |
+| `programEffectiveness` · `templateSurvival` | 300 | whole-history aggregates, not windowed |
+
+Everything else uses the RTK Query default (60s).
+
+---
+
+## 12. Optimistic updates
+
+Two places do real optimistic work, and they use different tools.
+
+### `onQueryStarted` + `updateQueryData` — review ratings
+
+[`reviews.endpoints.ts`](../src/api/endpoints/reviews.endpoints.ts) folds a rating
+in or out of the public aggregate so the header flips from `—` to `5.0 · 1 review`
+on the tap, then lets the tag invalidation reconcile:
+
+```ts
+async onQueryStarted({ body, tenantId }, { dispatch, queryFulfilled }) {
+  const patch = dispatch(reviewsEndpoints.util.updateQueryData(
+    'getPublicReviewsSummary', { tenantId },
+    (draft) => foldRating(draft, { next: body.rating, delta: 1 }) ?? draft));
+  try { await queryFulfilled; } catch { patch.undo(); }
+}
+```
+
+`foldRating` returns `null` when the summary can't be reasoned about, and the
+caller then **leaves the cache alone and waits for the refetch rather than
+inventing a number**. Removing the last review yields an `undefined` average, never
+`0.0` — a zero would render as a catastrophic score for a coach with no reviews.
+
+### Direct cache patchers — chat
+
+Messaging doesn't use `onQueryStarted` at all. Socket events and optimistic sends
+both go through named helpers in
+[`messaging/cache.ts`](../src/features/shared/messaging/cache.ts):
+`upsertMessage`, `removePendingMessage`, `setPendingStatus`, `markOutboundRead`,
+`markInboundRead`, `bumpConversation`, `clearConversationUnread`. Full design in
+[`10-chat-messaging.md`](10-chat-messaging.md).
+
+---
+
+## 13. Custom `serializeQueryArgs` — the chat threads
+
+Chat needs **one cache entry per thread**, with `before` / `limit` paging *into* it
+rather than spawning new entries:
+
+```ts
+serializeQueryArgs: ({ endpointName, queryArgs }) =>
+  `${endpointName}(${queryArgs.tenantId}:${queryArgs.clientId})`,
+merge: (cache, incoming) => mergeMessages(cache, incoming),
+forceRefetch: ({ currentArg, previousArg }) =>
+  Boolean(currentArg?.before) && currentArg?.before !== previousArg?.before,
+```
+
+That combination gives the socket a single place to patch. `forceRefetch` is
+required because with a collapsed cache key RTK Query would otherwise consider a
+new `before` value the same query and never fetch the older page.
+
+---
+
+## 14. Resetting
+
+Three different resets, and they are not interchangeable:
+
+| Situation | What runs |
+| --- | --- |
+| **Logout / forced 401** | `forceLogout()` in `baseApi.ts`: `clearTokens()` → disconnect both sockets → `clearAuth` + `clearChatUi` + `clearActiveTenant` + `clearMemberships` → `resetApiState()` |
+| **Tenant switch** | `useSwitchCoach`: persist new tokens → `bumpTenantEpoch()` → `setActiveTenant` → `resetApiState()` → reconnect both sockets → `router.replace` to the tab root |
+| **Single resource** | `invalidatesTags` on the mutation |
+
+`forceLogout` is guarded on `state.auth.isAuthenticated` so a 401 arriving after
+an already-completed logout can't fire the whole teardown a second time.
+
+---
+
+## 15. Performance notes
+
+- Select the narrowest slice you need. `useAppSelector((s) => s.chatUi.connected)`
+  re-renders on far less than selecting `s.chatUi`.
+- Co-locate selectors with slices; memoise cross-slice derivations with
+  `createSelector`.
+- React Compiler is on — reach for `useMemo`/`useCallback` when **identity** feeds a
+  dependency array or a query arg, not as blanket optimisation.
+- For a screen assembled from many reads, write **one hook** that owns all of them
+  and returns a single `isLoading` / `isFetching` / `refetchAll`
+  (`useCoachHomeData`, `useTodayData`). Subscribing to the same query from a child
+  costs nothing extra — RTK Query dedupes — so children can keep their own hooks
+  while the parent controls the loading gate.

@@ -88,6 +88,18 @@
      (--sun-ink) sit in the same family as the fill they land on. */
   --color-sun-tint: var(--sun-tint);
 
+  /* Rating gold. RATING GLYPHS ONLY — never a fill, never text. Kept apart
+     from --sun-ink (which tints whole review surfaces) so a star is always the
+     same colour whatever it sits on. */
+  --color-star: var(--star);
+
+  /* The client's OWN review card: a wash of --primary behind it, and the one
+     primary step small text can sit on top of that wash and still clear 4.5:1.
+     Note --primary-light is "light" in role, not in luminance — in light mode
+     it is DARKER than --primary, because the tint it lands on is near-white. */
+  --color-primary-tint: var(--primary-tint);
+  --color-primary-light: var(--primary-light);
+
   /* Text that sits ON bg-lilac, and the saturated end-stop for the week bars. */
   --color-lilac-on: var(--lilac-on);
   --color-lilac-bright: var(--lilac-bright);
@@ -97,6 +109,17 @@
   --shadow-soft: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px -12px rgb(0 0 0 / 0.1);
   --shadow-pop: 0 2px 4px rgb(0 0 0 / 0.04), 0 18px 40px -16px rgb(0 0 0 / 0.18);
   --shadow-ink: 0 2px 6px rgb(0 0 0 / 0.2), 0 22px 50px -20px rgb(0 0 0 / 0.35);
+  /* The lift under a filled-primary CTA — tinted with the button's own orange
+     so it reads as the button glowing rather than as a grey drop shadow.
+     Lives here, not as an arbitrary shadow-[...] in a component, because the
+     colour is a brand value.
+
+     One value for both themes on purpose. `@theme inline` bakes these shadow
+     literals straight into the .shadow-* utility, so a redefinition in the
+     dark :root block below would never be read — which is already true of
+     --shadow-soft/pop/ink, whose dark values are dead. The spread is widened
+     from the spec's -12px so the glow still registers on the dark ground. */
+  --shadow-cta: 0 11px 26px -10px rgb(226 98 47 / 0.85);
 
   --animate-fade-up: fade-up 400ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   --animate-streak: streak-pop 700ms cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -180,6 +203,14 @@
 
   --sun-tint: oklch(0.965 0.04 92);
 
+  /* #E8B54A, the rating gold, expressed on the same oklch scale as the rest of
+     the palette so it dark-mode-swaps through the same mechanism. */
+  --star: oklch(0.8 0.135 83);
+
+  --primary-tint: oklch(0.965 0.028 38);
+  /* L .575 so 9.5px kicker text clears 4.5:1 on --primary-tint. */
+  --primary-light: oklch(0.575 0.185 38);
+
   /* --lilac is a pale fill in light mode, so what sits on it must be dark. */
   --lilac-on: oklch(0.3 0.13 295);
   --lilac-bright: oklch(0.62 0.17 295);
@@ -262,6 +293,14 @@
     --indigo-tint: oklch(0.275 0.05 295);
 
     --sun-tint: oklch(0.285 0.045 92);
+
+    /* Deliberately the same value as light: the rating gold is one brand
+       colour, and L .8 clears both the paper and the ink ground. */
+    --star: oklch(0.8 0.135 83);
+
+    --primary-tint: oklch(0.265 0.045 38);
+    /* Here "light" is literal — the tint underneath is dark. */
+    --primary-light: oklch(0.82 0.13 38);
 
     /* --lilac is a dark fill in dark mode, so what sits on it must be light. */
     --lilac-on: oklch(0.97 0.02 295);

@@ -69,7 +69,7 @@ the usual convention in `AGENTS.md`. The path is socket-only and the backend per
 nothing, so there is no cache to populate and nothing to invalidate. Do not add an
 `Assistant` tagType.
 
-**`useAiEvents()` is mounted once, in `app/_layout.tsx`, next to `useChatEvents()` —
+**`useAiEvents()` is mounted once, in [`src/app/_layout.tsx`](../src/app/_layout.tsx), next to `useChatEvents()` —
 never in a screen.** The answer arrives seconds after the ask, so a handler owned by the
 AI screen would be torn down by a tab change and the reply would be lost for good (rooms
 don't survive, nothing is persisted, `busy` would strand at true). For the same reason
@@ -114,8 +114,10 @@ membership from another tenant is `ai.rejected` with `"client not found in this 
 
 Consequences for the UI:
 
-- The coach's `membershipId` comes from the roster (`getClients`; `client.id` is the
-  membership id, same resolution as `ClientDetailSheet`). `ClientScopePicker` owns this.
+- The coach's `membershipId` comes from the roster (`getClients`). On a `/client` row
+  the **row's own `id`** (or `membershipId`) is the membership id, while `row.client.id`
+  is the client's *user* id — the same resolution `ClientDetailSheet` uses, and an easy
+  pair to cross. `ClientScopePicker` owns this.
 - Retrieval covers **at most one client at a time**, so a roster-wide question ("which
   of my clients has a shoulder problem?") returns nothing useful. That belongs to a
   REST query over the database. There is deliberately no multi-select.
@@ -155,7 +157,7 @@ never on screen under the new one:
 
 A client's token carries `tenantId: null` until they join a coach, and the gateway
 **rejects such a token at handshake** — there is no KB to ground against. The AI tab is
-hidden in `app/(client)/(tabs)/_layout.tsx` while `tenantId` is null. Showing it anyway
+hidden in [`src/app/(client)/(tabs)/_layout.tsx`](../src/app/(client)/(tabs)/_layout.tsx) while `tenantId` is null. Showing it anyway
 produces an instant `ai.unauthorized` and a closed socket, which reads as a bug.
 
 ## Rendering

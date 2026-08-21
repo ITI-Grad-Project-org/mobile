@@ -1,332 +1,380 @@
 # 01 — Architecture
 
-## The big picture in one sentence
-
-CoachHub is **one app that shows two different interfaces** — a **Coach UI** and a **Client UI** — and which one you see is decided by **your role in the tenant you're currently in**.
-
-That's the whole idea. The rest of this doc unpacks it.
+How the app is put together, in the order you need to understand it: the two
+interfaces, the two identity concepts that decide which one you get, the real
+route tree, and what happens between launch and first paint.
 
 ---
 
-## Part 1 — The two interfaces
+## 1. One app, two interfaces
 
-The app has two completely separate "homes," each with its own bottom tab bar:
-
-```
-                    ┌─────────────────────────────┐
-                    │      User opens the app      │
-                    └──────────────┬──────────────┘
-                                   │
-                    role in the active tenant?
-                                   │
-                ┌──────────────────┴──────────────────┐
-                │                                      │
-          role = owner                            role = client
-                │                                      │
-                ▼                                      ▼
-       ┌─────────────────┐                    ┌─────────────────┐
-       │    COACH UI     │                    │    CLIENT UI    │
-       │  (5 tabs)       │                    │  (5 tabs)       │
-       └─────────────────┘                    └─────────────────┘
-```
-
-These are **not** the same screens with things hidden. They are two different tab bars, two different sets of screens, two different navigation trees. A coach never sees client tabs; a client never sees coach tabs.
-
-### Coach UI — the tabs
-
-This is what the coach (owner) sees. It's a business-management interface. **Six tabs:**
+UPLY renders **two entirely separate navigation trees**. They are not one set of
+screens with things hidden — they are different tab bars, different stacks,
+different feature folders.
 
 ```
-┌───────────────────────────────────────────────────────────────────┐
-│                            COACH UI                                 │
-├────────┬─────────┬────────┬────────┬─────────┬────────────────────┤
-│  Home  │ Clients │ Plans  │   AI   │  Inbox  │      Profile       │
-│   🏠   │   👥    │  🏋️    │   🤖   │   📨    │        👤          │
-└────────┴─────────┴────────┴────────┴─────────┴────────────────────┘
+┌──────────────────────────── COACH UI ─────────────────────────────┐
+│  Home  │  Clients  │  AI  │  Plans  │  Inbox                      │
+│  🏠       👥        🧠      📅       ✉️  (badge: unread)          │
+└───────────────────────────────────────────────────────────────────┘
+        src/app/(coach)/(tabs)/  →  src/features/coach/*
+
+┌──────────────────────────── CLIENT UI ────────────────────────────┐
+│  Today  │  Plan  │  AI*  │  Progress  │  Chat                     │
+│  🏠        📅      ✨       📈          💬  (badge: unread)        │
+└───────────────────────────────────────────────────────────────────┘
+        src/app/(client)/(tabs)/  →  src/features/client/*
+
+        * hidden until the client has joined a coach — see §6
 ```
 
-| Tab | What's in it | Spec feature |
+Both tab bars are **native** (`expo-router/unstable-native-tabs` → `NativeTabs`),
+themed from one place: [`useNativeTabsTheme`](../src/shared/hooks/useNativeTabsTheme.ts).
+That hook mirrors the `--primary` / `--muted-foreground` tokens as literal colour
+values, because `NativeTabs` props are native and cannot read CSS variables.
+
+> **Both UIs have five tabs, not six.** Profile is *not* a tab. It sits behind the
+> avatar in [`AppHeader`](../src/shared/components/AppHeader.tsx) and opens the
+> shared `/my-profile` route. An older draft of `AGENTS.md` describes six coach
+> tabs including Profile; the code is the authority.
+
+Above both tab bars, each group's `_layout.tsx` renders `AppHeader` — logo, theme
+toggle, notification bell (with a real pending-items badge) and the avatar.
+
+---
+
+## 2. Persona vs role — the distinction everything hangs on
+
+There are **two** identity concepts in this codebase and they are not the same.
+
+| | **Persona** | **Role** |
 | --- | --- | --- |
-| **Home** | Dashboard: active clients, adherence/compliance, engagement, churn-risk flags, quick actions | Analytics (§2F) |
-| **Clients** | Roster (prospective/active/paused/archived), client profiles, intake, **private notes**, invites | CRM (§2A) |
-| **Plans** | Exercise library, program builder, templates, assign a plan to a client | Training (§2B) |
-| **AI** | Coach-mode AI (draft a plan, summarize progress, suggest adjustments) + manage the AI knowledge base | AI (§2E) |
-| **Inbox** | All conversations across clients + broadcasts/announcements | Communication (§2D) |
-| **Profile** | Business profile, logo, brand colors, **billing/plan**, account settings | Admin & Billing (§2G/§2H) |
-
-> ⚠️ **Six tabs is at the edge of what a bottom tab bar holds comfortably.** iOS and Android bottom bars start to feel cramped past ~5 items (labels truncate, tap targets shrink, and iOS auto-collapses overflow into a "More" tab). This works, but see **"A note on the coach's six tabs"** below for two ways to keep it clean.
-
-### Client UI — the tabs
-
-This is what an invited trainee sees. It's a "follow my plan and track my progress" interface. **Five tabs:**
+| Values | `'coach'` \| `'customer'` | `'owner'` \| `'client'` |
+| Lives in | `auth.persona` (Redux) + `expo-secure-store` | the active **membership** |
+| Set by | which auth endpoints you signed in through | the tenant you are currently in |
+| Scope | the whole account, for the session | per tenant, can differ between tenants |
+| Decides | which `/auth/*` routes and `/me` endpoint to call | which UI and which data you see |
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                       CLIENT UI                           │
-├──────────┬──────────┬──────────┬──────────┬──────────────┤
-│  Today   │   Plan   │ Progress │ Messages │   Profile    │
-│   🏠     │    📋    │    📈    │   💬     │     👤       │
-└──────────┴──────────┴──────────┴──────────┴──────────────┘
+persona = 'coach'    → /auth/login,          /auth/me,          /coaches/me
+persona = 'customer' → /auth/customer/login, /auth/customer/me, /clients/me
 ```
 
-| Tab | What's in it | Spec feature |
-| --- | --- | --- |
-| **Today** | Today's assigned workout, check-in due, announcements, quick log | Training + Check-ins |
-| **Plan** | The assigned program, log sets/reps/weight/RPE | Training (§2B) + logging (§2C) |
-| **Progress** | Body metrics, measurements, progress photos, PRs, personal charts | Progress (§2C/§2F) |
-| **Messages** | 1:1 chat with the coach | Communication (§2D) |
-| **Profile** | Account, personal info, preferences, the tenant switcher (if in multiple tenants) | Identity / settings |
+A person signed in as `customer` can hold several memberships. Each carries its
+own `role` and `status`:
 
-The client sees **only their own data** — never other clients, never the coach's private notes.
+```
+        Sara's single account (persona = 'customer')
+                          │
+        ┌─────────────────┴──────────────────┐
+   tenant: "Coach Mike"              tenant: "Coach Lina"
+   role = client                     role = client
+   status = active                   status = paused
+        │                                    │
+        ▼                                    ▼
+   full Client UI                     read-only-ish Client UI
+```
 
-> Where's the client's AI? The client-mode AI Q&A doesn't get its own tab in this layout — it's reachable from **Today** (an "Ask your coach's AI" entry point) and/or **Plan**. If you'd rather give clients a dedicated **AI** tab (matching the coach's), swap it in for one of the five — that's a clean choice too. Decide and record it in `AGENTS.md`.
+And a coach account (`persona = 'coach'`) resolves to exactly one tenant — their
+own — with `role = 'owner'`, synthesised in `_layout.tsx` from `GET /auth/me`.
+
+**Never branch on persona when you mean role.** `useRole()` reads the active
+membership; `auth.persona` only tells you which API surface to talk to.
+
+```ts
+// src/shared/hooks/useRole.ts
+const { role } = useActiveTenant();
+return { role, isCoach: role === 'owner', isClient: role === 'client' };
+```
+
+The one sanctioned exception is [`useChatRole`](../src/features/shared/messaging/useChatRole.ts),
+which falls back to persona while the membership is still resolving — chat has to
+pick a side before the roster lands.
 
 ---
 
-## Part 2 — Why "role in the active tenant" decides the UI
+## 3. The active tenant
 
-This is the part that makes CoachHub different from a normal app, and it's worth slowing down on.
-
-In a normal app, a person *is* one thing: a buyer, or a driver, or an admin. In CoachHub, **a person can be a coach in one place and a client in another, with the same login.**
-
-Concrete example — meet Sara:
+The app tracks exactly one **active tenant** at a time.
 
 ```
-        Sara's single account
-                 │
-     ┌───────────┴────────────┐
-     │                        │
-  Tenant: "Sara's Gym"   Tenant: "Coach Mike's"
-  role = owner           role = client
-     │                        │
-     ▼                        ▼
-  COACH UI                CLIENT UI
+store.activeTenant = { tenantId: string | null, switching: boolean }
+store.memberships  = entity adapter keyed by tenantId
 ```
 
-Sara runs her own coaching business (she's the **owner** there → Coach UI). She's *also* being coached by Mike for her own training (she's a **client** there → Client UI). **Same app, same login, two different interfaces depending on which tenant she's looking at.**
+The active tenant decides two things:
 
-So the question "which UI do I show?" is never "who is this user?" It's always **"who is this user *in the tenant they're currently viewing*?"**
+1. **Which UI** — `role` in that membership.
+2. **Which data** — every request is resolved against the tenant encoded in the
+   JWT, and every RTK Query cache entry is keyed by `tenantId`.
 
-### What "active tenant" means
+It is persisted to `expo-secure-store` under `activeTenantId` so the same tenant
+survives a relaunch, and `switching: true` holds the branded splash over the whole
+swap so no screen is ever painted half-switched.
 
-Because a user can belong to several tenants, the app always tracks **one active tenant** — the one currently in focus. The active tenant determines:
-
-1. **Which UI** (their role in *that* tenant → Coach or Client).
-2. **Which data** (every screen shows data from *that* tenant only).
-
-If a user belongs to just one tenant, it's auto-selected and they never think about it. If they belong to several (like Sara), they pick from a **tenant switcher**, and switching tenants can flip them from the Coach UI to the Client UI.
-
-```
-   Tenant switcher
-   ┌─────────────────────────────┐
-   │  ● Sara's Gym      (Coach)  │ ← tap → Coach UI
-   │  ○ Coach Mike's    (Client) │ ← tap → Client UI
-   └─────────────────────────────┘
-```
+Switching is a **token operation**, not a state toggle — see
+[`08-auth-and-tenancy.md`](08-auth-and-tenancy.md).
 
 ---
 
-## Part 3 — How this maps to folders and navigation
+## 4. The real route tree
 
-Now the practical part: how the two UIs live in code. We use **Expo Router** (file-based routing — the folder structure *is* the navigation).
+Routes live in `src/app/` (Expo Router picks up `src/app` automatically). Route
+files are thin: import a screen from a feature barrel, render it.
 
 ```
-app/
-├── _layout.tsx                 # root: providers (store, theme), decides where to send you
+src/app/
+├── _layout.tsx                     ← providers · session restore · sockets · splash
+├── index.tsx                       ← the redirect gate (§5)
+├── my-profile.tsx                  → features/shared/profile          (both personas)
+├── coach/[tenantId].tsx            → features/client/coach-profile    (public coach page)
 │
-├── (auth)/                     # NOT logged in
-│   ├── sign-in.tsx
-│   └── accept-invite.tsx
+├── (auth)/
+│   ├── _layout.tsx
+│   ├── login.tsx  ·  register.tsx      → features/shared/auth · AuthScreen
+│   ├── verify.tsx                      → VerifyScreen  (OTP)
+│   └── forgot-password.tsx · reset-password.tsx
 │
-├── (onboarding)/               # logged in, but no active tenant yet
-│   ├── tenant-switcher.tsx     # pick which tenant to enter
-│   ├── accept-invite.tsx
-│   └── create-tenant.tsx       # "become a coach"
+├── (onboarding)/
+│   └── onboarding.tsx              → features/client/onboarding (first-run carousel)
 │
-├── (coach)/                    # ◀── COACH UI  (only mounted if role = owner)
-│   ├── _layout.tsx             # the Coach tab bar (6 tabs)
-│   ├── home.tsx                # Home (dashboard)
-│   ├── clients/
-│   │   ├── index.tsx           # roster
-│   │   └── [clientId].tsx      # one client's profile
-│   ├── plans/                  # Plans (program builder, library, templates)
-│   ├── ai.tsx                  # AI (coach-mode + KB management)
-│   ├── inbox/
-│   │   ├── index.tsx           # all conversations + broadcasts
-│   │   └── [clientId].tsx      # one conversation thread
-│   └── profile.tsx             # Profile (business, branding, billing, settings)
+├── (setup)/                        ← post-signup, pre-app
+│   ├── coach-profile.tsx           → features/coach/profile-setup
+│   ├── client-profile.tsx          → features/client/profile-setup
+│   ├── match-coach.tsx             → features/client/match-coach (directory + join request)
+│   └── intake.tsx                  → ClientIntakeScreen
 │
-└── (client)/                   # ◀── CLIENT UI  (only mounted if role = client)
-    ├── _layout.tsx             # the Client tab bar (5 tabs)
-    ├── today.tsx               # Today
-    ├── plan/                   # Plan (assigned program + logging)
-    ├── progress/               # Progress
-    ├── messages.tsx            # Messages
-    └── profile.tsx             # Profile (account, prefs, tenant switcher)
+├── (coach)/
+│   ├── _layout.tsx                 ← AppHeader + Stack
+│   ├── (tabs)/
+│   │   ├── _layout.tsx             ← NativeTabs ×5
+│   │   ├── home.tsx  clients.tsx  ai.tsx  plans.tsx  inbox.tsx
+│   ├── chat/[id].tsx               → ConversationScreen (id = client USER id)
+│   ├── activity.tsx  renewals.tsx  at-risk.tsx  reviews.tsx  notifications.tsx
+│   ├── check-ins/index.tsx  ·  check-ins/[clientId].tsx
+│   └── plans/
+│       ├── training/[programId]/index.tsx
+│       ├── training/[programId]/days/[programDayId].tsx
+│       ├── nutrition/[planId]/index.tsx
+│       └── nutrition/[planId]/days/[dayId].tsx
+│
+└── (client)/
+    ├── _layout.tsx                 ← AppHeader + Stack + useSyncClientTimezone()
+    ├── (tabs)/
+    │   ├── _layout.tsx             ← NativeTabs ×5 (AI hidden without a tenant)
+    │   ├── today.tsx  plan.tsx  ai.tsx  progress.tsx  chat.tsx
+    ├── measurement.tsx             ← modal
+    ├── notifications.tsx           ← modal
+    ├── workout/[programDayId].tsx  → WorkoutLogScreen
+    ├── program/[programId].tsx     → ProgramDetailsScreen
+    ├── nutrition/[dayId].tsx       → NutritionLogScreen
+    └── nutrition/plan/[planId].tsx → NutritionPlanDetailsScreen
 ```
 
-The two route groups `(coach)` and `(client)` are the two interfaces. Each has its own `_layout.tsx` that defines its tab bar. **Only one of them is ever mounted at a time**, based on role.
-
-### The router decides which group to show
+A route file, in full:
 
 ```tsx
-// app/_layout.tsx  (simplified — the routing brain)
-function RootLayout() {
-  const { isSignedIn } = useAuth();
-  const { tenantId, role } = useActiveTenant();   // role in the ACTIVE tenant
+// src/app/(coach)/(tabs)/clients.tsx
+import { ClientsScreen } from "@/features/coach/clients";
+import { View } from "@/tw";
 
-  if (!isSignedIn)            return <Redirect href="/(auth)/sign-in" />;
-  if (!tenantId)             return <Redirect href="/(onboarding)/tenant-switcher" />;
-  if (role === 'owner')      return <Redirect href="/(coach)/home" />;
-  if (role === 'client')     return <Redirect href="/(client)/today" />;
-
-  return <Redirect href="/(onboarding)/tenant-switcher" />;
-}
-```
-
-Read it top to bottom like a bouncer at a door:
-
-1. Not signed in? → sign-in screen.
-2. Signed in but haven't picked a tenant? → tenant switcher.
-3. You're an **owner** in this tenant? → **Coach UI**.
-4. You're a **client** in this tenant? → **Client UI**.
-
-When Sara switches from "Sara's Gym" to "Coach Mike's," `role` changes from `owner` to `client`, this code re-runs, and she's moved from the Coach UI to the Client UI automatically.
-
-### The tab bars
-
-Each UI's tab bar is just its `_layout.tsx`:
-
-```tsx
-// app/(coach)/_layout.tsx  — the Coach tab bar (6 tabs)
-import { Tabs } from 'expo-router';
-
-export default function CoachLayout() {
+export default function CoachClientsRoute() {
   return (
-    <Tabs>
-      <Tabs.Screen name="home"     options={{ title: 'Home' }} />
-      <Tabs.Screen name="clients"  options={{ title: 'Clients' }} />
-      <Tabs.Screen name="plans"    options={{ title: 'Plans' }} />
-      <Tabs.Screen name="ai"       options={{ title: 'AI' }} />
-      <Tabs.Screen name="inbox"    options={{ title: 'Inbox' }} />
-      <Tabs.Screen name="profile"  options={{ title: 'Profile' }} />
-    </Tabs>
+    <View className="flex-1 bg-background px-4">
+      <ClientsScreen />
+    </View>
   );
 }
 ```
 
+That is the whole contract: **layout chrome and padding in the route, everything
+else in the feature.** `typedRoutes` is on (`app.json` → `experiments`), so hrefs
+are type-checked.
+
+---
+
+## 5. Boot sequence
+
+[`src/app/_layout.tsx`](../src/app/_layout.tsx) is the only place that knows how a
+session comes back to life. In order:
+
+```
+1. SplashScreen.preventAutoHideAsync()
+2. restoreSession()
+     read accessToken + persona from SecureStore
+     → dispatch setAuth({ persona, profileCompleted })
+     → read activeTenantId from SecureStore → dispatch setActiveTenant
+     → always dispatch setLoading(false)   (even when signed out)
+3. Persona-gated identity query, with refetchOnMountOrArgChange: true
+     coach    → GET /auth/me                    → one synthesised owner membership
+     customer → GET /auth/customer/memberships  → 0..N memberships
+4. Reconcile the active tenant
+     persisted tenant wins; otherwise pick the first `active` membership
+5. useChatEvents()  and  useAiEvents()          ← app-wide, mounted ONCE, here
+6. Not authenticated? router.dismissAll() + replace('/(auth)/login')
+7. Hide the native splash; AnimatedSplash covers the handoff
+```
+
+Two details worth knowing before you touch this file:
+
+- **`refetchOnMountOrArgChange: true` is load-bearing.** The login screen primes
+  these queries with lazy triggers. If that prime failed, the cache holds an
+  *error* entry — and subscribing to a cached error does not retry. Without the
+  flag, the active tenant would stay `null` for the whole session and every
+  tenant-scoped query would skip.
+- **The `Stack` is keyed by a tenant epoch.** A real tenant change increments
+  `tenantView.epoch`, remounting the entire navigator so no screen survives with
+  derived state from the previous coach. The key is adjusted *during render*, not
+  in an effect, so the remount and the splash land in the same commit.
+
+### Why the sockets live in the root layout
+
+Both `useChatEvents` and `useAiEvents` are mounted once, at the root:
+
+- **Chat** — inbox rows and the tab badge must stay live from any tab.
+- **AI** — an answer arrives seconds after the ask. Socket rooms do not survive a
+  reconnect and nothing is persisted server-side, so a handler unmounted by a tab
+  change loses the reply *permanently*. There is no endpoint to fetch it from.
+
+Never mount either hook in a screen.
+
+---
+
+## 6. The redirect gate
+
+[`src/app/index.tsx`](../src/app/index.tsx) is the bouncer. Read top to bottom:
+
 ```tsx
-// app/(client)/_layout.tsx  — the Client tab bar (5 tabs)
-import { Tabs } from 'expo-router';
-
-export default function ClientLayout() {
-  return (
-    <Tabs>
-      <Tabs.Screen name="today"    options={{ title: 'Today' }} />
-      <Tabs.Screen name="plan"     options={{ title: 'Plan' }} />
-      <Tabs.Screen name="progress" options={{ title: 'Progress' }} />
-      <Tabs.Screen name="messages" options={{ title: 'Messages' }} />
-      <Tabs.Screen name="profile"  options={{ title: 'Profile' }} />
-    </Tabs>
-  );
-}
+if (!isAuthenticated)                     → /(auth)/login
+if (!profileCompleted)
+     persona==='coach' || role==='owner'  → /(setup)/coach-profile
+     else                                 → /(setup)/client-profile
+if (persona==='coach' || role==='owner')  → /(coach)/(tabs)/home
+if (!tenantId)                            → /(setup)/match-coach
+                                          → /(client)/(tabs)/today
 ```
 
-Two files, two tab bars. That's the entire "two UIs" mechanism.
+`profileCompleted` is a device-local flag (`uply.hasCompletedProfile` in
+SecureStore, via [`useProfileSetup`](../src/shared/hooks/useProfileSetup.ts)), with
+`profileLooksComplete()` as a server-side sanity check at login so a reinstall
+doesn't send a fully-configured user back through setup.
+
+**A client with no tenant is a normal state**, not an error: they have signed up
+but not yet joined a coach. That is why the client AI tab is hidden — a
+tenant-less token has nothing to ground a knowledge-base lookup against, and the
+gateway rejects it at handshake with `ai.unauthorized`.
 
 ---
 
-## Part 4 — Where the screens' actual logic lives
+## 7. Feature organisation
 
-Keep the `app/` files **thin**. A route file should import a screen and render it — nothing more:
-
-```tsx
-// app/(coach)/home.tsx
-import { DashboardScreen } from '@/features/analytics/screens/DashboardScreen';
-export default DashboardScreen;
-```
-
-The real code lives in feature folders, organized **by UI** (`coach/`, `client/`, `shared/`):
+`src/features/` is organised **by UI**, not by domain:
 
 ```
-src/
-├── features/
-│   ├── coach/          # screens the Coach UI owns
-│   │   ├── home/       #   HomeScreen (dashboard)
-│   │   ├── clients/    #   ClientsScreen (CRM)
-│   │   ├── plans/      #   PlansScreen
-│   │   ├── inbox/      #   InboxScreen (messaging: all clients)
-│   │   └── assistant/  #   AssistantScreen (coach AI)
-│   ├── client/         # screens the Client UI owns
-│   │   ├── today/  plan/  progress/  onboarding/
-│   │   ├── chat/       #   ChatScreen (messaging: the one coach)
-│   │   └── assistant/  #   AssistantScreen (client AI)
-│   └── shared/         # shared CODE, not shared concept
-│       ├── profile/    #   ONE ProfileScreen rendered by both UIs
-│       ├── auth/       #   AuthScreen (role-agnostic)
-│       ├── messaging/  #   data layer only: api.ts + types.ts (no screens)
-│       └── assistant/  #   no screens: types.ts + useAiChat.ts (socket, no api.ts)
-│
-├── shared/             # cross-cutting, non-feature code
-│   ├── ui/             # @expo/ui wrappers + NativeWind primitives
-│   ├── hooks/          # useActiveTenant, useRole
-│   └── components/     # AppHeader, Avatar, EmptyState, LoadingState, ...
-│
-└── store/              # Redux store + RTK Query (see doc 04)
+features/
+├── coach/     home · clients · plans · inbox · assistant · activity ·
+│              checkins · reviews · renewals · at-risk · notifications · profile-setup
+├── client/    today · plan · progress · workout · nutrition · program · chat ·
+│              assistant · coach-profile · match-coach · notifications ·
+│              onboarding · profile-setup
+└── shared/    auth · messaging · assistant · profile · setup · measurements ·
+               plans · reviews
 ```
 
-Why by UI? Because most screens belong to exactly one UI, and even where a domain
-appears in both (messaging, AI) the two screens are genuinely different — the Coach
-inbox is a list of every client; the Client chat is a single thread with their coach.
-Forcing those into one folder would pretend they're one screen. So screens split by UI.
-`shared/` is reserved for code that is *literally reused*: a data layer both sides call
-(`shared/messaging` — `api.ts`/`types.ts`; `shared/assistant` — `types.ts`/`useAiChat.ts`,
-socket-only so no `api.ts`; neither has screens), a screen that
-is genuinely identical for both roles (`shared/profile`), or role-agnostic flows (`auth`).
-(More in [doc 05](05-feature-modules.md).)
+Three placement rules:
+
+1. **A screen belonging to one UI** → under `coach/` or `client/`, with an
+   *unprefixed* name (`coach/home` → `HomeScreen`).
+2. **Same domain, genuinely different screen per UI** → split
+   (`coach/inbox` + `client/chat`; `coach/assistant` + `client/assistant`). Only
+   the shared *data layer* goes in `shared/<domain>/` — hooks, types, cache
+   helpers, **no screens**.
+3. **A genuinely identical surface** → one screen in `shared/`
+   (`shared/profile/ProfileScreen`, rendered by `/my-profile` for both personas;
+   `shared/auth` for the role-agnostic auth flow).
+
+`shared/` means *shared code*, never *shared concept*. Inside a feature:
+
+```
+<feature>/
+├── screens/       one screen per file, default-exported through index.ts
+├── components/    presentational pieces used only by this feature
+├── hooks/         data assembly — one hook per screen where the screen is big
+├── lib/           pure functions: normalisers, formatters, derivations
+└── index.ts       the barrel — the only thing routes and siblings import
+```
+
+The pattern to copy for a data-heavy screen is `useCoachHomeData` /
+`useTodayData`: **one hook resolves the screen as a single unit**, exposing one
+`isLoading`, one `isFetching` and one `refetchAll`. Today's screen pulls ten reads
+across four features; without that hook it reflowed five times per visit.
 
 ---
 
-## Part 5 — Two rules to keep in your head
+## 8. Membership lifecycle
 
-These come straight from the spec and they're easy to get wrong:
-
-**Rule 1 — Everything is scoped to the active tenant.**
-Every screen, in either UI, shows data from the active tenant *only*. A coach with two gyms sees one gym at a time; a client with two coaches sees one coach at a time. This is handled centrally in the data layer so you don't repeat it everywhere — see [doc 04](04-state-management.md).
-
-**Rule 2 — The UI split is convenience, not security.**
-Showing the Client UI to a client doesn't *protect* the coach's data — the **server** does that. Never assume "the client can't see this because there's no button for it." Anyone can poke the API directly, and the backend rejects unauthorized calls. The two-UI split is about giving each role the right *experience*, not about access control. (More in [doc 05](05-feature-modules.md).)
-
----
-
-## A note on the coach's six tabs (worth deciding before you build)
-
-You specified six coach tabs: **Home · Clients · Plans · AI · Inbox · Profile.** That's a complete, sensible set — but six is one past the point where a bottom tab bar stays comfortable, so it's worth a deliberate decision now rather than a redesign later.
-
-**What actually happens at six tabs:**
-- **iOS:** a native tab bar shows up to 5 items; a 6th triggers an automatic **"More" tab** that hides items behind a list. If you use `@expo/ui` / native tabs you may hit this; if you use a JS tab bar you control it, but six labels get tight on smaller phones.
-- **Android:** Material guidance recommends **3–5** bottom-nav destinations; 6 is over the recommended max and labels start truncating.
-
-**Three clean ways to handle it — pick one:**
-
-- **Option A — Keep all six, custom tab bar.** Use a JS-rendered bottom bar (not the native 5-item one) so you control overflow, use icon-forward items with short labels, and test on a small device. Totally doable; just be intentional so iOS doesn't auto-collapse you into "More."
-- **Option B — Fold Profile into Home (5 tabs).** Drop **Profile** as a tab and put it behind an avatar in the **Home** header (top-right) — a very common pattern. Tabs become **Home · Clients · Plans · AI · Inbox**. This is the lowest-friction option and what most production apps do.
-- **Option C — Fold AI into Inbox or Home.** If the coach-mode AI is used less often than messaging, surface it inside another screen rather than as its own tab. Tabs become **Home · Clients · Plans · Inbox · Profile**.
-
-**My recommendation: Option B.** Five tabs is the native sweet spot on both platforms, and "account/profile behind the avatar" is an established convention coaches will recognize instantly. But all three are fine — the point is to choose on purpose and write it in `AGENTS.md` so it doesn't drift between you and your teammate.
-
-The client side is already at the comfortable five (**Today · Plan · Progress · Messages · Profile**), so no change needed there.
-
----
-
-## The lifecycle a membership goes through
-
-One last piece. A person's membership in a tenant isn't binary — it moves through states (this runs **per tenant**, so Sara can be `active` in her gym and `paused` under Mike at the same time):
+A membership is not binary — and it runs **per tenant**, so a client can be
+`active` under one coach and `paused` under another at the same time.
 
 ```
 invited ──accept──▶ active ──pause──▶ paused ──resume──▶ active
    │                   │                                   │
-   └──decline──▶ gone  └──────────remove────────────▶ removed
+   └──decline──▶ gone  └───────────remove──────────▶ removed
 ```
 
-The app reads the membership's `status` and reacts: `invited` shows the accept/decline screen; `active` shows the full UI for the role; `paused` shows a "paused by your coach" read-only state; `removed` makes the membership disappear from the user's tenant list. How this is stored is covered in [doc 04](04-state-management.md).
+What the app does with each:
+
+| Status | Behaviour |
+| --- | --- |
+| `invited` | Surfaces in the client's notifications as an invitation card |
+| `active` | Full UI for the role |
+| `paused` | Still readable; **chat stays open** (`canChat` allows `active` and `paused`) |
+| `removed` | The membership disappears from the tenant list |
+
+`canChat` / `threadAllowsChat` in
+[`features/shared/messaging/types.ts`](../src/features/shared/messaging/types.ts)
+are the single source of truth for "may these two people message each other".
+
+---
+
+## 9. Two entry paths into a coaching relationship
+
+Both exist, and they are inverses:
+
+```
+INVITATION                              JOIN REQUEST
+coach → POST /invitation                client → POST /client/me/join-requests
+client sees it in notifications         coach sees it in Clients / notifications
+client accepts → membership             coach approves → membership
+```
+
+Discovery for the join-request path is the **coach directory**
+(`GET /coaches/directory`), rendered by `features/client/match-coach` and the
+public profile at `/coach/[tenantId]`.
+
+> The client-side invitation routes (`GET|DELETE /client/me/invitations`) are not
+> live server-side yet. They are gated behind `CLIENT_INVITATIONS_READY = false`
+> in [`invitations.endpoints.ts`](../src/api/endpoints/invitations.endpoints.ts),
+> because a 401 from them would be escalated to a full logout by the reauth
+> wrapper. Flip the flag when the backend ships them.
+
+---
+
+## 10. Where the seams are
+
+| Concern | Owner | Note |
+| --- | --- | --- |
+| Navigation | `src/app/**` | Thin. Import from `expo-router`, never `@react-navigation/*` |
+| Session + tenant | `src/app/_layout.tsx`, `src/store/*Slice.ts` | The only place session state is reconstructed |
+| Server data | `src/api/**` (RTK Query) | One `baseApi`; features inject endpoints |
+| Realtime | `src/lib/chatSocket.ts`, `src/lib/aiSocket.ts` | Module singletons with listener registries, not React state |
+| Theme | `src/global.css` | Every colour, radius and shadow. No inline hex in components |
+| RN + `className` | `src/tw/**` | Plain RN components ignore `className` — always import from `@/tw` |
+
+### Legacy still in the tree
+
+[`src/lib/data.ts`](../src/lib/data.ts) and [`src/lib/role.ts`](../src/lib/role.ts)
+hold pre-API fixtures (Unsplash images, a hardcoded `Coach Mike`). Four screens
+still read from them for exercise demo media and accent colours. Treat them as
+**deprecated**: don't add to them, and prefer the real payload when you touch a
+call site.

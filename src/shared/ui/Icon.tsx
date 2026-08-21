@@ -65,6 +65,7 @@ export type IconName =
   | "mail"
   | "star"
   | "star-outline"
+  | "map-pin"
   | "trash";
 
 interface IconProps {
@@ -132,6 +133,7 @@ const SYMBOLS: Record<IconName, { ios: string; android: string }> = {
   "mail": { ios: "envelope.fill", android: "mail" },
   "star": { ios: "star.fill", android: "star" },
   "star-outline": { ios: "star", android: "star_outline" },
+  "map-pin": { ios: "mappin.and.ellipse", android: "location_on" },
   "trash": { ios: "trash.fill", android: "delete" },
 };
 

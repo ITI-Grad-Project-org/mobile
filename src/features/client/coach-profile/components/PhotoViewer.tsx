@@ -2,66 +2,17 @@ import { useState } from "react";
 import { Modal, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Card } from "@/shared/ui/Card";
 import { GlassButton } from "@/shared/ui/GlassButton";
 import { Icon } from "@/shared/ui/Icon";
-import { Pressable, ScrollView, Text, View } from "@/tw";
+import { ScrollView, Text, View } from "@/tw";
 import { Image } from "@/tw/image";
 
-export function TransformationGallery({ photos }: { photos: string[] }) {
-  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
-
-  if (photos.length === 0) return null;
-
-  return (
-    <>
-      <Card glass className="gap-3">
-        <View className="flex-row items-center justify-between">
-          <Text className="text-[15px] font-bold text-foreground">
-            Client transformations
-          </Text>
-          <Text className="text-[12px] text-muted-foreground">
-            {photos.length} photo{photos.length === 1 ? "" : "s"}
-          </Text>
-        </View>
-
-        {/* Negative margin so the strip bleeds to the card edge while the
-            header above keeps the card's padding. */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          className="-mx-5"
-          contentContainerClassName="gap-x-2.5 px-5"
-        >
-          {photos.map((uri, i) => (
-            <Pressable
-              key={uri}
-              onPress={() => setViewerIndex(i)}
-              accessibilityRole="imagebutton"
-              accessibilityLabel={`Transformation photo ${i + 1} of ${photos.length}`}
-              className="h-52 w-40 overflow-hidden rounded-2xl bg-secondary active:opacity-85"
-            >
-              <Image source={{ uri }} className="h-full w-full object-cover" />
-            </Pressable>
-          ))}
-        </ScrollView>
-      </Card>
-
-      {/* Mounted only while open, and keyed on the tapped photo, so the pager
-          starts on it — `contentOffset` only applies on first layout. */}
-      {viewerIndex != null ? (
-        <PhotoViewer
-          key={viewerIndex}
-          photos={photos}
-          initialIndex={viewerIndex}
-          onClose={() => setViewerIndex(null)}
-        />
-      ) : null}
-    </>
-  );
-}
-
-function PhotoViewer({
+/**
+ * Full-screen pager for the transformation photos. Mount it keyed on the
+ * tapped index so the pager starts there — `contentOffset` only applies on
+ * first layout.
+ */
+export function PhotoViewer({
   photos,
   initialIndex,
   onClose,
@@ -130,7 +81,7 @@ function PhotoViewer({
           <GlassButton
             onPress={onClose}
             accessibilityLabel="Close photo"
-            className="h-10 w-10 items-center justify-center rounded-full bg-white/15 active:opacity-70"
+            className="h-11 w-11 items-center justify-center rounded-full bg-white/15 active:opacity-70"
           >
             <Icon name="x" size={20} color="#ffffff" />
           </GlassButton>

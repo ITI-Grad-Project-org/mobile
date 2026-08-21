@@ -45,6 +45,9 @@ export const profileEndpoints = baseApi.injectEndpoints({
     }),
     getPublicCoachProfile: builder.query<any, string>({
       query: (tenantId) => `/coaches/${tenantId}/profile`,
+      // Documented as "public profile with rating & reviews" — same aggregate
+      // the client's own review counts into.
+      providesTags: (result, error, tenantId) => [{ type: 'CoachProfile', id: tenantId }],
     }),
     getClientProfile: builder.query<any, void>({
       query: () => '/clients/me',

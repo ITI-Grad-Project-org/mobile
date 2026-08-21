@@ -8,12 +8,19 @@ export function StarRating({
   value,
   size = 14,
   onChange,
+  color = "--sun-ink",
   className,
 }: {
   value: number;
   size?: number;
   /** Pass to make the row interactive (tap a star to set 1–5). */
   onChange?: (rating: number) => void;
+  /**
+   * Filled-glyph colour, as a CSS variable NAME. Defaults to --sun-ink, which
+   * is what the coach-side review surfaces are tuned around; the client's coach
+   * profile passes --star, the standalone rating gold.
+   */
+  color?: string;
   className?: string;
 }) {
   const rounded = Math.round(value);
@@ -30,7 +37,7 @@ export function StarRating({
           <Icon
             name={filled ? "star" : "star-outline"}
             size={size}
-            color={filled ? "--sun-ink" : "--muted-foreground"}
+            color={filled ? color : "--muted-foreground"}
           />
         );
 

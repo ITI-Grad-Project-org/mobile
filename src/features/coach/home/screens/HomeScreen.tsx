@@ -8,16 +8,15 @@ import { router } from "expo-router";
 import { useCallback, useMemo } from "react";
 import { ActivityIndicator, RefreshControl } from "react-native";
 
+import { useCoachReviews } from "@/features/coach/reviews";
 import { ActivityRow } from "../components/ActivityRow";
 import { AttentionRow } from "../components/AttentionRow";
-import { InsightCard } from "../components/InsightCard";
 import { StatTile } from "../components/StatTile";
 import { WeekActivityChart } from "../components/WeekActivityChart";
-import { useCoachHomeAnalytics } from "../hooks/useCoachHomeAnalytics";
 import { useClientAvatars } from "../hooks/useClientAvatars";
+import { useCoachHomeAnalytics } from "../hooks/useCoachHomeAnalytics";
 import { useCoachHomeData } from "../hooks/useCoachHomeData";
 import { useDismissedInsights } from "../hooks/useDismissedInsights";
-import { useCoachReviews } from "@/features/coach/reviews";
 
 import { useRosterCheckins } from "../hooks/useRosterCheckins";
 import { useWeekActivity } from "../hooks/useWeekActivity";
@@ -111,16 +110,16 @@ export function HomeScreen() {
   // cross-check below fire on every new review.
   const countedTotal = counts
     ? [counts.atRisk, counts.programsEndingSoon]
-        .filter((n) => typeof n === "number" && Number.isFinite(n))
-        .reduce((sum, n) => sum + n, 0) +
-      checkins.length +
-      reviews.unseen.length
+      .filter((n) => typeof n === "number" && Number.isFinite(n))
+      .reduce((sum, n) => sum + n, 0) +
+    checkins.length +
+    reviews.unseen.length
     : null;
   const listTotal = attentionQueue
     ? attentionQueue.atRisk.length +
-      attentionQueue.checkinsAwaitingReview.length +
-      attentionQueue.programsEndingSoon.length +
-      reviews.unseen.length
+    attentionQueue.checkinsAwaitingReview.length +
+    attentionQueue.programsEndingSoon.length +
+    reviews.unseen.length
     : null;
   // Prefer the counts; fall back to the lists rather than showing nothing when
   // the counts are absent.
@@ -129,10 +128,10 @@ export function HomeScreen() {
   if (__DEV__ && countedTotal !== null && listTotal !== null && countedTotal !== listTotal) {
     console.warn(
       `[HomeScreen] attentionCounts (${countedTotal}) disagrees with the attention lists ` +
-        `(${listTotal}). Check-ins are the same number on both sides, so this is at-risk or ` +
-        `ending-soon: either a custom threshold reached /attention, the lists are capped, ` +
-        `or a queue is spelled differently than normalizeAttention expects — check the ` +
-        `"[attention] top-level keys" log.`
+      `(${listTotal}). Check-ins are the same number on both sides, so this is at-risk or ` +
+      `ending-soon: either a custom threshold reached /attention, the lists are capped, ` +
+      `or a queue is spelled differently than normalizeAttention expects — check the ` +
+      `"[attention] top-level keys" log.`
     );
   }
 
@@ -379,16 +378,6 @@ export function HomeScreen() {
               </>
             )}
           </View>
-
-          {/* AI insight */}
-          {showInsight ? (
-            <InsightCard
-              body={insight.body}
-              onDraft={() => openClient(insight.membershipId)}
-              onDismiss={() => dismiss(insight.key)}
-            />
-          ) : null}
-
           {/* Today's activity */}
           <View className="gap-2.5">
             <View className="flex-row items-center justify-between">

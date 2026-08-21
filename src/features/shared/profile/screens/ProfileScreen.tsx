@@ -15,8 +15,8 @@ import {
 } from "@/api/endpoints/profile.endpoints";
 import { useGetPublicReviewsSummaryQuery } from "@/api/endpoints/reviews.endpoints";
 import { useGetTenantMeQuery } from "@/api/endpoints/tenant.endpoints";
-import { planDisplayName, planHint, useEntitlements } from "@/features/coach/billing";
 import { MeasurementsSummaryCard } from "@/features/client/progress";
+import { planDisplayName, planHint, useEntitlements } from "@/features/coach/billing";
 import { disconnectAiSocket } from "@/lib/aiSocket";
 import { disconnectChatSocket } from "@/lib/chatSocket";
 import { resolveCoachFields } from "@/lib/coach";
@@ -161,7 +161,6 @@ function CoachProfile() {
   const handle = publicProfileHandle(tenant?.slug);
 
   const coachRows: SettingsRow[] = [
-    { icon: "sparkles", label: "AI knowledge base" },
     { icon: "palette", label: "Branding", hint: tenant?.name || "Logo, colors" },
     {
       icon: "credit-card",
@@ -171,10 +170,10 @@ function CoachProfile() {
       label: "Subscription",
       hint: entitlements.isReady
         ? planHint(
-            planDisplayName(entitlements.plan),
-            entitlements.activeClientCount,
-            entitlements.activeClientLimit
-          )
+          planDisplayName(entitlements.plan),
+          entitlements.activeClientCount,
+          entitlements.activeClientLimit
+        )
         : null,
       onPress: () => router.push("/(coach)/billing"),
     },

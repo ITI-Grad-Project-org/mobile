@@ -15,7 +15,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#F7F7F7",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
@@ -31,10 +31,12 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
-          "android": {
-            "image": "./assets/images/splash-icon.png",
-            "imageWidth": 76
+          "backgroundColor": "#f8f5f1",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200,
+          "dark": {
+            "backgroundColor": "#0b0d13",
+            "image": "./assets/images/Uply-offwhite-logo.png"
           }
         }
       ],

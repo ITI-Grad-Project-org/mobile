@@ -85,16 +85,16 @@ function ChatThread({
     mySide,
   } = useChatThread();
 
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
 
   useEffect(() => {
     const showSub = Keyboard.addListener(
       Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
-      (e) => setKeyboardHeight(e.endCoordinates.height)
+      () => setKeyboardOpen(true)
     );
     const hideSub = Keyboard.addListener(
       Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
-      () => setKeyboardHeight(0)
+      () => setKeyboardOpen(false)
     );
     return () => {
       showSub.remove();
@@ -105,8 +105,8 @@ function ChatThread({
   const [input, setInput] = useState("");
   // When keyboard is open, give comfortable breathing room above keyboard.
   // When closed, lift above home indicator on iOS or tab bar.
-  const composerBottom = keyboardHeight > 0
-    ? 12
+  const composerBottom = keyboardOpen
+    ? 8
     : Platform.OS === "ios"
     ? insets.bottom + 12
     : 8;
@@ -133,17 +133,8 @@ function ChatThread({
     >
       {/* No status-bar inset here: AppHeader already sits above this screen and
           consumes insets.top, so adding it again double-counts the notch. */}
-      <View
-        className="flex-1 pt-2"
-        style={{
-          paddingBottom:
-            Platform.OS === "android"
-              ? keyboardHeight > 0
-                ? keyboardHeight + (insets.bottom > 0 ? insets.bottom : 8)
-                : 0
-              : 0,
-        }}
-      >
+      <View className="flex-1 pt-2">
+        {/* Chat header — clean, integrated */}
         {/* Chat header — clean, integrated */}
         <View className="mb-3 flex-row items-center gap-3 rounded-lg border border-border/50 bg-card p-4 shadow-soft">
           {canGoBack ? (
@@ -231,7 +222,7 @@ function ChatThread({
         {!canChat ? (
           <View
             className="rounded-2xl border border-border bg-card px-4 py-3"
-            style={{ marginBottom: insets.bottom + 8 }}
+            style={{ marginBottom: composerBottom }}
           >
             <Text className="text-center text-[12.5px] text-muted-foreground">
               Messaging opens once your coach confirms you.

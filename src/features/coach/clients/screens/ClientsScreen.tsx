@@ -136,11 +136,15 @@ export function ClientsScreen() {
               {pendingCount > 0 ? ` · ${pendingCount} pending` : ""}
             </Text>
           </View>
+          {/* Glass, but tinted primary — the bg class alone sits behind the
+              glass material and comes out looking disabled. */}
           <GlassButton
             onPress={() => setShowInviteSheet(true)}
-            className="h-10 w-10 justify-center items-center rounded-full bg-primary shadow-soft active:opacity-85"
+            accessibilityLabel="Invite a client"
+            tint="--primary"
+            className="h-10 w-10 items-center justify-center rounded-full bg-primary shadow-soft active:opacity-85"
           >
-            <Text className="text-primary-foreground text-lg font-bold">+</Text>
+            <Text className="text-lg font-bold text-primary-foreground">+</Text>
           </GlassButton>
         </View>
 

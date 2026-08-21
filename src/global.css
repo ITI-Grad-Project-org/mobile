@@ -363,3 +363,24 @@
 @utility pb-screen {
   padding-bottom: 32px;
 }
+
+/* -------------------------------------------------------------------------
+   Bottom clearance for a screen whose LAST child is pinned (the AI composer).
+
+   Scroll content can be padded past the overlaying tab bar; a pinned pill
+   cannot — it sits where the column ends, which on iOS is underneath the bar.
+   So the SCREEN has to stop above it instead. Goes on the container that wraps
+   the KeyboardAvoidingView, never inside it: KAV derives its keyboard padding
+   from `frame.y + frame.height`, so shrinking that frame by the same amount it
+   pads below cancels out, and the pill still lands flush on the keyboard.
+
+   49pt bar + 34pt home indicator; the pill brings its own 8px gap. iOS only —
+   Android's shorter bar has not been reported as covering the composer, and
+   padding it there would open a gap under the pill instead.
+   ------------------------------------------------------------------------- */
+@utility pb-pinned-tabbar {
+  padding-bottom: 0px;
+  @media ios {
+    padding-bottom: 83px;
+  }
+}

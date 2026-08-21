@@ -7,25 +7,10 @@ import { bumpTenantEpoch } from "@/api/tenantEpoch";
 import { reconnectAiSocket } from "@/lib/aiSocket";
 import { reconnectChatSocket } from "@/lib/chatSocket";
 import { useSwitchTenantMutation } from "@/api/endpoints/auth.endpoints";
+import { readTokenPair } from "@/api/tokenPair";
 import { useAppDispatch, useAppSelector } from "@/store";
 import { setActiveTenant, setTenantSwitching } from "@/store/activeTenantSlice";
 import { saveTokens } from "@/store/authSlice";
-
-/**
- * The switch-tenant response is untyped on the server (no OpenAPI response
- * schema), so accept the shapes it could plausibly use rather than silently
- * skipping the token swap when the payload is nested or snake_cased.
- */
-function readTokenPair(res: any): { accessToken: string; refreshToken: string } | null {
-  for (const bag of [res, res?.tokens, res?.data, res?.data?.tokens]) {
-    const accessToken = bag?.accessToken ?? bag?.access_token;
-    const refreshToken = bag?.refreshToken ?? bag?.refresh_token;
-    if (typeof accessToken === "string" && typeof refreshToken === "string") {
-      return { accessToken, refreshToken };
-    }
-  }
-  return null;
-}
 
 export function useSwitchCoach() {
   const dispatch = useAppDispatch();

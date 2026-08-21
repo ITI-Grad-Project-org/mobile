@@ -20,6 +20,7 @@ import {
   useGetCustomerMembershipsQuery,
 } from '@/api/endpoints/auth.endpoints';
 import { hasCompletedProfile } from '@/shared/hooks/useProfileSetup';
+import { useTenantScopedToken } from '@/shared/hooks/useTenantScopedToken';
 import { useAiEvents } from '@/features/shared/assistant';
 import { useChatEvents } from '@/features/shared/messaging';
 
@@ -172,6 +173,10 @@ function AppContent() {
     setWasSwitching(tenantSwitching);
     if (tenantSwitching) setSplashDone(false);
   }
+
+  // A client whose token predates joining their coach carries no tenant, and
+  // every /client/me/* route rejects it. Re-scope before the screens read.
+  useTenantScopedToken();
 
   // One app-wide chat socket. It lives here rather than on the chat screens so
   // inbox rows and tab badges stay live from any tab.

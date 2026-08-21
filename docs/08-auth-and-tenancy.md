@@ -100,8 +100,8 @@ POST /auth[/customer]/reset-password    { …, password }  → done
 
 On cold start, `src/app/_layout.tsx` reads `accessToken` + `persona` from
 SecureStore and dispatches `setAuth` **without validating the token**. The first
-API call does the validating: a 401 triggers refresh, and a failed refresh
-triggers `forceLogout`.
+API call does the validating: a 401 triggers a refresh, and only a refresh the
+server *refuses* triggers `forceLogout` (§5).
 
 `setLoading(false)` runs in a `finally`, so `auth.loading` cannot stay stuck true
 for a signed-out user.
@@ -114,9 +114,9 @@ for a signed-out user.
 implementation, and it **joins concurrent callers**:
 
 ```ts
-let inFlight: Promise<boolean> | null = null;
+let inFlight: Promise<RefreshOutcome> | null = null;
 
-export function refreshAccessToken(): Promise<boolean> {
+export function refreshSession(): Promise<RefreshOutcome> {
   if (!inFlight) inFlight = doRefresh().finally(() => { inFlight = null; });
   return inFlight;
 }
@@ -126,27 +126,54 @@ This matters because the refresh token is **single-use**. A 401 from an RTK Quer
 request and a 401 from an in-flight file upload arriving together would otherwise
 each spend it, and the second would fail — logging out a user whose session was
 fine. Three call sites share this one promise: `baseApi`, `mediaUpload`, and the
-AI socket's auth recovery.
+AI socket's auth recovery. (`refreshAccessToken(): Promise<boolean>` still exists
+for the two callers that can't act on *why* it failed.)
 
 The refresh path itself is persona-dependent (`/auth/refresh` vs
 `/auth/customer/refresh`) and sends the **refresh token in the `Authorization`
 header**, not the body.
+
+### The outcome decides whether the session is over
+
+| `RefreshOutcome` | When | Effect |
+|---|---|---|
+| `refreshed` | new pair saved | retry the request |
+| `rejected` | refresh route answered 401/403, or there is no refresh token | `forceLogout()` — **the only path that signs a user out** |
+| `unavailable` | offline, timeout, 5xx, unreadable body | keep the session, surface the error |
+
+`unavailable` exists because a dropped connection says nothing about the session.
+Collapsing it into "failed" is what logged people out on a flaky network.
+
+### Token generation
+
+[`tokenGeneration.ts`](../src/api/tokenGeneration.ts) counts token pairs;
+`saveTokens` bumps it, so login, refresh and the tenant switch all count. The
+reauth wrapper reads it to tell a stale token apart from a refused one.
 
 ### The reauth wrapper
 
 [`baseApi.ts`](../src/api/baseApi.ts) → `baseQueryWithReauth`, in order:
 
 ```
-1. capture the current tenant epoch
+1. capture the tenant epoch, the token generation and the start time
 2. run the request
 3. epoch changed?      → discard the response (§7)
 4. 401 on a non-auth route?
-       refresh succeeded → retry once, re-check the epoch
-       refresh failed    → forceLogout()
+       generation moved while in flight → retry on the new token, no refresh
+       token was minted < 15s before the request started → it is the ROUTE
+           refusing this token, not an expiry: surface the error, no refresh
+       otherwise → refreshSession(), then the outcome table above
+5. still 401 after a retry? → surface it. A token minted seconds ago is not
+   evidence the session is over.
 ```
 
 Auth routes are excluded by URL match — a bad password must surface as a 401 to
 the login screen, not kick off a refresh.
+
+In `__DEV__`, a surviving 401 logs the rejected token's claims
+(`type`/`persona`/`role`/`tenant`/`exp`, decoded by [`jwt.ts`](../src/api/jwt.ts)).
+`"Invalid token type"` on `/client/me/*` means a token minted for the other
+surface, or one with no tenant — neither of which a refresh can fix.
 
 ### `forceLogout`
 
@@ -161,9 +188,22 @@ dispatch(baseApi.util.resetApiState());
 
 The guard makes a second 401 arriving after logout a no-op.
 
-> **Watch out:** any endpoint that reliably 401s will log the user out. That is
-> exactly why the unimplemented client-invitation routes are gated behind
-> `CLIENT_INVITATIONS_READY = false` instead of just failing quietly.
+> **Watch out:** an endpoint that reliably 401s no longer logs the user out, but
+> it still burns a refresh on the first hit of every fresh token and leaves the
+> screen in an error state. Don't call a route the current token can't satisfy:
+> that is why the unimplemented client-invitation routes are gated behind
+> `CLIENT_INVITATIONS_READY = false`, and why `useChatRole` refuses to call the
+> chat API of the surface the persona wasn't minted for.
+
+### Keeping a client's token tenant-scoped
+
+A customer who registered before joining a coach holds a token with **no tenant
+claim**, and every `/client/me/*` route rejects it once memberships arrive and
+the screens start reading — a valid session that 401s everywhere.
+[`useTenantScopedToken`](../src/shared/hooks/useTenantScopedToken.ts), mounted
+once in `src/app/_layout.tsx`, compares the token's tenant claim against the
+active tenant and re-scopes through `switch-tenant` (§6) when they disagree —
+once per tenant per session, non-blocking, never a logout on failure.
 
 ---
 

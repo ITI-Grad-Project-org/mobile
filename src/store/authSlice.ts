@@ -1,3 +1,4 @@
+import { markTokensCleared, markTokensRotated } from '@/api/tokenGeneration';
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import * as SecureStore from 'expo-secure-store';
 
@@ -56,6 +57,9 @@ export const saveTokens = async (
   if (email) {
     await SecureStore.setItemAsync('userEmail', email.toLowerCase().trim());
   }
+  // Login, refresh and the tenant switch all land here — so this is the one
+  // place that can tell the reauth wrapper the token it 401'd on is now old.
+  markTokensRotated();
 };
 
 export const clearTokens = async () => {
@@ -63,4 +67,5 @@ export const clearTokens = async () => {
   await SecureStore.deleteItemAsync('refreshToken');
   await SecureStore.deleteItemAsync('persona');
   await SecureStore.deleteItemAsync('userEmail');
+  markTokensCleared();
 };

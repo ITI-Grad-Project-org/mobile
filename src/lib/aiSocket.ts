@@ -1,5 +1,6 @@
 import { BASE_URL } from "@/api/config";
 import { refreshAccessToken } from "@/api/tokenRefresh";
+import { describeSocketError } from "@/lib/socketError";
 import type {
   AiAccepted,
   AiCompleted,
@@ -153,7 +154,7 @@ export async function connectAiSocket(): Promise<Socket | null> {
       void handleAuthFailure();
     });
     s.on("connect_error", (err) => {
-      if (__DEV__) console.warn("[ai] connect_error:", err?.message);
+      if (__DEV__) console.warn("[ai] connect_error:", describeSocketError(err));
       emitConnectionChange(false);
     });
 

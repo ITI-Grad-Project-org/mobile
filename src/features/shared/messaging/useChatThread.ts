@@ -59,6 +59,20 @@ export function useChatThread(clientId?: string, threadStatus?: string | null) {
 
   const messages = useMemo<Message[]>(() => query.data ?? [], [query.data]);
 
+  // Which read failed, and why. The screen only ever shows "couldn't load", and
+  // the two candidates here (a 403 from a relationship the server doesn't
+  // consider active, a 4xx from the paging params) are indistinguishable from
+  // the UI — so name them in Metro instead of guessing from the symptom.
+  const threadError = query.error;
+  useEffect(() => {
+    if (!__DEV__ || !threadError) return;
+    console.warn(
+      `[chat] thread read failed (${isCoach ? `coach/${clientId}` : "client/me"}` +
+        `${before ? `, before=${before}` : ""}):`,
+      JSON.stringify(threadError).slice(0, 400)
+    );
+  }, [threadError, isCoach, clientId, before]);
+
   const [sendMessageRest] = useSendMessageMutation();
   const [sendMyMessageRest] = useSendMyMessageMutation();
   const [markReadRest] = useMarkReadMutation();
@@ -260,6 +274,7 @@ export function useChatThread(clientId?: string, threadStatus?: string | null) {
     messages,
     isLoading: query.isLoading,
     isError: query.isError,
+    error: threadError,
     refetch: query.refetch,
     isFetching: query.isFetching,
 

@@ -266,6 +266,7 @@ Declared in `baseApi.tagTypes`:
 | `Activity` | `/client/me/activity` heat-map | **set/meal outcome mutations**, not completion |
 | `Analytics` | every `/analytics/*` route | program create/publish/reschedule/cancel |
 | `Conversations` · `Messages` | chat REST | patched directly by socket handlers |
+| `Billing` | `/billing/*` — the coach's own subscription | **nothing in the app** — invalidated by hand once a payment reports `succeeded` |
 
 ### Two tag conventions worth copying
 
@@ -291,6 +292,8 @@ activity recorded on another device.
 | `{ type: 'Invitations', id: 'MINE' }` | the client's own feed — spans tenants, so **not** tenant-keyed |
 | `{ type: 'Analytics', id: \`OVERVIEW-${tenantId}-${from}-${to}\` }` | windowed analytics |
 | `{ type: 'Analytics', id: \`LIST-${tenantId}\` }` | the blast-radius tag every analytics query also provides |
+| `{ type: 'Billing', id: \`ME-${tenantId}\` }` | the tenant's plan + entitlements |
+| `{ type: 'Billing', id: 'PLANS' }` | the plan catalogue — identical for every coach, so **not** tenant-keyed |
 
 `'MINE'` is the exception that proves the rule: `/client/me/invitations` and
 `/client/me/join-requests` answer across **all** of the client's tenants, so

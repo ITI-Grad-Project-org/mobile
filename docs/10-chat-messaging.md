@@ -123,8 +123,11 @@ so caches are keyed per tenant (house pattern).
 | Client | `sendMyMessage` | `POST /client/me/chat/messages` `{ body, clientMsgId? }` |
 | Client | `markMyRead` | `POST /client/me/chat/read` |
 
-All three read endpoints accept either a bare array or `{ messages }` /
-`{ conversations }` and normalise via `transformResponse`.
+All three read endpoints normalise through **`unwrapList`** (`src/api/pagination.ts`)
+like every other list read in the app — a bare array, or an envelope under
+`docs` / `data` / `items` / `results` / `records`. They used to guess a single
+key (`messages` / `conversations`) by hand, which silently yields `[]` for every
+other shape: an empty inbox that reads as "no clients yet" rather than as a bug.
 
 Tag types: `Conversations` (`LIST-${tenantId}`) and `Messages`
 (`${tenantId}:${clientId}`, or `${tenantId}:me` for the client). **The send
@@ -195,15 +198,16 @@ One socket for the whole app. Module-level state:
 | `socket` | the current instance, or `null` |
 | `connecting` | in-flight connect promise, so concurrent callers share one |
 | `authRetries` | auth-rebuild attempts, capped at `MAX_AUTH_RETRIES = 3` |
-| `recoveringAuth` | reentrancy guard — `error` and `connect_error` both fire for one rejection |
+| `recoveringAuth` | reentrancy guard — `error`, `connect_error` and `disconnect` all fire for one rejection |
+| `authCooldown` | timer held while the budget is spent; `connectChatSocket` no-ops until it fires |
 | `generation` | bumped by every explicit teardown, to invalidate superseded connects |
 
 ### Public API
 
 ```ts
 connectChatSocket(): Promise<Socket | null>   // idempotent
-disconnectChatSocket({ keepAuthRetries? }): void
-reconnectChatSocket({ keepAuthRetries? }): Promise<Socket | null>
+disconnectChatSocket({ keepAuthState? }): void
+reconnectChatSocket({ keepAuthState? }): Promise<Socket | null>
 getChatSocket(): Socket | null
 isChatConnected(): boolean
 onChatConnectionChange(fn): () => void        // connect/disconnect fan-out
@@ -211,6 +215,29 @@ onChatSocketChange(fn): () => void            // the INSTANCE was replaced
 emitAck<T>(event, payload): Promise<SocketAck<T>>
 emitFireAndForget(event, payload): void
 ```
+
+### `/chat` rejects AFTER the handshake — unlike the AI namespace
+
+Verified against the live gateway. The two namespaces fail differently, and
+every rule below follows from it:
+
+| Namespace | A bad/absent token produces |
+| --- | --- |
+| `/` (AI) | `connect_error` at the handshake — the socket never connects |
+| `/chat` | `connect`, then `error {"message":"Unauthorized"}`, then a server-side close (`disconnect("io server disconnect")`) |
+
+Consequences:
+
+1. **`connect` is not proof of anything on `/chat`** — a rejected attempt fires it
+   too. `authRetries` is therefore cleared by a timer (`AUTH_SETTLE_MS = 4000`)
+   that only counts a connection still up when it fires. Clearing on `connect`
+   made the 3-attempt cap unreachable.
+2. **socket.io never retries `"io server disconnect"`** (it deliberately treats a
+   server-initiated close as final). That reason is routed into
+   `handleAuthFailure()`; without it chat goes silently dead for the rest of the
+   session while every REST screen keeps working.
+3. `chatUi.connected` flickers true for the few ms before the kick. Harmless —
+   `useChatThread` just re-emits `conversation:join` on the next connect.
 
 ### `connectChatSocket` is idempotent — and must stay that way
 
@@ -230,26 +257,38 @@ connection. (This was a real bug; see §14.)
   `accessToken` from SecureStore on *every* connect attempt. `baseQueryWithReauth`
   may have rotated the token since construction, and socket.io would otherwise
   replay the dead one on every reconnect forever.
-- The socket never refreshes tokens itself. REST does that; the socket only
-  benefits from it.
+- **The socket refreshes the token itself from the second retry on** (via the
+  shared single-flight `refreshAccessToken`). It has no 401 to hang a refresh
+  off the way `baseQueryWithReauth` does, so a session restored from SecureStore
+  with an expired access token used to leave chat permanently dead while every
+  REST screen recovered silently. The first retry deliberately does *not*
+  refresh — a server restart needs no new token, and REST may already have
+  rotated one in.
 - No token in SecureStore ⇒ `connectChatSocket` resolves `null` and no socket is
   created.
 
 ### Auth recovery
 
 `error` and `connect_error` are matched against
-`/unauthor|forbidden|token|jwt|auth|401|403/i`:
+`/unauthor|forbidden|token|jwt|auth|401|403/i`; `disconnect("io server
+disconnect")` is treated as a rejection outright (see above).
 
-- **Auth-shaped** → `handleAuthFailure()`: wait `2^(n-1)` seconds, then rebuild
-  with a freshly-read token, up to 3 attempts, then give up quietly (REST still
-  works and will drive a real logout on its next 401).
-- **Anything else** (offline, server restart, DNS) → left entirely to socket.io's
-  own backoff (`reconnectionDelay` 1s → `reconnectionDelayMax` 10s). Hand-rolling
-  a reconnect there *cancels* that backoff and fights it.
+- **Auth-shaped** → `handleAuthFailure()`: wait `2^(n-1)` seconds, refresh the
+  token pair (attempts 2+), rebuild — up to `MAX_AUTH_RETRIES = 3`.
+- **Budget spent, or the refresh itself fails** → `startAuthCooldown()`: tear
+  down and stay down for `AUTH_COOLDOWN_MS = 60_000`, then start the whole budget
+  over. The cooldown is not optional: tearing the socket down notifies
+  `useChatEvents`, which re-runs and calls straight back into
+  `connectChatSocket()` — so without it the give-up *is* the next attempt and the
+  app hammers the gateway forever.
+- **Anything else** (offline, DNS, a client-side drop) → left entirely to
+  socket.io's own backoff (`reconnectionDelay` 1s → `reconnectionDelayMax` 10s).
+  Hand-rolling a reconnect there *cancels* that backoff and fights it.
 
-`handleAuthFailure`'s own rebuild passes `keepAuthRetries: true`, because
-`disconnectChatSocket` otherwise zeroes the counter — which would make the
-3-attempt budget unreachable and loop a permanently-bad token forever.
+`handleAuthFailure`'s own rebuild passes `keepAuthState: true`. Every *other*
+teardown (logout, tenant switch) is a fresh start and clears both the counter
+and the cooldown — otherwise a re-login would sit out the remainder of the
+previous session's cooldown.
 
 ### Teardown safety
 
@@ -610,6 +649,9 @@ the reasoning is lost.
 | Endless refetch of the client thread | badge and chat screen subscribed to one cache entry with different args; `forceRefetch` fired on any change | force only on a defined `before`; share `MESSAGES_PAGE_SIZE` |
 | Optimistic bubble vanished | `mergeMessages` dropped any `status` row lacking a `clientMsgId` | keep it until the server echoes the id |
 | REST fallback waited a full 8s after the socket died | `emitAck` only had the ack timeout | also reject on `disconnect` |
+| No real-time at all; REST kept working | `/chat` rejects *after* connect and closes server-side, which socket.io never retries — and `handleAuthFailure` rebuilt on the same expired token it had just been refused, while `connect` (which fires on a rejected attempt too) kept resetting the retry budget | route `"io server disconnect"` into recovery; refresh the token from retry 2; clear the budget from a settle timer, not from `connect` |
+| Give-up looped instead of giving up | `disconnectChatSocket()` zeroed `authRetries` and notified `useChatEvents`, which immediately reconnected | `authCooldown` latch + `keepAuthState` |
+| Thread replaced by "couldn't load" after loading fine | pages share one cache entry, so a failed *older-page* fetch flips `isError` for the whole thread | error state only when `messages.length === 0`; inline retry banner otherwise |
 | "Messaging opens once this relationship is active" on active clients | `canChat` read the **coach's own** membership status, which is synthesized from `/coach/me` and often absent | coach ungated on own status; per-thread `threadAllowsChat` |
 
 ---
@@ -619,6 +661,17 @@ the reasoning is lost.
 Not yet confirmed against a live server — check these first when something looks
 wrong on device:
 
+- **What `clientId` on a `ConversationSummary` actually is.** The whole app
+  assumes it is the client's USER id (`/(coach)/chat/[id]` is fed one from Home,
+  Check-ins, Reviews and the plan screens too — see
+  `useCoachHomeData.clientUserIds`). If `/chat/conversations` returned a
+  *membership* id instead, `GET /chat/conversations/:clientId/messages` answers
+  403 "No active relationship with client" and only the inbox route breaks.
+  The thread's error state now prints the server's message, so the device says
+  which it is.
+- **Whether `before` / `limit` are read at all.** Neither is declared in the
+  OpenAPI for either messages route, though 23 other routes do declare their
+  query params — so paging may be a silent no-op server-side.
 - The `conversation:updated` payload shape (`{ clientId, lastMessage }`).
 - That acks really are `{ ok, data }` / `{ ok, error }` on every emit.
 - Whether the server echoes `clientMsgId` on `message:new` to the sender (the

@@ -4,6 +4,7 @@ import { useChatThread } from "@/features/shared/messaging/useChatThread";
 import { sfx } from "@/lib/sfx";
 import { cn } from "@/lib/utils";
 import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
+import { describeQueryError } from "@/shared/utils/query";
 import { Icon } from "@/shared/ui/Icon";
 import { Pressable, Text, TextInput, View } from "@/tw";
 import { Image } from "@/tw/image";
@@ -40,6 +41,7 @@ export function ConversationScreen({ clientId }: { clientId: string }) {
     messages,
     isLoading,
     isError,
+    error,
     refetch,
     loadEarlier,
     hasEarlier,
@@ -56,6 +58,13 @@ export function ConversationScreen({ clientId }: { clientId: string }) {
 
   const [input, setInput] = useState("");
   const canSend = canChat && input.trim().length > 0;
+
+  // A failed read only owns the screen when there is nothing else to show.
+  // Paging backwards writes into the SAME cache entry as the first page, so a
+  // failed older-page fetch used to replace a perfectly good thread with
+  // "couldn't load this conversation".
+  const blankedByError = isError && messages.length === 0;
+  const errorDetail = isError ? describeQueryError(error) : "";
 
   const onSend = () => {
     if (!canSend) return;
@@ -120,11 +129,16 @@ export function ConversationScreen({ clientId }: { clientId: string }) {
           <View className="flex-1 items-center justify-center">
             <ActivityIndicator />
           </View>
-        ) : isError ? (
+        ) : blankedByError ? (
           <View className="flex-1 items-center justify-center gap-y-3 px-8">
             <Text className="text-center text-[13.5px] text-muted-foreground">
               Couldn&apos;t load this conversation.
             </Text>
+            {errorDetail ? (
+              <Text className="text-center text-[12px] text-muted-foreground/80">
+                {errorDetail}
+              </Text>
+            ) : null}
             <Pressable
               onPress={() => refetch()}
               className="rounded-full bg-primary px-4 py-2 active:opacity-85"
@@ -140,6 +154,16 @@ export function ConversationScreen({ clientId }: { clientId: string }) {
           </View>
         ) : (
           <View className="flex-1 px-3">
+            {isError ? (
+              <Pressable
+                onPress={() => refetch()}
+                className="mt-2 rounded-xl border border-border bg-card px-3 py-2 active:opacity-80"
+              >
+                <Text className="text-center text-[12px] text-muted-foreground">
+                  {errorDetail || "Couldn't load older messages."} Tap to retry.
+                </Text>
+              </Pressable>
+            ) : null}
             <MessageList
               messages={messages}
               mySide={mySide}

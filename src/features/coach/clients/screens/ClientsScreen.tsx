@@ -1,6 +1,7 @@
 import { useGetClientsQuery } from "@/api/endpoints/clients.endpoints";
 import { useListInvitationsQuery } from "@/api/endpoints/invitations.endpoints";
 import { useListTenantJoinRequestsQuery } from "@/api/endpoints/joinRequests.endpoints";
+import { useEntitlements } from "@/features/coach/billing";
 import { useCheckinReviews } from "@/features/coach/checkins/hooks/useCheckinReviews";
 import {
   toRosterClients,
@@ -96,6 +97,15 @@ export function ClientsScreen() {
   const totalClientsCount = clientList.length;
   const pendingCount = pendingInvitations.length + pendingRequests.length;
 
+  // Plan usage. `activeClientCount` is the server's own count of ACTIVE
+  // memberships, which is not the same as clientList.length — the roster
+  // includes paused clients, and only active ones consume a seat.
+  const entitlements = useEntitlements();
+  const seatLabel =
+    entitlements.isReady && entitlements.activeClientLimit !== null
+      ? `${entitlements.activeClientCount} / ${entitlements.activeClientLimit} on your plan`
+      : null;
+
   // Filter client roster
   const filteredClients = clientList.filter((c: any) => {
     const cObj = c.client || c;
@@ -122,6 +132,7 @@ export function ClientsScreen() {
             <Text className="text-[26px] font-bold tracking-tight text-foreground">Clients</Text>
             <Text className="text-[13.5px] text-muted-foreground mt-0.5">
               {totalClientsCount} total client{totalClientsCount !== 1 ? "s" : ""}
+              {seatLabel ? ` · ${seatLabel}` : ""}
               {pendingCount > 0 ? ` · ${pendingCount} pending` : ""}
             </Text>
           </View>
@@ -374,6 +385,10 @@ export function ClientsScreen() {
           visible={showInviteSheet}
           tenantId={tenantId}
           existingClientEmails={existingClientEmails}
+          // Only lock once we have a real answer — a spurious "limit reached"
+          // on a coach with room is worse than briefly offering a form the
+          // server would refuse. The sheet handles that 403 either way.
+          limitReached={entitlements.isReady && !entitlements.canAddActiveClient}
           onClose={() => setShowInviteSheet(false)}
         />
       ) : null}

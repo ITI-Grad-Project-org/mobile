@@ -1,6 +1,6 @@
 # 09 — The Data Layer
 
-Everything under `src/api/`: one RTK Query api, 23 endpoint modules, three
+Everything under `src/api/`: one RTK Query api, 24 endpoint modules, three
 different multipart conventions, a retrying uploader, and the defensive reads that
 exist because this backend's responses are not always the shape you expect.
 
@@ -24,7 +24,7 @@ src/api/
 ├── imagePrep.ts       client-side downscale before upload
 ├── mediaUpload.ts     native multipart uploader with retry + reauth
 ├── client.ts          legacy axios instance + uploadImage/uploadDocument
-└── endpoints/         23 modules, each injecting into baseApi
+└── endpoints/         24 modules, each injecting into baseApi
 ```
 
 ---
@@ -35,7 +35,7 @@ src/api/
 export const baseApi = createApi({
   reducerPath: 'api',
   baseQuery: baseQueryWithReauth,
-  tagTypes: [ /* 28 tags — see doc 04 §9 */ ],
+  tagTypes: [ /* 29 tags — see doc 04 §9 */ ],
   endpoints: () => ({}),          // features inject their own
 });
 ```
@@ -77,6 +77,7 @@ crossing between them.
 | `chat` | conversations, messages, read receipts | custom `serializeQueryArgs` |
 | `activity` | `/client/me/activity` heat-map | omit `year` for a rolling 365 days |
 | `upload` | `DELETE /upload/{key}` + re-exports the legacy uploaders | |
+| `billing` | coach's own CoachHub subscription: plans, `/billing/me`, checkout, payment status | `createCheckout` has **no** `invalidatesTags` — only a succeeded payment moves the plan |
 
 ### The shape of an endpoint module
 

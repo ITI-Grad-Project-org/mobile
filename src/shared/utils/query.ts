@@ -48,3 +48,26 @@ export function isHardError(query: QueryStatus): boolean {
   const status = (query.error as FetchBaseQueryError | undefined)?.status;
   return status !== 400 && status !== 404;
 }
+
+/**
+ * The server's own words for a failed read.
+ *
+ * A bare "Couldn't load" is undiagnosable on device — "No active relationship
+ * with client" or "Network request failed" tells the user (and whoever reads
+ * the bug report) which of the two it was. Returns "" when the error carries
+ * nothing worth showing, so callers can render their generic copy alone.
+ */
+export function describeQueryError(error: unknown): string {
+  if (!error || typeof error !== "object") return "";
+  const e = error as { status?: unknown; data?: any; error?: unknown };
+
+  // Nest sends `message`, sometimes as an array of validation failures.
+  const message = e.data?.message ?? e.data?.error;
+  const text = Array.isArray(message) ? message.join(", ") : message;
+  if (typeof text === "string" && text.trim()) return text.trim();
+
+  // FETCH_ERROR / PARSING_ERROR / TIMEOUT_ERROR carry their detail here.
+  if (typeof e.error === "string" && e.error.trim()) return e.error.trim();
+
+  return typeof e.status === "number" ? `Request failed (${e.status}).` : "";
+}

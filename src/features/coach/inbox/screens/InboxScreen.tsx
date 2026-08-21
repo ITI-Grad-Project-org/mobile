@@ -3,6 +3,7 @@ import { clientName, formatThreadTime } from "@/features/shared/messaging/format
 import type { ConversationSummary } from "@/features/shared/messaging/types";
 import { cn } from "@/lib/utils";
 import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
+import { describeQueryError } from "@/shared/utils/query";
 import { Icon } from "@/shared/ui/Icon";
 import { Pressable, ScrollView, Text, TextInput, View } from "@/tw";
 import { Image } from "@/tw/image";
@@ -32,6 +33,7 @@ export function InboxScreen() {
     data: conversations,
     isLoading,
     isError,
+    error,
     refetch,
   } = useGetConversationsQuery({ tenantId: tenantId! }, { skip: !tenantId });
 
@@ -120,6 +122,11 @@ export function InboxScreen() {
             <Text className="text-[13.5px] text-muted-foreground">
               Couldn&apos;t load your conversations.
             </Text>
+            {describeQueryError(error) ? (
+              <Text className="px-8 text-center text-[12px] text-muted-foreground/80">
+                {describeQueryError(error)}
+              </Text>
+            ) : null}
             <Pressable
               onPress={() => refetch()}
               className="rounded-full bg-primary px-4 py-2 active:opacity-85"

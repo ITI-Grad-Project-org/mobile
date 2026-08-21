@@ -1,10 +1,18 @@
+import { useLazyGetMyBillingQuery } from "@/api/endpoints/billing.endpoints";
 import {
   useApproveJoinRequestMutation,
   useRejectJoinRequestMutation,
 } from "@/api/endpoints/joinRequests.endpoints";
+import {
+  isForbidden,
+  messageForBillingError,
+  serverMessage,
+} from "@/features/coach/billing";
 import { Card } from "@/shared/ui/Card";
 import { Icon } from "@/shared/ui/Icon";
 import { Pressable, Text, View } from "@/tw";
+import { router } from "expo-router";
+import { useState } from "react";
 import { ActivityIndicator } from "react-native";
 
 interface JoinRequestCardProps {
@@ -15,22 +23,52 @@ interface JoinRequestCardProps {
 export function JoinRequestCard({ request, tenantId }: JoinRequestCardProps) {
   const [approveJoinRequest, { isLoading: isApproving }] = useApproveJoinRequestMutation();
   const [rejectJoinRequest, { isLoading: isRejecting }] = useRejectJoinRequestMutation();
+  const [fetchBilling] = useLazyGetMyBillingQuery();
+
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  /** The failure was the plan's active-client limit, not a permission problem. */
+  const [blockedByPlan, setBlockedByPlan] = useState(false);
 
   const isBusy = isApproving || isRejecting;
 
+  /**
+   * Approving is where the backend enforces the active-client limit — this is
+   * the last gate before a membership goes active, and a join request can
+   * easily outlive the room that existed when it arrived.
+   *
+   * This used to swallow every error, which made a limit-reached 403 look like
+   * a button that simply didn't work.
+   */
   const handleApprove = async () => {
+    setErrorMsg(null);
+    setBlockedByPlan(false);
+
     try {
       await approveJoinRequest({ id: request.id, tenantId }).unwrap();
-    } catch {
-      // Error handles automatically via RTK Query cache invalidation
+    } catch (err: any) {
+      if (isForbidden(err)) {
+        // A fresh /billing/me is the authoritative way to tell a limit 403 from
+        // an RBAC 403 — the error body carries no code to distinguish them.
+        const fresh = await fetchBilling({ tenantId }).unwrap().catch(() => null);
+        if (fresh?.canAddActiveClient === false) {
+          setBlockedByPlan(true);
+          setErrorMsg(
+            serverMessage(err) ??
+              "You've reached the active-client limit on your plan."
+          );
+          return;
+        }
+      }
+      setErrorMsg(messageForBillingError(err));
     }
   };
 
   const handleReject = async () => {
+    setErrorMsg(null);
     try {
       await rejectJoinRequest({ id: request.id, tenantId }).unwrap();
-    } catch {
-      // Error handles automatically via RTK Query cache invalidation
+    } catch (err: any) {
+      setErrorMsg(messageForBillingError(err));
     }
   };
 
@@ -68,6 +106,41 @@ export function JoinRequestCard({ request, tenantId }: JoinRequestCardProps) {
           <Text className="text-[12px] text-foreground italic" numberOfLines={2}>
             {`"${request.message}"`}
           </Text>
+        </View>
+      ) : null}
+
+      {errorMsg ? (
+        <View
+          className={
+            blockedByPlan
+              ? "flex-row items-start gap-x-2 rounded-xl bg-sun/15 p-2.5 border border-sun/30"
+              : "flex-row items-start gap-x-2 rounded-xl bg-destructive/10 p-2.5 border border-destructive/20"
+          }
+        >
+          <Icon
+            name="alert-triangle"
+            size={15}
+            color={blockedByPlan ? "--sun-ink" : "--destructive"}
+          />
+          <View className="flex-1 gap-y-1.5">
+            <Text
+              className={
+                blockedByPlan
+                  ? "text-[12.5px] font-medium text-sun-ink"
+                  : "text-[12.5px] font-medium text-destructive"
+              }
+            >
+              {errorMsg}
+            </Text>
+            {blockedByPlan ? (
+              // Straight to the billing screen rather than an UpgradeSheet:
+              // these cards render in a list, and a Modal per card would mean N
+              // mounted sheets each subscribing to the billing queries.
+              <Pressable onPress={() => router.push("/(coach)/billing")}>
+                <Text className="text-[12.5px] font-bold text-primary">See plans</Text>
+              </Pressable>
+            ) : null}
+          </View>
         </View>
       ) : null}
 

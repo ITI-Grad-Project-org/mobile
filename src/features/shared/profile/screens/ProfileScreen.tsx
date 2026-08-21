@@ -15,6 +15,7 @@ import {
 } from "@/api/endpoints/profile.endpoints";
 import { useGetPublicReviewsSummaryQuery } from "@/api/endpoints/reviews.endpoints";
 import { useGetTenantMeQuery } from "@/api/endpoints/tenant.endpoints";
+import { planDisplayName, planHint, useEntitlements } from "@/features/coach/billing";
 import { MeasurementsSummaryCard } from "@/features/client/progress";
 import { disconnectAiSocket } from "@/lib/aiSocket";
 import { disconnectChatSocket } from "@/lib/chatSocket";
@@ -91,6 +92,7 @@ function CoachProfile() {
     { skip: !tenantId }
   );
   const { data: tenant } = useGetTenantMeQuery();
+  const entitlements = useEntitlements();
 
   const openEdit = () => {
     router.push({
@@ -161,7 +163,21 @@ function CoachProfile() {
   const coachRows: SettingsRow[] = [
     { icon: "sparkles", label: "AI knowledge base" },
     { icon: "palette", label: "Branding", hint: tenant?.name || "Logo, colors" },
-    { icon: "credit-card", label: "Billing & payouts", hint: "Not available yet" },
+    {
+      icon: "credit-card",
+      // "Subscription", not "Billing & payouts": this is the coach's own
+      // CoachHub plan. Coach-to-client payouts don't exist in V1, and the old
+      // label promised them.
+      label: "Subscription",
+      hint: entitlements.isReady
+        ? planHint(
+            planDisplayName(entitlements.plan),
+            entitlements.activeClientCount,
+            entitlements.activeClientLimit
+          )
+        : null,
+      onPress: () => router.push("/(coach)/billing"),
+    },
     {
       icon: "bell",
       label: "Notifications",

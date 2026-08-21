@@ -13,6 +13,8 @@ export default function CoachLayout() {
         <Stack.Screen name="renewals" />
         <Stack.Screen name="at-risk" />
         <Stack.Screen name="reviews" />
+        <Stack.Screen name="billing/index" />
+        <Stack.Screen name="billing/result" />
         <Stack.Screen name="check-ins/index" />
         <Stack.Screen name="check-ins/[clientId]" />
         <Stack.Screen name="plans/training/[programId]/index" />

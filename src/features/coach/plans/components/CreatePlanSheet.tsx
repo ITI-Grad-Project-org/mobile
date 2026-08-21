@@ -1,7 +1,9 @@
 import { DASHBOARD_URL } from "@/api/config";
+import { useEntitlements } from "@/features/coach/billing";
 import { GlassButton } from "@/shared/ui/GlassButton";
 import { Icon } from "@/shared/ui/Icon";
 import { Pressable, Text, View } from "@/tw";
+import { router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { useState } from "react";
 import { Modal } from "react-native";
@@ -20,10 +22,16 @@ interface CreatePlanSheetProps {
  */
 export function CreatePlanSheet({ visible, onClose }: CreatePlanSheetProps) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const entitlements = useEntitlements();
 
   // No URL configured for this build: the sheet still explains itself, it just
   // has nowhere to send anyone.
   const canOpenDashboard = DASHBOARD_URL.length > 0;
+
+  // Only shown when it's actionable. On Solo/Studio this sheet reads exactly as
+  // it did before — its job is explaining where authoring lives, and a second
+  // message would dilute that.
+  const showAiUpsell = entitlements.isReady && !entitlements.aiPlanBuilderEnabled;
 
   const handleClose = () => {
     setErrorMsg(null);
@@ -78,6 +86,25 @@ export function CreatePlanSheet({ visible, onClose }: CreatePlanSheetProps) {
               to review day by day.
             </Text>
           </View>
+
+          {/* The AI plan builder is a paid entitlement enforced server-side on
+              POST /ai/plan-suggestions — the dashboard will refuse it, so say so
+              before the coach gets there. */}
+          {showAiUpsell ? (
+            <Pressable
+              onPress={() => {
+                handleClose();
+                router.push("/(coach)/billing");
+              }}
+              className="mt-3 flex-row items-center gap-x-3 rounded-2xl border border-sun/30 bg-sun/15 p-3.5 active:opacity-85"
+            >
+              <Icon name="sparkles" size={16} color="--sun-ink" />
+              <Text className="flex-1 text-[12.5px] leading-4 font-medium text-sun-ink">
+                AI plan building needs a Solo or Studio plan.
+              </Text>
+              <Icon name="chevron-right" size={14} color="--sun-ink" />
+            </Pressable>
+          ) : null}
 
           {errorMsg ? (
             <View className="mt-4 flex-row items-start gap-x-2 rounded-xl border border-destructive/20 bg-destructive/10 p-3">

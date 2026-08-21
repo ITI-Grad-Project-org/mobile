@@ -85,7 +85,17 @@ wins — fix the doc in the same PR.
 - Plan AUTHORING lives in the web dashboard: the app reads plans and links out to
   EXPO_PUBLIC_DASHBOARD_URL (empty = every such link hides). The builder endpoints
   exist and are typed but are not surfaced in mobile UI.
-- Not in scope: push/SMS, live payment, scheduling, agentic AI, marketplace.
+- BILLING is built: the COACH's own CoachHub subscription (Free/Solo/Studio via
+  Paymob), at src/features/coach/billing + /(coach)/billing. NOT coach-to-client
+  payments — those don't exist. Paymob's redirect target is configured server-side
+  as a WEB page, so nothing returns into the app: checkout opens in a WebBrowser
+  and the result screen POLLS `/billing/payments/:id`. A dismissed browser, a
+  Paymob success screen and `success=true` are all worthless as proof. Gate UI on
+  `plan` (effective), never `storedPlan`. Client-limit and AI-builder 403s are
+  enforced server-side AT ACTIVATION, so every gate also handles a live 403.
+- Not in scope: push/SMS, scheduling, agentic AI, marketplace, coach-to-client
+  payments. Billing V1 has no recurring charge, cancellation, refund, invoice or
+  proration — never write copy implying an automatic monthly charge.
 - Client invitation routes are dormant behind `CLIENT_INVITATIONS_READY = false` —
   they 401 server-side, and a 401 escalates to a full logout.
 

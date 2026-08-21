@@ -130,6 +130,14 @@ export const baseApi = createApi({
     'Analytics',
     'Conversations',
     'Messages',
+    /**
+     * The coach's own CoachHub subscription: the plan catalogue, the tenant's
+     * effective plan + entitlements, and individual Paymob payment attempts.
+     * Nothing the app does invalidates this directly — a plan only changes when
+     * Paymob's webhook reaches the backend — so the result screen invalidates
+     * `ME-<tenantId>` by hand once an attempt reports `succeeded`.
+     */
+    'Billing',
   ],
   endpoints: () => ({}),
 });

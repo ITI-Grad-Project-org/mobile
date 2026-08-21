@@ -1042,3 +1042,86 @@ export interface SurvivalPoint {
   week: number;
   survivingPct: number; // monotonically non-increasing
 }
+
+// ---------------------------------------------------------------------------
+// Billing — the COACH's own CoachHub subscription (/billing/*).
+//
+// This is NOT coach-to-client payments; CoachHub does not collect or manage
+// those in V1. A subscription belongs to ONE tenant, not globally to every
+// tenant a coach owns, so a tenant switch means reloading all of it.
+//
+// The backend owns price, currency, duration, tenant and payment status. The
+// app never sends any of them, and never treats the Paymob browser redirect as
+// proof of payment — only GET /billing/payments/:id and GET /billing/me are
+// trusted.
+// ---------------------------------------------------------------------------
+export type SubscriptionPlan = 'free' | 'solo' | 'studio';
+
+export type PaymentAttemptStatus = 'pending' | 'succeeded' | 'failed';
+
+/** One row of the plan catalogue. Render from these values — never hardcode a
+ *  price or a limit, and key rows by `plan`, never by array position. */
+export interface BillingPlan {
+  plan: SubscriptionPlan;
+  displayName: string;
+  /** In cents. Divide by 100 for display only; never send it back. */
+  priceCents: number;
+  currency: 'EGP';
+  /** null on Free, which has no expiry. */
+  durationDays: number | null;
+  /** null means UNLIMITED — not zero and not unknown. */
+  activeClientLimit: number | null;
+  aiPlanBuilderEnabled: boolean;
+}
+
+export interface BillingSummary {
+  /**
+   * Effective plan after applying the expiry rule. THIS is what gates UI —
+   * badges, features, limits, actions. There is no scheduled job flipping an
+   * expired tenant to Free; the backend derives this on every read.
+   */
+  plan: SubscriptionPlan;
+  /**
+   * The raw plan stored on the tenant, which can still say 'studio' long after
+   * it expired. Only ever used to explain WHY access dropped ("your Studio plan
+   * expired on ..."). Never gate on this.
+   */
+  storedPlan: SubscriptionPlan;
+  /** ISO timestamp for a paid plan, otherwise null. */
+  subscriptionExpiresAt: string | null;
+  isPaidSubscriptionActive: boolean;
+  /** Only memberships whose backend status is `active` are counted. */
+  activeClientCount: number;
+  /** 3 on Free, 20 on Solo, null (unlimited) on Studio. */
+  activeClientLimit: number | null;
+  /** Backend-calculated. Can be false while `activeClientCount` still exceeds
+   *  the limit — an expired tenant keeps its existing clients. */
+  canAddActiveClient: boolean;
+  aiPlanBuilderEnabled: boolean;
+}
+
+/** The ONLY field the checkout accepts. The backend rejects unknown fields, so
+ *  never add amount, currency, tenantId, coachId or status. `free` cannot be
+ *  purchased. */
+export interface CreateCheckoutRequest {
+  plan: Exclude<SubscriptionPlan, 'free'>;
+}
+
+export interface CreateCheckoutResponse {
+  /** CoachHub UUID — the trusted handle for polling this payment. Save it
+   *  BEFORE leaving the app for Paymob. */
+  paymentAttemptId: string;
+  /** A complete Paymob hosted-checkout URL. Opaque: never parse it, rebuild it,
+   *  append to it, or log it. */
+  checkoutUrl: string;
+}
+
+export interface PaymentAttempt {
+  id: string;
+  plan: Exclude<SubscriptionPlan, 'free'>;
+  amountCents: number;
+  currency: 'EGP';
+  status: PaymentAttemptStatus;
+  paidAt: string | null;
+  createdAt: string;
+}

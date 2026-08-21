@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { Icon, type IconName } from "@/shared/ui/Icon";
 import { Pressable, SafeAreaView, Text, View, useCSSVariable } from "@/tw";
 
-import { formatPrice } from "../lib/money";
+import { formatPrice } from "@/lib/money";
 
 export interface StickyActionBarProps {
   /**

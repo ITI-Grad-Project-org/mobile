@@ -2,7 +2,7 @@ import { Modal } from "react-native";
 
 import { Pressable, SafeAreaView, Text, View } from "@/tw";
 
-import { formatPrice, formatPriceRange } from "../lib/money";
+import { formatPrice, formatPriceRange } from "@/lib/money";
 
 /**
  * What the price block opens: the coach's full range rather than just the

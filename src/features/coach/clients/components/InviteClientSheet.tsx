@@ -4,9 +4,17 @@ import { UpgradeSheet, isForbidden, serverMessage } from "@/features/coach/billi
 import { cn } from "@/lib/utils";
 import { GlassButton } from "@/shared/ui/GlassButton";
 import { Icon } from "@/shared/ui/Icon";
-import { Pressable, Text, TextInput, View } from "@/tw";
+import { Pressable, ScrollView, Text, TextInput, View } from "@/tw";
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform } from "react-native";
+import {
+  ActivityIndicator,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  useWindowDimensions,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface InviteClientSheetProps {
   visible: boolean;
@@ -54,6 +62,8 @@ export function InviteClientSheet({
   limitReached = false,
   onClose,
 }: InviteClientSheetProps) {
+  const insets = useSafeAreaInsets();
+  const { height: screenHeight } = useWindowDimensions();
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -62,6 +72,22 @@ export function InviteClientSheet({
   const [blockedByPlan, setBlockedByPlan] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [upgradeMessage, setUpgradeMessage] = useState<string | null>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      (e) => setKeyboardHeight(e.endCoordinates.height)
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => setKeyboardHeight(0)
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const [fetchBilling] = useLazyGetMyBillingQuery();
   const [createInvitation, { isLoading }] = useCreateInvitationMutation();
@@ -265,7 +291,7 @@ export function InviteClientSheet({
           onPress={handleSubmit}
           disabled={!canSubmit}
           className={cn(
-            "mt-3 flex-row justify-center items-center gap-x-2 rounded-2xl bg-primary py-3.5 shadow-soft active:opacity-90",
+            "mt-3 mb-3 flex-row justify-center items-center gap-x-2 rounded-2xl bg-primary py-3.5 shadow-soft active:opacity-90",
             !canSubmit && "opacity-50"
           )}
         >
@@ -298,12 +324,25 @@ export function InviteClientSheet({
         behavior={isIOS ? "padding" : undefined}
       >
         <Pressable className="absolute inset-0 bg-black/40" onPress={handleClose} />
-        <View className="w-full overflow-hidden bg-card rounded-t-3xl shadow-pop px-5 pt-3 pb-10">
+        <View
+          className="w-full overflow-hidden bg-card rounded-t-3xl shadow-pop px-5 pt-3"
+          style={{
+            maxHeight: screenHeight * 0.85,
+            paddingBottom:
+              Platform.OS === "android"
+                ? keyboardHeight > 0
+                  ? keyboardHeight + 20
+                  : Math.max(insets.bottom, 24)
+                : keyboardHeight > 0
+                ? 20
+                : Math.max(insets.bottom, 24),
+          }}
+        >
           {/* Handle */}
           <View className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-border" />
 
           {/* Header */}
-          <View className="flex-row items-center justify-between mb-4">
+          <View className="flex-row items-center justify-between mb-3">
             <View className="flex-1 pr-3">
               <Text className="text-[20px] font-bold text-foreground">
                 {atLimit ? "Client limit reached" : "Invite Client"}
@@ -322,7 +361,14 @@ export function InviteClientSheet({
             </GlassButton>
           </View>
 
-          {sentTo ? successView : atLimit ? limitView : formView}
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+            contentContainerStyle={{ paddingBottom: 20 }}
+          >
+            {sentTo ? successView : atLimit ? limitView : formView}
+          </ScrollView>
         </View>
       </KeyboardAvoidingView>
     </Modal>

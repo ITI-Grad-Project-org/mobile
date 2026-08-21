@@ -74,6 +74,27 @@ const assistantSlice = createSlice({
       state.busy = false;
     },
 
+    /**
+     * Apply the `ai.timed_out` advisory — but ONLY to a bubble that is still
+     * waiting.
+     *
+     * The advisory is fire-and-forget on the server's own timer, so it can (and
+     * does) arrive AFTER `ai.completed` already answered or failed the request.
+     * Applied unconditionally it overwrote a finished bubble's text with
+     * "Still thinking…" and put it back on the spinner — and because
+     * `ai.completed` had already cleared `busy`, the composer was showing Send
+     * rather than Stop, leaving no way out of a wait that was already over.
+     */
+    markSlowIfPending: (
+      state,
+      action: PayloadAction<{ requestId: string; text: string }>
+    ) => {
+      const msg = state.thread.find((m) => m.requestId === action.payload.requestId);
+      if (!msg || msg.state !== "thinking") return;
+      msg.state = "slow";
+      msg.text = action.payload.text;
+    },
+
     resolveMessage: (
       state,
       action: PayloadAction<{ requestId: string; text: string }>
@@ -109,7 +130,14 @@ const assistantSlice = createSlice({
      */
     failPending: (state, action: PayloadAction<string>) => {
       for (const msg of state.thread) {
-        if (msg.role === "assistant" && msg.state && msg.state !== "failed") {
+        // Terminal states are left alone: a bubble the user already stopped
+        // must not be relabelled "Connection lost" by a later disconnect.
+        if (
+          msg.role === "assistant" &&
+          msg.state &&
+          msg.state !== "failed" &&
+          msg.state !== "stopped"
+        ) {
           msg.state = "failed";
           msg.text = action.payload;
         }
@@ -148,6 +176,7 @@ export const {
   appendMessage,
   attachRequestId,
   failIfPending,
+  markSlowIfPending,
   resolveMessage,
   setMessageState,
   failPending,

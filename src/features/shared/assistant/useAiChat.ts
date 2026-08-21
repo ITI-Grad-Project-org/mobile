@@ -13,6 +13,7 @@ import {
   clearThread,
   failIfPending,
   failPending,
+  markSlowIfPending,
   resolveMessage,
   setBusy,
   setConnected,
@@ -211,10 +212,11 @@ export function useAiEvents() {
     };
 
     // Advisory only: ai-service is still working and a late answer still lands.
+    // Guarded in the reducer, because this fires on the server's own timer and
+    // routinely lands AFTER the answer did — unguarded it re-opened a finished
+    // bubble as "Still thinking…" with no Stop button to escape it.
     const onTimedOut = ({ requestId }: AiTimedOut) => {
-      dispatch(
-        setMessageState({ id: requestId, state: "slow", text: COPY.slow }),
-      );
+      dispatch(markSlowIfPending({ requestId, text: COPY.slow }));
     };
 
     const failInFlight = (text: string) => {
@@ -275,9 +277,26 @@ export function useAiEvents() {
  */
 export function useAiChat() {
   const dispatch = useAppDispatch();
-  const { thread, busy, connected, lastPrompt } = useAppSelector(
-    (s) => s.assistant,
+  const {
+    thread,
+    busy: protocolBusy,
+    connected,
+    lastPrompt,
+  } = useAppSelector((s) => s.assistant);
+
+  /**
+   * A spinner on screen with no Stop button is a trap, and `busy` alone can't
+   * prevent one: it tracks the PROTOCOL (cleared the moment `ai.completed`
+   * lands) while the spinner is driven by the BUBBLE's state, and any late
+   * event that reopens a bubble makes the two disagree. Taking the union means
+   * anything still visibly thinking is always stoppable — and, symmetrically,
+   * that a second ask can't be sent behind a bubble that never resolved.
+   */
+  const hasPending = thread.some(
+    (m) =>
+      m.role === "assistant" && (m.state === "thinking" || m.state === "slow"),
   );
+  const busy = protocolBusy || hasPending;
 
   const send = useCallback(
     async (raw: string, options: SendOptions = {}) => {
@@ -359,23 +378,22 @@ export function useAiChat() {
    * this does is give the user back their composer and stop the spinner.
    */
   const stop = useCallback(() => {
-    const pending = thread.find(
+    // Every pending bubble, not just the first: one ask at a time SHOULD make
+    // these equivalent, but a Stop that leaves a spinner behind is precisely
+    // the dead end this needs to be incapable of producing.
+    const pending = thread.filter(
       (m) =>
         m.role === "assistant" &&
         (m.state === "thinking" || m.state === "slow"),
     );
-    // Remember the id so a late `ai.completed` doesn't resurrect the answer.
-    if (pending?.requestId) abandoned.add(pending.requestId);
 
     clearAllTimers();
     inFlightPlaceholderId = null;
-    if (pending) {
+    for (const msg of pending) {
+      // Remember the id so a late `ai.completed` doesn't resurrect the answer.
+      if (msg.requestId) abandoned.add(msg.requestId);
       dispatch(
-        setMessageState({
-          id: pending.id,
-          state: "stopped",
-          text: COPY.stopped,
-        }),
+        setMessageState({ id: msg.id, state: "stopped", text: COPY.stopped }),
       );
     }
     dispatch(setBusy(false));

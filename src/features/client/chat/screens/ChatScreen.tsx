@@ -10,8 +10,8 @@ import { Pressable, Text, TextInput, View } from "@/tw";
 import { Image } from "@/tw/image";
 import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import { useRouter } from "expo-router";
-import { useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Platform } from "react-native";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const LIQUID_GLASS = isLiquidGlassAvailable();
@@ -85,9 +85,31 @@ function ChatThread({
     mySide,
   } = useChatThread();
 
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      (e) => setKeyboardHeight(e.endCoordinates.height)
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => setKeyboardHeight(0)
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
   const [input, setInput] = useState("");
-  // iOS sits the composer right on the home indicator; give it a little breathing room.
-  const composerBottom = Platform.OS === "ios" ? insets.bottom + 12 : 8;
+  // When keyboard is open, give comfortable breathing room above keyboard.
+  // When closed, lift above home indicator on iOS or tab bar.
+  const composerBottom = keyboardHeight > 0
+    ? 12
+    : Platform.OS === "ios"
+    ? insets.bottom + 12
+    : 8;
   const canSend = canChat && input.trim().length > 0;
 
   // Paging backwards writes into the same cache entry as the first page, so a
@@ -105,13 +127,23 @@ function ChatThread({
 
   return (
     <KeyboardAvoidingView
-      behavior="padding"
-      keyboardVerticalOffset={90}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
       style={{ flex: 1 }}
     >
       {/* No status-bar inset here: AppHeader already sits above this screen and
           consumes insets.top, so adding it again double-counts the notch. */}
-      <View className="flex-1 pt-2">
+      <View
+        className="flex-1 pt-2"
+        style={{
+          paddingBottom:
+            Platform.OS === "android"
+              ? keyboardHeight > 0
+                ? keyboardHeight + (insets.bottom > 0 ? insets.bottom : 8)
+                : 0
+              : 0,
+        }}
+      >
         {/* Chat header — clean, integrated */}
         <View className="mb-3 flex-row items-center gap-3 rounded-lg border border-border/50 bg-card p-4 shadow-soft">
           {canGoBack ? (

@@ -9,16 +9,29 @@ import { Icon } from "@/shared/ui/Icon";
 import { Pressable, Text, TextInput, View } from "@/tw";
 import { Image } from "@/tw/image";
 import { useRouter } from "expo-router";
-import { useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView } from "react-native";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 
 const LIQUID_GLASS = isLiquidGlassAvailable();
 
+/** Client avatar, falling back to a neutral placeholder when none is set. */
+function ClientAvatar({ url, className }: { url?: string; className: string }) {
+  if (!url) {
+    return (
+      <View className={cn("items-center justify-center bg-secondary", className)}>
+        <Icon name="user" size={14} color="--muted-foreground" />
+      </View>
+    );
+  }
+  return <Image source={{ uri: url }} className={className} />;
+}
+
 export function ConversationScreen({ clientId }: { clientId: string }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const canGoBack = router.canGoBack();
   const { tenantId } = useActiveTenant();
   const { data: clientData } = useGetClientQuery(
     { id: clientId, tenantId: tenantId! },
@@ -56,7 +69,31 @@ export function ConversationScreen({ clientId }: { clientId: string }) {
     mySide,
   } = useChatThread(clientId, status);
 
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      (e) => setKeyboardHeight(e.endCoordinates.height)
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => setKeyboardHeight(0)
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
   const [input, setInput] = useState("");
+  // When keyboard is open, give comfortable breathing room above keyboard.
+  // When closed, lift above system navigation bar / home indicator.
+  const composerBottom = keyboardHeight > 0
+    ? 12
+    : Platform.OS === "ios"
+    ? insets.bottom + 12
+    : Math.max(insets.bottom, 14) + 8;
   const canSend = canChat && input.trim().length > 0;
 
   // A failed read only owns the screen when there is nothing else to show.
@@ -75,52 +112,51 @@ export function ConversationScreen({ clientId }: { clientId: string }) {
   };
 
   return (
-    <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={90} style={{ flex: 1 }}>
-      <View className="flex-1 bg-background">
-        {/* Chat header — who you're talking to + back */}
-        <View className="flex-row items-center gap-x-3 px-4 py-3 border-b border-border">
-          {LIQUID_GLASS ? (
-            <GlassView
-              glassEffectStyle="regular"
-              isInteractive
-              style={{ width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" }}
-            >
-              <Pressable
-                onPress={() => router.back()}
-                className="h-full w-full items-center justify-center rounded-full active:opacity-70"
-                accessibilityLabel="Back"
-              >
-                <Icon name="chevron-left" size={22} color="--foreground" />
-              </Pressable>
-            </GlassView>
-          ) : (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+      style={{ flex: 1 }}
+    >
+      {/* No status-bar inset here: AppHeader already sits above this screen and
+          consumes insets.top, so adding it again double-counts the notch. */}
+      <View
+        className="flex-1 pt-2"
+        style={{
+          paddingBottom:
+            Platform.OS === "android"
+              ? keyboardHeight > 0
+                ? keyboardHeight + (insets.bottom > 0 ? insets.bottom : 8)
+                : 0
+              : 0,
+        }}
+      >
+        {/* Chat header — clean, integrated */}
+        <View className="mb-3 flex-row items-center gap-3 rounded-lg border border-border/50 bg-card p-4 shadow-soft">
+          {canGoBack ? (
             <Pressable
               onPress={() => router.back()}
-              className="h-9 w-9 -ml-1 items-center justify-center rounded-full bg-secondary active:opacity-70"
+              className="h-8 w-8 items-center justify-center rounded-full active:opacity-70"
               accessibilityLabel="Back"
             >
-              <Icon name="chevron-left" size={22} color="--foreground" />
+              <Icon name="chevron-left" size={16} color="--muted-foreground" />
             </Pressable>
-          )}
-          {avatarUrl ? (
-            <Image
-              source={{ uri: avatarUrl }}
-              className="h-11 w-11 rounded-full bg-secondary"
-            />
-          ) : (
-            <View className="h-11 w-11 items-center justify-center rounded-full bg-secondary">
-              <Icon name="user" size={20} color="--muted-foreground" />
-            </View>
-          )}
-          <View className="flex-1 min-w-0">
-            <Text className="text-[17px] font-bold text-foreground" numberOfLines={1}>
+          ) : null}
+          <ClientAvatar url={avatarUrl} className="h-10 w-10 rounded-full" />
+          <View className="min-w-0 flex-1">
+            <Text numberOfLines={1} className="text-[14.5px] font-semibold text-foreground">
               {fullName}
             </Text>
-            {subtitle ? (
-              <Text className="text-[12.5px] text-muted-foreground mt-0.5" numberOfLines={1}>
-                {subtitle}
+            <View className="flex-row items-center gap-1.5">
+              <View
+                className={cn(
+                  "h-1.5 w-1.5 rounded-full",
+                  connected ? "bg-success" : "bg-muted-foreground"
+                )}
+              />
+              <Text className="text-[11px] text-muted-foreground">
+                {otherTyping ? "Typing…" : connected ? subtitle || "Connected" : "Reconnecting…"}
               </Text>
-            ) : null}
+            </View>
           </View>
         </View>
 
@@ -153,11 +189,11 @@ export function ConversationScreen({ clientId }: { clientId: string }) {
             </Text>
           </View>
         ) : (
-          <View className="flex-1 px-3">
+          <View className="flex-1">
             {isError ? (
               <Pressable
                 onPress={() => refetch()}
-                className="mt-2 rounded-xl border border-border bg-card px-3 py-2 active:opacity-80"
+                className="rounded-xl border border-border bg-card px-3 py-2 active:opacity-80"
               >
                 <Text className="text-center text-[12px] text-muted-foreground">
                   {errorDetail || "Couldn't load older messages."} Tap to retry.
@@ -179,7 +215,10 @@ export function ConversationScreen({ clientId }: { clientId: string }) {
 
         {/* Chat needs a confirmed relationship — the server rejects the rest. */}
         {!canChat ? (
-          <View className="mx-4 mb-4 rounded-2xl border border-border bg-card px-4 py-3">
+          <View
+            className="rounded-2xl border border-border bg-card px-4 py-3"
+            style={{ marginBottom: composerBottom }}
+          >
             <Text className="text-center text-[12.5px] text-muted-foreground">
               Messaging opens once this coaching relationship is active.
             </Text>
@@ -200,18 +239,18 @@ export function ConversationScreen({ clientId }: { clientId: string }) {
                   onSubmitEditing={onSend}
                   placeholder={connected ? `Message ${firstName}…` : "Reconnecting…"}
                   placeholderTextColor="#7c7c85"
-                  className="min-w-0 flex-1 bg-transparent px-3 text-[15px] text-foreground h-11 py-0"
+                  className="min-w-0 flex-1 bg-transparent px-3 text-[14px] text-foreground h-12"
                 />
                 <Pressable
                   onPress={onSend}
                   disabled={!canSend}
                   className={cn(
-                    "h-11 w-11 justify-center items-center rounded-full bg-primary active:opacity-85",
+                    "h-9 w-9 justify-center items-center rounded-full bg-primary active:opacity-85",
                     !canSend && "opacity-40"
                   )}
                   accessibilityLabel="Send"
                 >
-                  <Icon name="send" size={18} color="#ffffff" />
+                  <Icon name="send" size={16} color="#ffffff" />
                 </Pressable>
               </>
             );
@@ -225,17 +264,16 @@ export function ConversationScreen({ clientId }: { clientId: string }) {
                   alignItems: "center",
                   gap: 8,
                   padding: 6,
-                  marginHorizontal: 16,
-                  borderRadius: 28,
-                  marginBottom: insets.bottom + 8,
+                  borderRadius: 9999,
+                  marginBottom: composerBottom,
                 }}
               >
                 {composerControls}
               </GlassView>
             ) : (
               <View
-                className="flex-row items-center gap-2 rounded-2xl border border-border/60 bg-card/80 p-1.5 mx-4 shadow-soft"
-                style={{ marginBottom: insets.bottom + 8 }}
+                className="flex-row items-center gap-2 rounded-full border border-border/60 bg-card/80 p-1.5 shadow-soft"
+                style={{ marginBottom: composerBottom }}
               >
                 {composerControls}
               </View>

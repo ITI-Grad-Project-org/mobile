@@ -61,16 +61,18 @@ export function WorkoutCompleteModal({
   const content = (
     <View className="flex-1 bg-card">
       {/* Header */}
-      <Tone name="mint" className={cn("px-5 pb-5", isIOS ? "pt-5" : "pt-10")} glass>
+      <Tone name="mint" className={cn("pl-5 pr-14 pb-5", isIOS ? "pt-5" : "pt-10")} glass>
         <GlassButton
           onPress={onClose}
+          disabled={isLoading}
+          hitSlop={12}
           accessibilityLabel="Close"
           className={cn(
-            "absolute right-4 h-9 w-9 rounded-full bg-black/20",
+            "absolute right-4 z-10 h-9 w-9 items-center justify-center rounded-full bg-black/30 active:bg-black/50",
             isIOS ? "top-4" : "top-9"
           )}
         >
-          <Icon name="x" size={16} color="--foreground" />
+          <Icon name="x" size={16} color="#ffffff" />
         </GlassButton>
         <Text className="text-[11px] font-semibold uppercase tracking-[0.16em] text-mint-ink opacity-80">
           Finish Workout

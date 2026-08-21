@@ -14,7 +14,6 @@ import {
   withRepeat,
   withTiming,
 } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MAX_PROMPT_LENGTH } from "../types";
 
 // Apple Liquid Glass is iOS 26+ only — fall back to a frosted pill elsewhere.
@@ -49,7 +48,6 @@ export function AssistantComposer({
   glowTone,
   accessory,
 }: Props) {
-  const insets = useSafeAreaInsets();
   const placeholderColor = useCSSVariable("--muted-foreground");
 
   const trimmed = value.trim();
@@ -134,7 +132,7 @@ export function AssistantComposer({
           and must not stretch over the accessory above it. */}
       <View
         className={cn("relative", !accessory && !tooLong && "mt-3")}
-        style={{ marginBottom: insets.bottom + 8 }}
+        style={{ marginBottom: 8 }}
       >
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, glowStyle]}>
           <Tone name={glowTone} className="h-full w-full rounded-full opacity-60" />

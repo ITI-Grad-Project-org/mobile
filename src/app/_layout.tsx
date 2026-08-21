@@ -2,7 +2,9 @@ import "@/global.css";
 import { router, Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useState } from "react";
-import { StatusBar, View } from "react-native";
+import { View } from "react-native";
+import { StatusBar } from "expo-status-bar";
+import { useColorScheme } from "nativewind";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Provider } from 'react-redux';
@@ -225,11 +227,13 @@ function AppContent() {
 
 
 export default function RootLayout() {
+  const { colorScheme } = useColorScheme();
+
   return (
     <Provider store={store}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
-          <StatusBar barStyle={"default"} />
+          <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
           <AppContent />
         </SafeAreaProvider>
       </GestureHandlerRootView>

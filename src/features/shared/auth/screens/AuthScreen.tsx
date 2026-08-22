@@ -36,7 +36,7 @@ import {
 } from "@/api/endpoints/profile.endpoints";
 import { useAppDispatch } from "@/store";
 import { setActiveTenant } from "@/store/activeTenantSlice";
-import { saveTokens, setAuth } from "@/store/authSlice";
+import { saveTokens, setAuth, setEnteringApp } from "@/store/authSlice";
 import { setMemberships } from "@/store/membershipsSlice";
 import * as SecureStore from "expo-secure-store";
 
@@ -157,71 +157,80 @@ export function AuthScreen({
     const userLname = user?.lastName || fallbackUser?.lname || lname.trim();
 
     const persona = activeRole === "coach" ? "coach" : "customer";
-    await saveTokens(accessToken, refreshToken, persona, userEmail);
-    await primeActiveTenant(persona);
 
-    let profileDone = false;
+    // Raise the branded splash for the whole entry: the tenant prime, the
+    // profile fetch and the redirect all happen behind it. Cleared in a
+    // `finally` so a throw anywhere below can never leave the overlay stuck up.
+    dispatch(setEnteringApp(true));
     try {
-      const serverProfile =
-        activeRole === "coach"
-          ? await fetchCoachProfile().unwrap()
-          : await fetchClientProfile().unwrap();
-      profileDone = profileLooksComplete(serverProfile, persona);
-    } catch (e) {
-      console.warn("Could not fetch server profile on login:", e);
-      profileDone = false;
-    }
+      await saveTokens(accessToken, refreshToken, persona, userEmail);
+      await primeActiveTenant(persona);
 
-    if (profileDone) {
-      await markProfileComplete();
-    } else {
-      await resetProfile();
-    }
-
-    dispatch(
-      setAuth({
-        userId: user?.id || "user-id",
-        persona,
-        profileCompleted: profileDone,
-      })
-    );
-
-    if (activeRole === "coach") {
-      if (profileDone) {
-        router.replace("/(coach)/(tabs)/home");
-      } else {
-        router.replace({
-          pathname: "/(setup)/coach-profile",
-          params: {
-            email: userEmail,
-            fname: userFname,
-            lname: userLname,
-          },
-        });
+      let profileDone = false;
+      try {
+        const serverProfile =
+          activeRole === "coach"
+            ? await fetchCoachProfile().unwrap()
+            : await fetchClientProfile().unwrap();
+        profileDone = profileLooksComplete(serverProfile, persona);
+      } catch (e) {
+        console.warn("Could not fetch server profile on login:", e);
+        profileDone = false;
       }
-    } else {
-      // Client flow: onboarding -> profile setup -> match-coach.
+
       if (profileDone) {
-        router.replace("/(client)/(tabs)/today");
-      } else if (!(await hasOnboarded(userEmail))) {
-        router.replace({
-          pathname: "/(onboarding)/onboarding",
-          params: {
-            email: userEmail,
-            fname: userFname,
-            lname: userLname,
-          },
-        });
+        await markProfileComplete();
       } else {
-        router.replace({
-          pathname: "/(setup)/client-profile",
-          params: {
-            email: userEmail,
-            fname: userFname,
-            lname: userLname,
-          },
-        });
+        await resetProfile();
       }
+
+      dispatch(
+        setAuth({
+          userId: user?.id || "user-id",
+          persona,
+          profileCompleted: profileDone,
+        })
+      );
+
+      if (activeRole === "coach") {
+        if (profileDone) {
+          router.replace("/(coach)/(tabs)/home");
+        } else {
+          router.replace({
+            pathname: "/(setup)/coach-profile",
+            params: {
+              email: userEmail,
+              fname: userFname,
+              lname: userLname,
+            },
+          });
+        }
+      } else {
+        // Client flow: onboarding -> profile setup -> match-coach.
+        if (profileDone) {
+          router.replace("/(client)/(tabs)/today");
+        } else if (!(await hasOnboarded(userEmail))) {
+          router.replace({
+            pathname: "/(onboarding)/onboarding",
+            params: {
+              email: userEmail,
+              fname: userFname,
+              lname: userLname,
+            },
+          });
+        } else {
+          router.replace({
+            pathname: "/(setup)/client-profile",
+            params: {
+              email: userEmail,
+              fname: userFname,
+              lname: userLname,
+            },
+          });
+        }
+      }
+    } finally {
+      dispatch(setEnteringApp(false));
     }
   };
 

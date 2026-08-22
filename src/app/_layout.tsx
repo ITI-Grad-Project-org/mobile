@@ -61,7 +61,7 @@ function AppContent() {
   }, [dispatch]);
 
 
-  const { isAuthenticated, persona } = useAppSelector((state) => state.auth);
+  const { isAuthenticated, persona, entering } = useAppSelector((state) => state.auth);
   const activeTenantId = useAppSelector((state) => state.activeTenant.tenantId);
   const tenantSwitching = useAppSelector((state) => state.activeTenant.switching);
 
@@ -174,6 +174,15 @@ function AppContent() {
     if (tenantSwitching) setSplashDone(false);
   }
 
+  // Same for a fresh login: the overlay goes up the moment the credentials are
+  // accepted and only fades once the destination screen has been routed to, so
+  // the login form never flashes back before the app appears.
+  const [wasEntering, setWasEntering] = useState(entering);
+  if (wasEntering !== entering) {
+    setWasEntering(entering);
+    if (entering) setSplashDone(false);
+  }
+
   // A client whose token predates joining their coach carries no tenant, and
   // every /client/me/* route rejects it. Re-scope before the screens read.
   useTenantScopedToken();
@@ -220,9 +229,9 @@ function AppContent() {
         <Stack.Screen name="my-profile" />
         <Stack.Screen name="coach/[tenantId]" />
       </Stack>
-      {(!splashDone || tenantSwitching) && (
+      {(!splashDone || tenantSwitching || entering) && (
         <AnimatedSplash
-          hold={tenantSwitching}
+          hold={tenantSwitching || entering}
           onFinish={() => setSplashDone(true)}
         />
       )}

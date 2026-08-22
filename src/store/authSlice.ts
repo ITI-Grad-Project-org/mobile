@@ -8,6 +8,13 @@ interface AuthState {
   persona: 'coach' | 'customer' | null;
   profileCompleted: boolean;
   loading: boolean;
+  /**
+   * True from the moment a login succeeds until the destination screen has been
+   * routed to. The root layout holds the branded splash over that window, which
+   * hides the tenant prime, the profile fetch and the redirect behind one
+   * animation instead of a flash of the auth screen and a half-loaded tab.
+   */
+  entering: boolean;
 }
 
 const initialState: AuthState = {
@@ -16,6 +23,7 @@ const initialState: AuthState = {
   persona: null,
   profileCompleted: false,
   loading: true,
+  entering: false,
 };
 
 const authSlice = createSlice({
@@ -35,14 +43,19 @@ const authSlice = createSlice({
       state.persona = null;
       state.profileCompleted = false;
       state.loading = false;
+      state.entering = false;
     },
     setLoading: (state, action: PayloadAction<boolean>) => {
       state.loading = action.payload;
     },
+    setEnteringApp: (state, action: PayloadAction<boolean>) => {
+      state.entering = action.payload;
+    },
   },
 });
 
-export const { setAuth, clearAuth, setLoading } = authSlice.actions;
+export const { setAuth, clearAuth, setLoading, setEnteringApp } =
+  authSlice.actions;
 export default authSlice.reducer;
 
 export const saveTokens = async (

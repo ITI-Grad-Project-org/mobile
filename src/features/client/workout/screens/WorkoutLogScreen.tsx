@@ -8,6 +8,7 @@ import {
   useSkipTrainingDayMutation,
   useStartOrResumeLogMutation,
 } from "@/api/endpoints/training.endpoints";
+import { plannedExerciseInfo } from "@/lib/plannedExercise";
 import { cn } from "@/lib/utils";
 import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import { Card } from "@/shared/ui/Card";
@@ -22,14 +23,21 @@ import {
 import { Pressable, ScrollView, Text, View } from "@/tw";
 import { Animated } from "@/tw/animated";
 import { router } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
+  ScrollView as RNScrollView,
+  useWindowDimensions,
+} from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  Easing,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withTiming,
 } from "react-native-reanimated";
 import { ExerciseRail } from "../components/ExerciseRail";
 import { RestDock } from "../components/RestDock";
@@ -41,7 +49,13 @@ import {
   useElapsedSeconds,
   useRestTimer,
 } from "../hooks/useRestTimer";
-import { formatWeight, fromKg, useWeightUnit, type WeightUnit } from "../lib/units";
+import {
+  MIN_WEIGHT,
+  formatWeight,
+  fromKg,
+  useWeightUnit,
+  type WeightUnit,
+} from "../lib/units";
 
 /** Past this much horizontal travel the card commits to the next exercise. */
 const SWIPE_THRESHOLD = 55;
@@ -58,6 +72,7 @@ interface NormalizedSet {
   target: string;
   serverDraft: SetDraft;
   serverLogged: boolean;
+  serverSkipped: boolean;
 }
 
 interface NormalizedExercise {
@@ -84,16 +99,68 @@ function repsTarget(set: any): string | null {
   return max && max !== min ? `${min}–${max}` : `${min}`;
 }
 
-function setTarget(set: any, unit: WeightUnit): string {
+function setTarget(prescribed: any, unit: WeightUnit): string {
   const parts: string[] = [];
-  const reps = repsTarget(set);
-  if (set?.weightKg !== undefined && set?.weightKg !== null) {
-    parts.push(`${formatWeight(fromKg(set.weightKg, unit))} ${unit}`);
+  const reps = repsTarget(prescribed);
+  if (prescribed?.weightKg !== undefined && prescribed?.weightKg !== null) {
+    parts.push(`${formatWeight(fromKg(prescribed.weightKg, unit))} ${unit}`);
   }
   if (reps) parts.push(`${reps} reps`);
-  if (set?.intensityValue) parts.push(`RPE ${set.intensityValue}`);
-  if (set?.durationSeconds) parts.push(`${set.durationSeconds}s`);
+  if (prescribed?.intensityValue) parts.push(`RPE ${prescribed.intensityValue}`);
+  if (prescribed?.durationSeconds) parts.push(`${prescribed.durationSeconds}s`);
   return parts.length ? parts.join(" · ") : "No target";
+}
+
+/** Does this look like a LOGGED set rather than a prescribed one? A logged set's
+ *  own `reps`/`weightKg` are what the client did, so they must never be read as
+ *  the coach's target — see UpdatePrescribedLoggedSetDto vs PrescribedSetDto. */
+function isLoggedSet(set: any): boolean {
+  return (
+    set?.outcome !== undefined ||
+    set?.actualReps !== undefined ||
+    set?.actualWeightKg !== undefined ||
+    set?.loggedReps !== undefined ||
+    set?.loggedWeightKg !== undefined
+  );
+}
+
+/**
+ * The prescription behind a set. A logged set wraps its prescribed set the way a
+ * logged exercise wraps its planned one (see lib/plannedExercise); the training
+ * responses carry no OpenAPI schema, so every known alias is tried before giving
+ * up and letting the caller fall back to the program day's own prescription.
+ */
+function prescriptionOf(set: any): any | null {
+  const nested =
+    set?.prescribedSet ?? set?.plannedSet ?? set?.programSet ?? set?.prescription;
+  if (nested) return nested;
+  return isLoggedSet(set) ? null : (set ?? null);
+}
+
+/** The prescribed sets of a planned exercise, whichever key the payload uses. */
+function plannedSetsOf(exercise: any): any[] {
+  const sets = exercise?.sets || exercise?.prescribedSets || exercise?.plannedSets;
+  return Array.isArray(sets) ? sets : [];
+}
+
+/**
+ * The program day's prescription for a logged exercise. Matched by id first —
+ * a logged exercise carries the planned one's id under one of several names —
+ * then by position, since both lists describe the same day in the same order.
+ */
+function matchPrescribed(planned: any[], item: any, index: number): any | null {
+  if (!Array.isArray(planned) || planned.length === 0) return null;
+  const ids = [
+    item?.plannedExerciseId,
+    item?.programExerciseId,
+    item?.prescribedExerciseId,
+    item?.exerciseId,
+    item?.exercise?.id,
+  ].filter(Boolean);
+  const byId = planned.find(
+    (p: any) => ids.includes(p?.id) || (p?.exerciseId && ids.includes(p.exerciseId))
+  );
+  return byId ?? planned[index] ?? null;
 }
 
 /** "Last time · 100 kg × 8, 8, 8", when the payload carries a previous session. */
@@ -122,27 +189,32 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
   const [completeError, setCompleteError] = useState<string | null>(null);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const setsScrollRef = useRef<RNScrollView>(null);
 
   // Local overrides so a tap on the check lands instantly; the server value is
   // the fallback for anything the client hasn't touched this session.
   const [draftOverrides, setDraftOverrides] = useState<Record<string, SetDraft>>({});
   const [loggedOverrides, setLoggedOverrides] = useState<Record<string, boolean>>({});
+  const [skippedOverrides, setSkippedOverrides] = useState<Record<string, boolean>>({});
 
   const { tenantId } = useActiveTenant();
+  const insets = useSafeAreaInsets();
   const unit = useWeightUnit();
   const rest = useRestTimer();
   const [sessionStartedAt] = useState(() => Date.now());
   const elapsed = useElapsedSeconds(sessionStartedAt);
 
-  const { data: dayQueryData } = useGetTrainingDayQuery(programDayId, {
-    skip: !programDayId,
-  });
+  const { data: dayQueryData } = useGetTrainingDayQuery(
+    { tenantId: tenantId ?? "", programDayId },
+    { skip: !tenantId || !programDayId }
+  );
 
   const [startOrResumeLog, { isLoading: isStarting }] = useStartOrResumeLogMutation();
 
-  const { data: logData, isLoading: isLogLoading } = useGetWorkoutLogQuery(logId ?? "", {
-    skip: !logId,
-  });
+  const { data: logData, isLoading: isLogLoading } = useGetWorkoutLogQuery(
+    { tenantId: tenantId ?? "", logId: logId ?? "" },
+    { skip: !tenantId || !logId }
+  );
 
   const [logSet] = useLogSetMutation();
   const [addExtraSet, { isLoading: isAddingExtra }] = useAddExtraSetMutation();
@@ -192,13 +264,68 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
   /** Read-only: a finalized log, or a day that can't be logged yet. */
   const isLocked = Boolean(logError) || Boolean(activeLog?.completedAt || activeLog?.finishedAt);
 
+  // The day's own prescription. `rawExercises` prefers the LOG payload once one
+  // exists, and a logged set carries actuals rather than the coach's numbers —
+  // so the targets have to be read back off the program day alongside it.
+  const prescribedExercises: any[] = useMemo(
+    () => dayData?.exercises || dayData?.prescribedExercises || [],
+    [dayData]
+  );
+
   const exercises: NormalizedExercise[] = useMemo(() => {
     return rawExercises.map((item: any, index: number) => {
       const sets: any[] = item?.sets || item?.loggedSets || [];
-      const details = [item?.exercise?.equipment, item?.exercise?.primaryMuscle]
+      const planned = matchPrescribed(prescribedExercises, item, index);
+      const plannedSets = plannedSetsOf(planned);
+      // Extra sets have no prescription, so they must not consume a planned slot
+      // and shift every prescribed set after them onto the wrong target.
+      let plannedCursor = 0;
+      // The prescribed exercise is flat (exerciseName, primaryMuscle, equipment[]);
+      // see lib/plannedExercise.
+      const info = plannedExerciseInfo(item, index);
+      const details = [info.equipment.join(", "), info.muscle]
         .filter(Boolean)
         .join(" · ");
-      const firstWorking = sets.find((s) => !s?.isExtra) ?? sets[0];
+      const normalizedSets: NormalizedSet[] = sets.map((set: any, setIndex: number) => {
+        const isExtra = Boolean(set?.isExtra || set?.isExtraSet);
+        // The set's own prescription when the payload nests one, otherwise the
+        // program day's set in the same slot.
+        const prescribed =
+          prescriptionOf(set) ?? (isExtra ? null : (plannedSets[plannedCursor] ?? null));
+        if (!isExtra) plannedCursor += 1;
+
+        // Prefill order: what was logged -> what the coach prescribed. A value
+        // is only ever `null` when neither exists, and the card blocks confirm.
+        const loggedWeight = set?.actualWeightKg ?? set?.loggedWeightKg;
+        const loggedReps = set?.actualReps ?? set?.loggedReps;
+        const prescribedReps =
+          prescribed?.repsMin ?? prescribed?.repsMax ?? prescribed?.reps ?? null;
+
+        const serverLogged = set?.outcome === "completed" || set?.outcome === "partial";
+        const serverDraft = draftFromKg(
+          loggedWeight ?? (isLoggedSet(set) ? set?.weightKg : null) ?? prescribed?.weightKg ?? null,
+          loggedReps ?? (isLoggedSet(set) ? set?.reps : null) ?? prescribedReps,
+          unit
+        );
+        // Nothing below one plate ever reaches the stepper: a missing weight, a
+        // prescribed 0, or a stored value under the floor all start at MIN_WEIGHT,
+        // which is also as low as the stepper itself goes.
+        if (serverDraft.weight === null || serverDraft.weight < MIN_WEIGHT[unit]) {
+          serverDraft.weight = MIN_WEIGHT[unit];
+        }
+
+        return {
+          id: set?.id || `${item?.id}-set-${setIndex}`,
+          setType: set?.setType || prescribed?.setType || "working",
+          isExtra,
+          target: setTarget(prescribed, unit),
+          serverDraft,
+          serverLogged,
+          serverSkipped: set?.outcome === "skipped",
+        };
+      });
+
+      const firstWorking = normalizedSets.find((s) => !s.isExtra) ?? normalizedSets[0];
 
       return {
         id: item?.id || `exercise-${index}`,
@@ -211,38 +338,28 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
           item?.prescribedExerciseId,
           item?.exerciseId,
           item?.exercise?.id,
-          exerciseNameKey(item?.exercise?.name || item?.name || ""),
+          exerciseNameKey(info.name),
         ].filter(Boolean) as string[],
-        name: item?.exercise?.name || item?.name || `Exercise ${index + 1}`,
+        name: info.name,
         detailChip: details || null,
-        targetChip: firstWorking ? setTarget(firstWorking, unit) : null,
+        // "No target" is the set card's own placeholder — as a chip it would just
+        // be a header that says nothing, so it is dropped instead.
+        targetChip:
+          firstWorking && firstWorking.target !== "No target" ? firstWorking.target : null,
         lastTime: lastTimeLine(item, unit),
-        coachNotes: item?.coachNotes || null,
-        restSeconds: item?.restSeconds ?? DEFAULT_REST_SECONDS,
-        sets: sets.map((set: any, setIndex: number) => {
-          // Prefill order: what was logged -> what the coach prescribed. A value
-          // is only ever `null` when neither exists, and the card blocks confirm.
-          const loggedWeight = set?.actualWeightKg ?? set?.loggedWeightKg;
-          const loggedReps = set?.actualReps ?? set?.loggedReps;
-          const prescribedReps = set?.repsMin ?? set?.repsMax ?? set?.reps ?? null;
-          return {
-            id: set?.id || `${item?.id}-set-${setIndex}`,
-            setType: set?.setType || "working",
-            isExtra: Boolean(set?.isExtra || set?.isExtraSet),
-            target: setTarget(set, unit),
-            serverDraft: draftFromKg(
-              loggedWeight ?? set?.weightKg ?? null,
-              loggedReps ?? prescribedReps,
-              unit
-            ),
-            serverLogged: set?.outcome === "completed" || set?.outcome === "partial",
-          };
-        }),
+        coachNotes: info.coachNotes || null,
+        restSeconds: item?.restSeconds ?? planned?.restSeconds ?? DEFAULT_REST_SECONDS,
+        sets: normalizedSets,
       };
     });
-  }, [rawExercises, unit]);
+  }, [rawExercises, prescribedExercises, unit]);
 
   const clampedIndex = Math.min(activeIndex, Math.max(0, exercises.length - 1));
+
+  // A new exercise starts at set 1 — don't inherit the previous one's scroll offset.
+  useEffect(() => {
+    setsScrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [clampedIndex]);
   const activeExercise = exercises[clampedIndex];
 
   const draftFor = useCallback(
@@ -253,21 +370,31 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
     (set: NormalizedSet) => loggedOverrides[set.id] ?? set.serverLogged,
     [loggedOverrides]
   );
+  const isSetSkipped = useCallback(
+    (set: NormalizedSet) => skippedOverrides[set.id] ?? set.serverSkipped,
+    [skippedOverrides]
+  );
+  /** Logged or skipped — either way the client is done with the set. */
+  const isSetResolved = useCallback(
+    (set: NormalizedSet) => isSetLogged(set) || isSetSkipped(set),
+    [isSetLogged, isSetSkipped]
+  );
 
   const railSegments = useMemo(
     () =>
-      exercises.map((exercise, index) => ({
-        label: `Ex ${index + 1}`,
+      exercises.map((exercise) => ({
+        label: exercise.name,
         progress: exercise.sets.length
-          ? exercise.sets.filter(isSetLogged).length / exercise.sets.length
+          ? exercise.sets.filter(isSetResolved).length / exercise.sets.length
           : 0,
       })),
-    [exercises, isSetLogged]
+    [exercises, isSetResolved]
   );
 
   const loggedCount = activeExercise?.sets.filter(isSetLogged).length ?? 0;
+  const skippedCount = activeExercise?.sets.filter(isSetSkipped).length ?? 0;
   const totalSets = activeExercise?.sets.length ?? 0;
-  const allLogged = totalSets > 0 && loggedCount === totalSets;
+  const allLogged = totalSets > 0 && loggedCount + skippedCount === totalSets;
   const isLastExercise = clampedIndex >= exercises.length - 1;
 
   // Mirror per-exercise completion into the map the Today checklist reads, so a
@@ -285,14 +412,17 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
     // client made by hand on Today just by opening this screen.
     const updates: Record<string, boolean> = {};
     exercises.forEach((exercise) => {
-      if (exercise.sets.length === 0 || !exercise.sets.every(isSetLogged)) return;
+      // Every set resolved, and at least one actually performed — an exercise
+      // whose sets were all skipped is finished, not done.
+      if (exercise.sets.length === 0 || !exercise.sets.every(isSetResolved)) return;
+      if (!exercise.sets.some(isSetLogged)) return;
       exercise.progressIds.forEach((id) => {
         updates[id] = true;
       });
     });
     if (Object.keys(updates).length === 0) return;
     mergeDayProgress(progressKey, updates);
-  }, [exercises, isSetLogged, progressKey, dayIso]);
+  }, [exercises, isSetLogged, isSetResolved, progressKey, dayIso]);
 
   const exerciseVolume = useMemo(() => {
     if (!activeExercise) return 0;
@@ -305,41 +435,85 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
   }, [activeExercise, draftFor, isSetLogged]);
 
   // ----- Swipe between exercises
+  const { width: screenWidth } = useWindowDimensions();
   const translateX = useSharedValue(0);
+  const settle = useCallback(() => {
+    translateX.set(withSpring(0, { damping: 22, stiffness: 190, mass: 0.7 }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Swap the content while it is off-screen, then bring it in from the far side. */
+  const applyIndex = useCallback(
+    (index: number, enterFrom: number) => {
+      setActiveIndex(index);
+      translateX.set(enterFrom * screenWidth * 0.4);
+      settle();
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [screenWidth, settle]
+  );
 
   const goToExercise = useCallback(
     (index: number) => {
-      if (index < 0 || index > exercises.length - 1) return;
-      setActiveIndex(index);
+      // Out of range (or already there): rubber-band back instead of sticking.
+      if (index < 0 || index > exercises.length - 1 || index === clampedIndex) {
+        settle();
+        return;
+      }
+      const exitTo = index > clampedIndex ? -1 : 1;
+      translateX.set(
+        withTiming(
+          exitTo * screenWidth * 0.4,
+          { duration: 140, easing: Easing.out(Easing.quad) },
+          (finished?: boolean) => {
+            "worklet";
+            if (finished) runOnJS(applyIndex)(index, -exitTo);
+          }
+        )
+      );
     },
-    [exercises.length]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [applyIndex, clampedIndex, exercises.length, screenWidth, settle]
   );
 
-  // The card tracks the drag and snaps back under the threshold.
+  // The card tracks the drag, resists at the ends, and hands off to goToExercise.
   const panGesture = useMemo(
-    () =>
-      Gesture.Pan()
+    () => {
+      const isFirst = clampedIndex === 0;
+      const isLast = clampedIndex >= exercises.length - 1;
+      return Gesture.Pan()
         .activeOffsetX([-12, 12])
         .failOffsetY([-14, 14])
         .onUpdate((event) => {
-          translateX.set(event.translationX);
+          const dx = event.translationX;
+          const atEdge = (dx > 0 && isFirst) || (dx < 0 && isLast);
+          translateX.set(atEdge ? dx * 0.3 : dx);
         })
         .onEnd((event) => {
-          if (event.translationX < -SWIPE_THRESHOLD) {
-            runOnJS(goToExercise)(clampedIndex + 1);
-          } else if (event.translationX > SWIPE_THRESHOLD) {
-            runOnJS(goToExercise)(clampedIndex - 1);
+          // A quick flick counts even when it never travels the full threshold.
+          const flick = Math.abs(event.velocityX) > 550;
+          const past = Math.abs(event.translationX) > SWIPE_THRESHOLD;
+          if (!flick && !past) {
+            translateX.set(withSpring(0, { damping: 22, stiffness: 190, mass: 0.7 }));
+            return;
           }
-          translateX.set(withSpring(0, { damping: 20, stiffness: 200 }));
-        }),
+          const forward = event.translationX < 0;
+          runOnJS(goToExercise)(clampedIndex + (forward ? 1 : -1));
+        });
+    },
     // translateX is a shared value — a stable identity, so it stays out of deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [clampedIndex, goToExercise]
+    [clampedIndex, exercises.length, goToExercise]
   );
 
-  const cardStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.get() }],
-  }));
+  const cardStyle = useAnimatedStyle(() => {
+    const x = translateX.get();
+    const travel = Math.min(1, Math.abs(x) / (screenWidth * 0.4));
+    return {
+      transform: [{ translateX: x }, { scale: 1 - travel * 0.04 }],
+      opacity: 1 - travel * 0.7,
+    };
+  });
 
   // ----- Actions
   const handleToggleSet = async (set: NormalizedSet) => {
@@ -357,6 +531,7 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
 
     // Optimistic: paint the completed state and start resting immediately.
     setLoggedOverrides((prev) => ({ ...prev, [set.id]: true }));
+    setSkippedOverrides((prev) => ({ ...prev, [set.id]: false }));
     setDraftOverrides((prev) => ({ ...prev, [set.id]: draft }));
     setSaveError(null);
     rest.start(activeExercise?.restSeconds ?? DEFAULT_REST_SECONDS);
@@ -375,6 +550,38 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
     } catch (err: any) {
       setLoggedOverrides((prev) => ({ ...prev, [set.id]: wasLogged }));
       setSaveError(err?.data?.message || "Couldn't save that set. It stays unlogged.");
+    }
+  };
+
+  /**
+   * Reports a prescribed set as not performed:
+   * PATCH /client/me/training/logs/{logId}/sets/{loggedSetId} with
+   * `outcome: "skipped"` — no reps or weight, since none were done.
+   */
+  const handleToggleSkipSet = async (set: NormalizedSet) => {
+    const wasSkipped = isSetSkipped(set);
+
+    if (wasSkipped) {
+      // Same as un-logging: `outcome` is required and has no empty state, so
+      // this only reopens the row locally until the client logs or skips it.
+      setSkippedOverrides((prev) => ({ ...prev, [set.id]: false }));
+      return;
+    }
+
+    setSkippedOverrides((prev) => ({ ...prev, [set.id]: true }));
+    setLoggedOverrides((prev) => ({ ...prev, [set.id]: false }));
+    setSaveError(null);
+
+    if (!logId) return;
+    try {
+      await logSet({
+        logId,
+        loggedSetId: set.id,
+        body: { outcome: "skipped" },
+      }).unwrap();
+    } catch (err: any) {
+      setSkippedOverrides((prev) => ({ ...prev, [set.id]: wasSkipped }));
+      setSaveError(err?.data?.message || "Couldn't skip that set. It stays open.");
     }
   };
 
@@ -547,7 +754,7 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
       </View>
 
       {/* Whole-workout overview */}
-      <View className="px-4 pb-3">
+      <View className="pb-3">
         <ExerciseRail
           segments={railSegments}
           activeIndex={clampedIndex}
@@ -592,6 +799,7 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
 
           {/* Sets */}
           <ScrollView
+            ref={setsScrollRef}
             className="flex-1"
             contentContainerClassName="px-4 pb-4 gap-y-2.5"
             showsVerticalScrollIndicator={false}
@@ -605,12 +813,15 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
                 target={set.target}
                 draft={draftFor(set)}
                 isLogged={isSetLogged(set)}
+                isSkipped={isSetSkipped(set)}
                 unit={unit}
                 disabled={isLocked}
                 onChange={(draft) =>
                   setDraftOverrides((prev) => ({ ...prev, [set.id]: draft }))
                 }
                 onToggleLogged={() => handleToggleSet(set)}
+                // Extra sets are removed, not skipped — they were never prescribed.
+                onToggleSkipped={set.isExtra ? undefined : () => handleToggleSkipSet(set)}
                 onRemove={set.isExtra ? () => handleRemoveSet(set.id) : undefined}
               />
             ))}
@@ -638,8 +849,16 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
         </Animated.View>
       </GestureDetector>
 
-      {/* Bottom dock */}
-      <View className="border-t border-border bg-card px-4 pt-3 pb-4 gap-y-2.5">
+      {/* Bottom dock — padded past the home indicator and the rounded screen
+          corners, which otherwise clip the status line and "Skip day". */}
+      <View
+        className="border-t border-border bg-card pt-3 gap-y-2.5"
+        style={{
+          paddingBottom: Math.max(insets.bottom, 12),
+          paddingLeft: Math.max(insets.left, 16),
+          paddingRight: Math.max(insets.right, 16),
+        }}
+      >
         {saveError ? (
           <View className="flex-row items-center gap-2 rounded-sm bg-destructive/10 px-3 py-2">
             <Icon name="alert-triangle" size={13} color="--destructive" />
@@ -699,7 +918,9 @@ export function WorkoutLogScreen({ programDayId }: WorkoutLogScreenProps) {
 
             <View className="flex-row items-center gap-2">
               <Text className="flex-1 text-[12px] text-muted-foreground">
-                {loggedCount} of {totalSets} sets logged · swipe to change exercise
+                {loggedCount} of {totalSets} sets logged
+                {skippedCount > 0 ? ` · ${skippedCount} skipped` : ""} · swipe to change
+                exercise
               </Text>
               <Pressable
                 onPress={handleSkipWorkout}

@@ -1,15 +1,14 @@
 import * as ImagePicker from "expo-image-picker";
 
-// Thin wrappers around expo-image-picker that return LOCAL file URIs.
-//
-// Nothing is uploaded here. The profile and measurement endpoints take
-// multipart/form-data and attach the files themselves, so the form holds local
-// URIs until save. Pre-uploading and storing the returned URL would make those
-// endpoints skip the file — a remote URL is a value to keep, not a file to send.
+import { prepareImages } from "@/api/imagePrep";
+
 
 const IMAGE_OPTIONS: ImagePicker.ImagePickerOptions = {
   mediaTypes: ["images"],
   quality: 0.7,
+  // Nothing renders EXIF, and dropping it sheds bytes along with the photo's
+  // embedded GPS coordinates.
+  exif: false,
 };
 
 /**
@@ -26,12 +25,16 @@ async function ensurePermission(): Promise<boolean> {
   return granted;
 }
 
-/** Pick a single image. */
-export async function pickSingleImage(): Promise<PickResult> {
+/**
+ * Pick a single image. `maxEdge` overrides the downscale cap — certificate
+ * scans are read rather than glanced at, so they keep more pixels than a photo.
+ */
+export async function pickSingleImage(maxEdge?: number): Promise<PickResult> {
   if (!(await ensurePermission())) return { status: "denied" };
   const res = await ImagePicker.launchImageLibraryAsync(IMAGE_OPTIONS);
   if (res.canceled || res.assets.length === 0) return { status: "cancelled" };
-  return { status: "ok", uris: [res.assets[0].uri] };
+  const [uri] = await prepareImages([res.assets[0].uri], { maxEdge });
+  return { status: "ok", uris: [uri] };
 }
 
 /** Pick one or more images. */
@@ -42,5 +45,5 @@ export async function pickMultipleImages(): Promise<PickResult> {
     allowsMultipleSelection: true,
   });
   if (res.canceled || res.assets.length === 0) return { status: "cancelled" };
-  return { status: "ok", uris: res.assets.map((a) => a.uri) };
+  return { status: "ok", uris: await prepareImages(res.assets.map((a) => a.uri)) };
 }

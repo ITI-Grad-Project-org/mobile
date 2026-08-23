@@ -16,13 +16,26 @@ const N = '/plans/nutrition/client-plans';
 export const nutritionPlansEndpoints = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     // ----- Plan level
-    listNutritionPlans: builder.query<any[], ListNutritionPlansQuery | void>({
-      query: (params) => ({ url: N, params: params ?? undefined }),
-      providesTags: ['NutritionPlans'],
+    // tenantId is never sent in the URL — the x-tenant-id header/JWT does the
+    // real scoping. It rides along in the args so the cache is keyed per tenant.
+    // The plain tags stay so the mutations below (which only know a planId)
+    // keep invalidating these entries.
+    listNutritionPlans: builder.query<
+      any[],
+      ListNutritionPlansQuery & { tenantId: string }
+    >({
+      query: ({ tenantId, ...params }) => ({ url: N, params }),
+      providesTags: (result, error, { tenantId }) => [
+        'NutritionPlans',
+        { type: 'NutritionPlans', id: `LIST-${tenantId}` },
+      ],
     }),
-    getNutritionPlan: builder.query<any, string>({
-      query: (planId) => `${N}/${planId}`,
-      providesTags: (result, error, planId) => [{ type: 'NutritionPlan', id: planId }],
+    getNutritionPlan: builder.query<any, { tenantId: string; planId: string }>({
+      query: ({ planId }) => `${N}/${planId}`,
+      providesTags: (result, error, { tenantId, planId }) => [
+        { type: 'NutritionPlan', id: planId },
+        { type: 'NutritionPlan', id: `${tenantId}:${planId}` },
+      ],
     }),
     createNutritionPlan: builder.mutation<any, CreateClientNutritionPlanDto>({
       query: (body) => ({ url: N, method: 'POST', body }),
@@ -174,10 +187,14 @@ export const nutritionPlansEndpoints = baseApi.injectEndpoints({
         { type: 'NutritionLog', id: `PLAN-${planId}` },
       ],
     }),
-    getNutritionDayLog: builder.query<any, { planId: string; dayId: string }>({
+    getNutritionDayLog: builder.query<
+      any,
+      { tenantId: string; planId: string; dayId: string }
+    >({
       query: ({ planId, dayId }) => `${N}/${planId}/days/${dayId}/log`,
-      providesTags: (result, error, { dayId }) => [
+      providesTags: (result, error, { tenantId, dayId }) => [
         { type: 'NutritionLog', id: `DAY-${dayId}` },
+        { type: 'NutritionLog', id: `${tenantId}:DAY-${dayId}` },
       ],
     }),
   }),

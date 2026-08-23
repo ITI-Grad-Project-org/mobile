@@ -1,16 +1,15 @@
 import { Feather } from "@expo/vector-icons";
+import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
-  Platform,
   TextInput as RNTextInput,
 } from "react-native";
-import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 
-import { hasOnboarded } from "@/shared/hooks/useOnboarding";
 import { cn } from "@/lib/utils";
+import { hasOnboarded } from "@/shared/hooks/useOnboarding";
 import { Pressable, SafeAreaView, ScrollView, Text, View, useCSSVariable } from "@/tw";
 
 const LIQUID_GLASS = isLiquidGlassAvailable();
@@ -64,9 +63,19 @@ export function VerifyScreen() {
         });
         return;
       }
-      router.replace(
-        (await hasOnboarded()) ? "/(client)/(tabs)/today" : "/(onboarding)/onboarding"
-      );
+      const onboarded = await hasOnboarded(params.email);
+      if (onboarded) {
+        router.replace("/(setup)/client-profile");
+      } else {
+        router.replace({
+          pathname: "/(onboarding)/onboarding",
+          params: {
+            email: params.email ?? "",
+            fname: params.fname ?? "",
+            lname: params.lname ?? "",
+          },
+        });
+      }
     }, 600);
   };
 
@@ -88,8 +97,9 @@ export function VerifyScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
       <KeyboardAvoidingView
+        behavior="padding"
+        keyboardVerticalOffset={10}
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView
           className="flex-1"

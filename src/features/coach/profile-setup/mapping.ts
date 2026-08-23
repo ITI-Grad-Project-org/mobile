@@ -1,7 +1,5 @@
 import type { ProfileData, Certificate } from "@/features/shared/setup";
-import type { UpdateCoachProfileArgs } from "@/api/endpoints/profile.endpoints";
 import type {
-  Certification,
   CoachProfileData,
   Gender,
   OfflineAvailability,
@@ -68,16 +66,28 @@ function makeId(): string {
   return Math.random().toString(36).slice(2, 9);
 }
 
-function uriList(v: unknown): string[] {
+export function uriList(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((u): u is string => typeof u === "string" && Boolean(u.trim())) : [];
 }
 
+/** The certificate rows the form is holding, empty ones dropped. */
+export function coachDataToCertificates(data: ProfileData): Certificate[] {
+  const rows = Array.isArray(data.certificates)
+    ? (data.certificates as Certificate[])
+    : [];
+  return rows.filter((c) => str(c.name) || str(c.image));
+}
+
 /**
- * Build the multipart payload for PATCH /coaches/me. Images are no longer
- * pre-uploaded to /upload/* — the endpoint takes the files directly, so this
- * just splits ProfileData into the JSON `data` part and the file URIs.
+ * The JSON `data` part of PATCH /coaches/me — TEXT FIELDS ONLY.
+ *
+ * `certifications` is deliberately absent: certificates are now managed one at
+ * a time through /coaches/me/certifications, and sending the array here would
+ * replace the server's list (dropping the ids granular deletion depends on).
+ * Avatar and transformation photos likewise have their own endpoints, so this
+ * request carries no files at all and stays small and fast.
  */
-export async function coachDataToDto(data: ProfileData): Promise<UpdateCoachProfileArgs> {
+export function coachDataToProfileFields(data: ProfileData): CoachProfileData {
   const genderLabel = firstChip(data.gender);
   const offlineLabel = firstChip(data.offline);
 
@@ -86,24 +96,6 @@ export async function coachDataToDto(data: ProfileData): Promise<UpdateCoachProf
         .map((l) => SPECIALTY_TO_ENUM[l])
         .filter((s): s is Specialty => Boolean(s))
     : undefined;
-
-  const rawCerts = Array.isArray(data.certificates)
-    ? (data.certificates as Certificate[])
-    : [];
-  const certifications: Certification[] = [];
-  // Index-aligned with `certifications` — the i-th file fills the i-th entry.
-  const certificateUris: (string | undefined)[] = [];
-  for (const c of rawCerts) {
-    const name = str(c.name);
-    const image = str(c.image);
-    if (!name && !image) continue; // skip empty rows
-    certifications.push({
-      name: name ?? "",
-      ...(c.issued ? { issueDate: c.issued } : {}),
-      ...(c.expires ? { expiryDate: c.expires } : {}),
-    });
-    certificateUris.push(image);
-  }
 
   const dto: CoachProfileData = {
     firstName: str(data.fname),
@@ -115,7 +107,6 @@ export async function coachDataToDto(data: ProfileData): Promise<UpdateCoachProf
     specialties: specialties && specialties.length ? specialties : undefined,
     yearsExperience: num(data.yoe),
     careerExperience: str(data.experience),
-    certifications: certifications.length ? certifications : undefined,
     portfolioUrl: str(data.portfolio),
     featuredReviews: str(data.reviews),
     bio: str(data.bio),
@@ -133,12 +124,7 @@ export async function coachDataToDto(data: ProfileData): Promise<UpdateCoachProf
     }
   });
 
-  return {
-    data: dto,
-    avatarUri: str(data.avatar),
-    transformationUris: uriList(data.transformations),
-    certificateUris,
-  };
+  return dto;
 }
 
 /** Reverse mapping — hydrate the SignupFlow from an existing coach profile. */
@@ -158,10 +144,13 @@ export function coachProfileToData(profile: any): ProfileData {
       : [],
     yoe: profile.yearsExperience != null ? String(profile.yearsExperience) : "",
     experience: profile.careerExperience ?? "",
+    // Keep the SERVER's id when there is one: it's what
+    // DELETE /coaches/me/certifications/{id} needs, and the only way the save
+    // can tell an existing certificate from a newly added row.
     certificates: Array.isArray(profile.certifications)
       ? profile.certifications.map((c: any): Certificate => ({
-          id: makeId(),
-          image: c.fileUrl ?? "",
+          id: c.id ?? c.certificationId ?? makeId(),
+          image: c.fileUrl ?? c.url ?? "",
           name: c.name ?? "",
           issued: c.issueDate ?? "",
           expires: c.expiryDate ?? "",

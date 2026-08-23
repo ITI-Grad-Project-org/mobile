@@ -69,7 +69,7 @@ export function NotificationsScreen() {
   return (
     <ScrollView
       className="flex-1 bg-background"
-      contentContainerClassName="gap-y-5 pt-5 pb-30"
+      contentContainerClassName="gap-y-5 pt-5 pb-screen"
       showsVerticalScrollIndicator={false}
     >
       <View className="flex-row items-start justify-between px-1">

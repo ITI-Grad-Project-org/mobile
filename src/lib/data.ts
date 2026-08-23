@@ -4,6 +4,8 @@ const U = (id: string, w = 600) =>
 
 export type Exercise = {
   id: string;
+  /** Library exercise id — lets a screen fetch the real instructions/demo on demand. */
+  exerciseId?: string;
   name: string;
   sets: number;
   reps: string;
@@ -15,7 +17,23 @@ export type Exercise = {
   videoUrl?: string;
   demoGifUrl?: string;
   demoVideoUrl?: string;
+  /** Coach's note on this prescribed exercise, when they left one. */
+  coachNotes?: string;
 };
+
+/**
+ * The demo media to animate for an exercise, in priority order, or "" when the
+ * coach never attached one. A `.gif` still image counts as its own demo.
+ */
+export function animatedSourceOf(ex: Exercise | null | undefined): string {
+  return (
+    ex?.gifUrl ||
+    ex?.demoGifUrl ||
+    ex?.videoUrl ||
+    ex?.demoVideoUrl ||
+    (typeof ex?.image === "string" && ex.image.endsWith(".gif") ? ex.image : "")
+  );
+}
 
 
 
@@ -169,15 +187,6 @@ export const exerciseLibrary = [
     tag: "Push",
     image: U("photo-1581009146145-b5ef050c2e1e", 200),
   },
-];
-
-// 18 weeks of streak intensity (0-4) for github-style grid
-export const streakGrid: number[] = [
-  0, 1, 2, 1, 0, 0, 2, 1, 3, 2, 4, 3, 0, 1, 2, 4, 3, 2, 1, 0, 2, 3, 4, 3, 2, 1,
-  0, 1, 2, 3, 4, 4, 2, 1, 0, 1, 2, 3, 3, 4, 2, 0, 2, 3, 4, 3, 2, 1, 0, 1, 2, 4,
-  4, 3, 2, 1, 3, 4, 4, 3, 2, 1, 2, 4, 3, 2, 1, 0, 2, 3, 4, 4, 3, 2, 1, 0, 1, 2,
-  3, 4, 3, 2, 0, 1, 3, 4, 3, 2, 1, 0, 2, 3, 4, 4, 3, 2, 1, 2, 4, 4, 3, 2, 1, 3,
-  4, 3, 2, 4, 3, 2, 1, 0, 1, 3, 4, 2, 1, 0, 2, 3, 4, 3, 2, 1, 2, 3,
 ];
 
 export const clientsList = [

@@ -13,7 +13,12 @@ export const directoryEndpoints = baseApi.injectEndpoints({
     }),
     getDirectoryCoach: builder.query<any, string>({
       query: (tenantId) => `/coaches/directory/${tenantId}`,
-      providesTags: (result, error, tenantId) => [{ type: 'Directory', id: tenantId }],
+      // Also 'CoachProfile': this payload carries the coach's `rating`, so a
+      // review write has to refresh it alongside the summary endpoint.
+      providesTags: (result, error, tenantId) => [
+        { type: 'Directory', id: tenantId },
+        { type: 'CoachProfile', id: tenantId },
+      ],
     }),
   }),
 });

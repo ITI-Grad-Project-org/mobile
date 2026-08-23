@@ -1,267 +1,480 @@
 import { cn } from "@/lib/utils";
-import { Card } from "@/shared/ui/Card";
+import { AvatarStack } from "@/shared/ui/AvatarStack";
 import { Icon } from "@/shared/ui/Icon";
-import { SectionTitle } from "@/shared/ui/SectionTitle";
-import { Pressable, ScrollView, Text, useCSSVariable, View } from "@/tw";
-import { Tone } from "@/tw/Tone";
-import { LinearGradient } from "expo-linear-gradient";
+import { Surface } from "@/shared/ui/Surface";
+import { todayIso } from "@/shared/utils/date";
+import { Pressable, ScrollView, Text, View, useCSSVariable } from "@/tw";
+import { router } from "expo-router";
+import { useCallback, useMemo } from "react";
+import { ActivityIndicator, RefreshControl } from "react-native";
 
-const triage = [
-  {
-    tone: "primary" as const,
-    icon: "alert-triangle" as const,
-    title: "Sarah hasn't logged in 4 days",
-    sub: "Attrition risk · last session Jun 22",
-    cta: "Reach out",
-  },
-  {
-    tone: "ink" as const,
-    icon: "message-square" as const,
-    title: "3 check-ins waiting for review",
-    sub: "Alex · Mia · Daniel",
-    cta: "Review",
-  },
-  {
-    tone: "sun" as const,
-    icon: "clock" as const,
-    title: "2 plans ending this week",
-    sub: "Renew before Sunday",
-    cta: "Renew",
-  },
-];
+import { useCoachReviews } from "@/features/coach/reviews";
+import { ActivityRow } from "../components/ActivityRow";
+import { AttentionRow } from "../components/AttentionRow";
+import { StatTile } from "../components/StatTile";
+import { WeekActivityChart } from "../components/WeekActivityChart";
+import { useClientAvatars } from "../hooks/useClientAvatars";
+import { useCoachHomeAnalytics } from "../hooks/useCoachHomeAnalytics";
+import { useCoachHomeData } from "../hooks/useCoachHomeData";
+import { useDismissedInsights } from "../hooks/useDismissedInsights";
 
-const feed = [
-  { name: "Alex Rivera", action: "completed Lower body day", time: "12m", color: "mint" },
-  { name: "Mia Chen", action: "submitted weekly check-in", time: "1h", color: "lilac" },
-  { name: "Daniel Park", action: "logged 5 km Zone 2 run", time: "2h", color: "sky" },
-  { name: "Sofia Reyes", action: "hit a new squat PR · 95 kg", time: "5h", color: "peach" },
-] as const;
+import { useRosterCheckins } from "../hooks/useRosterCheckins";
+import { useWeekActivity } from "../hooks/useWeekActivity";
+import {
+  buildInsight,
+  buildQueues,
+  type AttentionRowModel,
+} from "../lib/attentionQueues";
+import {
+  DEFAULT_ENDING_HORIZON_DAYS,
+  DEFAULT_RISK_THRESHOLD_DAYS,
+  formatMrrLines,
+  formatPctShort,
+  rangeLabel,
+} from "../lib/format";
 
-/** Monogram initials from a name — deterministic, always renders (unlike emoji). */
-function initials(name: string) {
-  return name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase() ?? "")
-    .join("");
-}
-
-const colorMap: Record<string, { bg: string; text: string }> = {
-  mint: { bg: "bg-mint", text: "text-mint-ink" },
-  lilac: { bg: "bg-lilac", text: "text-lilac-ink" },
-  sky: { bg: "bg-sky", text: "text-sky-ink" },
-  peach: { bg: "bg-peach", text: "text-peach-ink" },
-  sun: { bg: "bg-sun", text: "text-sun-ink" },
-};
+const HIT_SLOP = { top: 8, bottom: 8, left: 6, right: 6 };
 
 export function HomeScreen() {
   const primaryColor = (useCSSVariable("--primary") as string) || "#e5673a";
-  const peachColor = (useCSSVariable("--peach") as string) || "#f7a083";
+
+  const {
+    greeting,
+    firstName,
+    roster,
+    clientUserIds,
+    checkinTargets,
+    isFetching: identityFetching,
+    refetchAll,
+  } = useCoachHomeData();
+  const {
+    overview,
+    attention,
+    activity,
+    isLoading,
+    isFetching,
+    isError,
+    refetch,
+  } = useCoachHomeAnalytics();
+  const { dismiss, isDismissed } = useDismissedInsights();
+  const week = useWeekActivity();
+  // Activity rows carry no avatar — only membershipId — so faces are looked up
+  // from the client list this screen already fetches via useCoachHomeData.
+  const avatars = useClientAvatars();
+
+  // The check-in queue is REPLACED, not filtered.
+  //
+  // /analytics/attention reports on a check-in resource of its own — its rows
+  // carry `scheduledFor` and `daysWaiting`, which a measurement has no
+  // equivalent for — and core-api exposes no CRUD for it. It has no idea a
+  // measurement carries `reviewedAt`, so it goes on reporting a review as due
+  // long after one happened. Only /measurements/reviews/pending knows what is
+  // genuinely unreviewed, so that is the queue Home shows and counts.
+  const {
+    checkins,
+    hydrated: checkinsKnown,
+    refetch: refetchCheckins,
+  } = useRosterCheckins(checkinTargets);
+  const attentionQueue = useMemo(
+    () => (attention ? { ...attention, checkinsAwaitingReview: checkins } : undefined),
+    [attention, checkins]
+  );
+
+  // Reviews are their own resource — /analytics/attention knows nothing about
+  // them — so they reach the queue block as an option rather than through
+  // `attention`. "New" is the session's own watermark: nothing server-side
+  // records that a coach has read one. See seenReviews.
+  const reviews = useCoachReviews();
+  const { refetch: refetchReviews } = reviews;
+  const queues = useMemo(
+    () => buildQueues(attentionQueue, { checkinsKnown, newReviews: reviews.unseen }),
+    [attentionQueue, checkinsKnown, reviews.unseen]
+  );
+  const insight = useMemo(() => buildInsight(attentionQueue), [attentionQueue]);
+
+  const counts = overview?.attentionCounts;
+  // The badge comes from overview, never from the list lengths: the counts are
+  // the authority for the number (the lists can be server-capped) and both are
+  // computed at the same default thresholds, which is why nothing custom is
+  // passed to /attention.
+  //
+  // Summed defensively because attentionCounts has no response schema either —
+  // a key spelled differently would otherwise make the whole sum NaN and put
+  // "NaN" in the badge.
+  // counts.checkinsAwaitingReview is deliberately NOT summed: it counts the
+  // analytics check-in resource, which the badge would otherwise inflate with
+  // reviews that are already done. The real number is the queue's own length.
+  //
+  // New reviews are added to BOTH sides: they're a row in the block, so the
+  // badge has to count them, and adding them to only one side would make the
+  // cross-check below fire on every new review.
+  const countedTotal = counts
+    ? [counts.atRisk, counts.programsEndingSoon]
+      .filter((n) => typeof n === "number" && Number.isFinite(n))
+      .reduce((sum, n) => sum + n, 0) +
+    checkins.length +
+    reviews.unseen.length
+    : null;
+  const listTotal = attentionQueue
+    ? attentionQueue.atRisk.length +
+    attentionQueue.checkinsAwaitingReview.length +
+    attentionQueue.programsEndingSoon.length +
+    reviews.unseen.length
+    : null;
+  // Prefer the counts; fall back to the lists rather than showing nothing when
+  // the counts are absent.
+  const badgeTotal = countedTotal !== null ? countedTotal : listTotal;
+
+  if (__DEV__ && countedTotal !== null && listTotal !== null && countedTotal !== listTotal) {
+    console.warn(
+      `[HomeScreen] attentionCounts (${countedTotal}) disagrees with the attention lists ` +
+      `(${listTotal}). Check-ins are the same number on both sides, so this is at-risk or ` +
+      `ending-soon: either a custom threshold reached /attention, the lists are capped, ` +
+      `or a queue is spelled differently than normalizeAttention expects — check the ` +
+      `"[attention] top-level keys" log.`
+    );
+  }
+
+  const openClient = useCallback(
+    (membershipId: string | undefined) => {
+      const userId = membershipId ? clientUserIds.get(membershipId) : undefined;
+      // The chat route wants the client's user id. Without it, land on the
+      // roster rather than pushing a route that can't resolve.
+      if (userId) {
+        router.push({ pathname: "/(coach)/chat/[id]", params: { id: userId } });
+        return;
+      }
+      router.push("/(coach)/(tabs)/clients");
+    },
+    [clientUserIds]
+  );
+
+  const onRowAction = useCallback(
+    (row: AttentionRowModel) => {
+      // The whole quiet queue, not just the worst client's chat — a row that
+      // says "and 3 others have gone quiet" has to open all four.
+      if (row.key === "atRisk") return router.push("/(coach)/at-risk");
+      if (row.key === "checkins") return router.push("/(coach)/check-ins");
+      // Opening the list is also what marks the new ones read.
+      if (row.key === "reviews") return router.push("/(coach)/reviews");
+      // The whole ending-soon queue, not the Plans tab — the tab lists every
+      // plan and drops the end dates and completion that make this actionable.
+      return router.push("/(coach)/renewals");
+    },
+    []
+  );
+
+  const onRefresh = useCallback(() => {
+    refetch();
+    refetchAll();
+    // Not covered by either of the above: the check-in queue and the reviews
+    // list are each their own read.
+    refetchCheckins();
+    refetchReviews();
+  }, [refetch, refetchAll, refetchCheckins, refetchReviews]);
+
+  const mrrLines = formatMrrLines(overview?.mrr);
+  // Labelled from the window the hook actually requested, never from today —
+  // the window rolls, so "last 7 days" is the honest heading and the dates
+  // stay correct if the range ever becomes user-selectable.
+  const weekLabel = rangeLabel(week.range);
+  // Still overview-derived, and still sessions: the Adherence tile's sparkline
+  // is a per-day shape, not the activity count the week card shows.
+  const byDay = useMemo(() => overview?.thisWeek.byDay ?? [], [overview]);
+  const showInsight = insight !== null && !isDismissed(insight.key);
+
+  const refreshControl = (
+    <RefreshControl
+      refreshing={(isFetching || identityFetching) && !isLoading}
+      onRefresh={onRefresh}
+      tintColor={primaryColor}
+    />
+  );
+
+  const header = (
+    <View className="gap-0.75">
+      <Text className="text-[12.5px] text-muted-foreground">{greeting}</Text>
+      <Text className="font-display text-[28px] font-bold leading-[1.1] tracking-[-0.02em] text-foreground">
+        {firstName ? `Hey, ${firstName}` : "Hey there"}
+      </Text>
+    </View>
+  );
+
+  if (isError) {
+    // Every failure lands here, including a 404 — that means the tenant scoping
+    // is wrong, and rendering it as "nothing to show" would hide the bug.
+    return (
+      <ScrollView
+        className="flex-1 bg-background"
+        contentContainerClassName="gap-y-5 px-5 pt-5 pb-tabbar"
+        showsVerticalScrollIndicator={false}
+        refreshControl={refreshControl}
+      >
+        {header}
+        <Surface radius="lg" className="items-center gap-2 p-6">
+          <Icon name="alert-triangle" size={22} color="--danger" />
+          <Text className="text-[15px] font-semibold text-foreground">
+            Couldn&apos;t load your dashboard
+          </Text>
+          <Text className="text-center text-[12.5px] text-muted-foreground">
+            Check your connection and try again.
+          </Text>
+          <Pressable
+            onPress={onRefresh}
+            hitSlop={HIT_SLOP}
+            className="mt-1 rounded-full bg-primary px-3.5 py-2 active:opacity-85"
+          >
+            <Text className="text-[12.5px] font-semibold text-primary-foreground">
+              Try again
+            </Text>
+          </Pressable>
+        </Surface>
+      </ScrollView>
+    );
+  }
 
   return (
     <ScrollView
       className="flex-1 bg-background"
-      contentContainerClassName="gap-y-5 pt-5 pb-30"
+      contentContainerClassName="gap-y-5 px-5 pt-5 pb-tabbar"
       showsVerticalScrollIndicator={false}
+      refreshControl={refreshControl}
     >
-      {/* Header */}
-      <View className="flex-row items-center justify-between px-1">
-        <View className="min-w-0 flex-1">
-          <Text className="text-[13px] text-muted-foreground">Friday morning</Text>
-          <Text className="text-[26px] font-bold tracking-tight text-foreground mt-0.5">Hey, Marco</Text>
+      {header}
+
+      {isLoading ? (
+        <View className="items-center py-16">
+          <ActivityIndicator color={primaryColor} />
         </View>
-        <Tone
-          name="ink"
-          className="h-12 w-12 shrink-0 rounded-full items-center justify-center shadow-soft"
-        >
-          <Text className="text-[16px] font-bold text-ink-foreground">M</Text>
-        </Tone>
-      </View>
+      ) : (
+        <>
+          {/* Stat tiles */}
+          <View className="flex-row gap-2.25">
+            <StatTile
+              value={overview ? String(overview.roster.active) : null}
+              label="Active"
+            />
+            <StatTile
+              // null means no sessions were scheduled — not 0% adherence.
+              value={
+                overview && overview.sessionAdherencePct !== null
+                  ? formatPctShort(overview.sessionAdherencePct)
+                  : null
+              }
+              label="Adherence"
+              tone="success"
+              // The API has no per-day adherence series, so this traces the
+              // week's logged sessions — the only daily shape it does return.
+              sparkline={byDay.map((day) => day.sessions)}
+            />
+            <StatTile label="MRR" className="flex-[1.25]">
+              {mrrLines.length > 0 ? (
+                <View className="relative gap-0.5">
+                  {/* A map keyed by ISO 4217, not a total: there is no FX rate
+                      in the system, so one line each. Summing invents a number. */}
+                  {mrrLines.map((line) => (
+                    <Text
+                      key={line}
+                      className="text-[15px] font-semibold text-foreground"
+                    >
+                      {line}
+                    </Text>
+                  ))}
+                </View>
+              ) : (
+                <Text className="relative text-[21px] font-bold leading-none text-muted-foreground">
+                  —
+                </Text>
+              )}
+            </StatTile>
+          </View>
 
-      {/* KPI row */}
-      <View className="flex-row gap-x-2">
-        {[
-          { v: "24", l: "Active", tone: "" },
-          { v: "92%", l: "Adherence", tone: "text-success" },
-          { v: "$8.4k", l: "MRR", tone: "" },
-        ].map((k) => (
-          <Card key={k.l} className="flex-1 items-center justify-center py-4 px-1" glass>
-            <Text className={cn("text-[20px] font-black text-foreground", k.tone)}>{k.v}</Text>
-            <Text className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground mt-1">
-              {k.l}
-            </Text>
-          </Card>
-        ))}
-      </View>
-
-      {/* Triage */}
-      <View>
-        <SectionTitle
-          title="Needs you now"
-          action={
-            <Text className="text-[12px] text-muted-foreground bg-secondary/80 px-2 py-0.5 rounded-full font-semibold">
-              3
-            </Text>
-          }
-        />
-        <View className="gap-y-3">
-          {triage.map((t) => {
-            const isDarkTone = t.tone === "primary" || t.tone === "ink";
-            // Tone gradients: primary/ink are dark surfaces (need light text),
-            // sun is a light surface (needs its dark -ink text). Using
-            // text-foreground here reads dark-on-dark on primary/ink in light mode.
-            const titleColor = isDarkTone ? "text-white" : "text-sun-ink";
-            return (
-              <Card
-                key={t.title}
-                tone={t.tone}
-                glass
-                className="flex-row items-center gap-x-4 p-4"
+          {/* Roster strip */}
+          {roster.length > 0 && overview ? (
+            <View className="flex-row items-center gap-3 px-0.5">
+              <AvatarStack
+                people={roster}
+                max={3}
+                total={overview.roster.total}
+              />
+              <Text
+                className="text-[12.5px] text-muted-foreground"
+                numberOfLines={1}
               >
-                <View
-                  className={cn(
-                    "h-12 w-12 shrink-0 rounded-2xl justify-center items-center",
-                    isDarkTone ? "bg-white/15" : "bg-black/10",
-                  )}
-                >
-                  <Icon
-                    name={t.icon}
-                    size={20}
-                    color={isDarkTone ? "#ffffff" : "--sun-ink"}
-                  />
+                <Text className="font-semibold text-foreground">
+                  {overview.roster.active} active
+                </Text>
+                {` · ${overview.roster.paused} paused`}
+              </Text>
+            </View>
+          ) : null}
+
+          {/* Needs you now */}
+          <View className="gap-2.5">
+            <View className="flex-row items-center justify-between">
+              <Text className="text-[17px] font-semibold tracking-[-0.01em] text-foreground">
+                Needs you now
+              </Text>
+              {badgeTotal !== null ? (
+                <View className="h-6 min-w-6 items-center justify-center rounded-full bg-secondary px-2">
+                  <Text className="text-xs font-bold text-secondary-foreground">
+                    {badgeTotal}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+
+            {queues.allClear ? (
+              <Surface
+                radius="md"
+                glass
+                className="flex-row items-center gap-3 px-3.25 py-3"
+              >
+                <View className="h-7.5 w-7.5 shrink-0 items-center justify-center rounded-full bg-success/15">
+                  <Icon name="check" size={15} color="--success" />
                 </View>
                 <View className="min-w-0 flex-1">
-                  <Text className={cn("text-[14.5px] font-bold", titleColor)} numberOfLines={1}>
-                    {t.title}
+                  <Text className="text-[14.5px] font-semibold leading-tight text-foreground">
+                    Nothing needs you
                   </Text>
-                  <Text className={cn("text-[12px] opacity-80 mt-0.5", titleColor)} numberOfLines={1}>
-                    {t.sub}
+                  <Text
+                    className="mt-0.5 text-xs text-muted-foreground"
+                    numberOfLines={2}
+                  >
+                    {`Nobody silent past ${DEFAULT_RISK_THRESHOLD_DAYS} days, no check-ins waiting, nothing ending in ${DEFAULT_ENDING_HORIZON_DAYS} days`}
                   </Text>
                 </View>
-                <Pressable
+              </Surface>
+            ) : (
+              <>
+                {/* Rendered in the order received — the API sorts them. */}
+                {queues.rows.map((row, i) => (
+                  <AttentionRow
+                    key={row.key}
+                    tone={row.tone}
+                    fromVar={row.fromVar}
+                    icon={row.icon}
+                    count={row.count}
+                    bubbleClassName={row.bubbleClassName}
+                    bubbleTextClassName={row.bubbleTextClassName}
+                    title={row.title}
+                    subtitle={row.subtitle}
+                    actionLabel={row.actionLabel}
+                    emphasis={i === 0}
+                    onPress={() => onRowAction(row)}
+                  />
+                ))}
+                {queues.collapsed.map((line) => (
+                  <View
+                    key={line.key}
+                    className="flex-row items-center gap-2 px-0.5 py-1"
+                  >
+                    <Icon name="clock" size={13} color="--muted-foreground" />
+                    <Text className="text-[12.5px] text-muted-foreground">
+                      {line.label}
+                    </Text>
+                  </View>
+                ))}
+              </>
+            )}
+          </View>
+          {/* Today's activity */}
+          <View className="gap-2.5">
+            <View className="flex-row items-center justify-between">
+              <Text className="text-[17px] font-semibold tracking-[-0.01em] text-foreground">
+                Today&apos;s activity
+              </Text>
+              <Pressable
+                onPress={() => router.push("/(coach)/activity")}
+                hitSlop={HIT_SLOP}
+                className="active:opacity-70"
+              >
+                <Text className="text-[12.5px] font-semibold text-primary">
+                  See all
+                </Text>
+              </Pressable>
+            </View>
+
+            <Surface radius="lg">
+              {activity.length === 0 ? (
+                <View className="items-center gap-1 py-8">
+                  <Text className="text-sm font-semibold text-foreground">
+                    No activity yet
+                  </Text>
+                  <Text className="text-xs text-muted-foreground">
+                    Logged workouts and meals show up here.
+                  </Text>
+                </View>
+              ) : (
+                // Order is the API's — by when it was logged, never by
+                // trainingDate, which many rows share.
+                activity.map((row, i) => (
+                  <ActivityRow
+                    key={row.id}
+                    row={row}
+                    divided={i > 0}
+                    avatarUrl={row.membershipId ? avatars.get(row.membershipId) : undefined}
+                    onPress={() => openClient(row.membershipId)}
+                  />
+                ))
+              )}
+            </Surface>
+          </View>
+
+          {/* Last 7 days — how many activities the roster logged, counted from
+              the activity feed over a ROLLING window, because a Mon–Sun week
+              empties out every Monday morning and reads as a broken card.
+              Deliberately NOT overview.thisWeek, which
+              counts sessions: a session is a coarser unit than the individual
+              things clients log, so it under-reports what the roster actually
+              did. The cost is two extra requests and the 200-row ceiling the
+              caveat line below owns up to. */}
+          <Surface radius="lg" className="gap-3.5 p-3.75">
+            <View className="flex-row items-start justify-between">
+              <View className="min-w-0 flex-1 gap-1">
+                <Text className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  {weekLabel ? `Last 7 days · ${weekLabel}` : "Last 7 days"}
+                </Text>
+                <Text className="text-[22px] font-bold leading-none tracking-[-0.02em] text-foreground">
+                  {week.capped ? `${week.total}+` : week.total}
+                  <Text className="text-sm font-normal text-muted-foreground">
+                    {" "}
+                    {week.total === 1 ? "activity" : "activities"}
+                  </Text>
+                </Text>
+              </View>
+              {/* Hidden entirely when null — no prior week, a zero baseline, or
+                  a capped page, none of which are "no change". */}
+              {week.changePct !== null ? (
+                <View
                   className={cn(
-                    "shrink-0 rounded-full px-3 py-1.5 active:opacity-85",
-                    t.tone === "primary" || t.tone === "ink"
-                      ? "bg-white"
-                      : "bg-ink",
+                    "rounded-[14px] px-2.5 py-1",
+                    week.changePct >= 0 ? "bg-success/12" : "bg-danger/12"
                   )}
                 >
                   <Text
                     className={cn(
-                      "text-[12px] font-semibold",
-                      t.tone === "primary" || t.tone === "ink"
-                        ? "text-ink"
-                        : "text-ink-foreground",
+                      "text-xs font-semibold",
+                      week.changePct >= 0 ? "text-success" : "text-danger"
                     )}
                   >
-                    {t.cta}
+                    {week.changePct > 0 ? "+" : ""}
+                    {formatPctShort(week.changePct)}
                   </Text>
-                </Pressable>
-              </Card>
-            );
-          })}
-        </View>
-      </View>
-
-      {/* AI suggestion */}
-      <Card tone="lilac" glass className="p-4">
-        <View className="flex-row items-start gap-x-3">
-          <View className="h-10 w-10 shrink-0 bg-lilac-ink rounded-2xl justify-center items-center">
-            <Icon name="sparkles" size={20} color="--lilac" />
-          </View>
-          <View className="min-w-0 flex-1">
-            <Text className="text-[11px] font-bold uppercase tracking-[0.14em] text-lilac-ink opacity-70">
-              AI insight
-            </Text>
-            <Text className="mt-1 text-[14.5px] font-semibold leading-snug text-lilac-ink">
-              Mia{"'"}s adherence dropped 18% — suggest swapping Wednesday HIIT for steady-state cardio?
-            </Text>
-            <View className="mt-3 flex-row gap-x-2">
-              <Pressable className="bg-lilac-ink rounded-full px-3 py-1.5 active:opacity-85">
-                <Text className="text-[11.5px] font-bold text-lilac">
-                  Draft message
-                </Text>
-              </Pressable>
-              <Pressable className="bg-background/60 rounded-full px-3 py-1.5 active:opacity-85">
-                <Text className="text-[11.5px] font-bold text-foreground">
-                  Dismiss
-                </Text>
-              </Pressable>
+                </View>
+              ) : null}
             </View>
-          </View>
-        </View>
-      </Card>
 
-      {/* Activity feed */}
-      <View>
-        <SectionTitle
-          title="Today's activity"
-          action={<Icon name="chevron-right" size={16} color="--muted-foreground" className="opacity-80" />}
-        />
-        <Card className="p-2" glass>
-          {feed.map((f, i) => {
-            const colors = colorMap[f.color] || { bg: "bg-muted", text: "text-muted-foreground" };
-            return (
-              <Pressable
-                key={f.name}
-                className={cn(
-                  "flex-row w-full items-center gap-x-3 rounded-2xl p-3 active:bg-secondary/60",
-                  i !== feed.length - 1 && "border-b border-border/50"
-                )}
-              >
-                <View className={cn("h-11 w-11 shrink-0 rounded-full justify-center items-center", colors.bg)}>
-                  <Text className={cn("text-[15px] font-bold", colors.text)}>{initials(f.name)}</Text>
-                </View>
-                <View className="min-w-0 flex-1">
-                  <Text className="text-[14px] font-semibold text-foreground">{f.name}</Text>
-                  <Text className="text-[12px] text-muted-foreground mt-0.5" numberOfLines={1}>
-                    {f.action}
-                  </Text>
-                </View>
-                <Text className="shrink-0 text-[11px] text-muted-foreground">{f.time}</Text>
-              </Pressable>
-            );
-          })}
-        </Card>
-      </View>
+            <WeekActivityChart byDay={week.byDay} today={todayIso()} />
 
-      {/* Weekly perf */}
-      <Card tone="ink" className="p-5" glass>
-        <View className="flex-row items-center justify-between">
-          <View>
-            <Text className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-foreground/60">
-              This week
-            </Text>
-            <Text className="mt-1 text-[20px] font-bold text-ink-foreground">112 sessions logged</Text>
-          </View>
-          <View className="flex-row items-center gap-x-1 rounded-full bg-success/20 px-3 py-1">
-            <Icon name="trending-up" size={13} color="--success" />
-            <Text className="text-[12px] font-bold text-success">+14%</Text>
-          </View>
-        </View>
-        <View className="mt-8 flex-row items-end justify-between px-1">
-          {[50, 70, 48, 85, 90, 75, 110].map((h, i) => (
-            <View key={i} className="items-center flex-1">
-              <LinearGradient
-                colors={[primaryColor, peachColor]}
-                start={{ x: 0, y: 1 }}
-                end={{ x: 0, y: 0 }}
-                style={{
-                  width: 28,
-                  height: h,
-                  borderTopLeftRadius: 14,
-                  borderTopRightRadius: 14,
-                  overflow: "hidden",
-                }}
-              />
-              <Text className="mt-2.5 text-center text-[10px] font-bold text-ink-foreground/50">
-                {["S", "M", "T", "W", "T", "F", "S"][i]}
+            {week.capped ? (
+              <Text className="text-[11px] text-muted-foreground">
+                Showing the first 200 activities in this window.
               </Text>
-            </View>
-          ))}
-        </View>
-      </Card>
+            ) : null}
+          </Surface>
+        </>
+      )}
     </ScrollView>
   );
 }

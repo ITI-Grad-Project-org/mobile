@@ -10,29 +10,36 @@ import {
 
 const N = '/client/me/nutrition';
 
+type TenantScoped<T = unknown> = T & { tenantId: string };
+
 export const nutritionEndpoints = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     // ----- Reading the plan
-    getMyNutritionPlans: builder.query<any[], void>({
+    getMyNutritionPlans: builder.query<any[], TenantScoped>({
       query: () => `${N}/plans`,
       providesTags: ['NutritionPlans'],
     }),
     // 409 here means two published plans cover today — surface the conflict
     // rather than treating it as "no plan".
-    getCurrentNutritionPlan: builder.query<any, void>({
+    getCurrentNutritionPlan: builder.query<any, TenantScoped>({
       query: () => `${N}/plans/current`,
       providesTags: ['NutritionPlans'],
     }),
-    getMyNutritionPlan: builder.query<any, string>({
-      query: (planId) => `${N}/plans/${planId}`,
-      providesTags: (result, error, planId) => [{ type: 'NutritionPlan', id: planId }],
+    getMyNutritionPlan: builder.query<any, TenantScoped<{ planId: string }>>({
+      query: ({ planId }) => `${N}/plans/${planId}`,
+      providesTags: (result, error, { planId }) => [
+        { type: 'NutritionPlan', id: planId },
+      ],
     }),
-    getNutritionCalendar: builder.query<any, CalendarQuery>({
+    getNutritionCalendar: builder.query<any, TenantScoped<CalendarQuery>>({
       query: ({ from, to }) => ({ url: `${N}/calendar`, params: { from, to } }),
       providesTags: ['NutritionCalendar'],
     }),
-    getNutritionDay: builder.query<any, string>({
-      query: (dayId) => `${N}/days/${dayId}`,
+    getNutritionDay: builder.query<any, TenantScoped<{ dayId: string }>>({
+      query: ({ dayId }) => `${N}/days/${dayId}`,
+      // Tagged so finishing or skipping refreshes the day's log state — the day
+      // payload is what a finished day's history is read back from.
+      providesTags: (result, error, { dayId }) => [{ type: 'NutritionDay', id: dayId }],
     }),
     // Read-only browse of the coach's Food library — active Foods only, so no
     // `includeInactive`. Separate cache namespace from the coach's own list.
@@ -54,11 +61,20 @@ export const nutritionEndpoints = baseApi.injectEndpoints({
     }),
     skipNutritionDay: builder.mutation<any, string>({
       query: (dayId) => ({ url: `${N}/days/${dayId}/skip`, method: 'POST' }),
-      invalidatesTags: ['NutritionCalendar'],
+      invalidatesTags: (result, error, dayId) => [
+        { type: 'NutritionDay', id: dayId },
+        'NutritionCalendar',
+        // Skipping marks every planned Meal skipped, which removes their heatmap
+        // activity — possibly on an older action date than today.
+        'Activity',
+        // Skipping also changes the day's logState in the plan payload.
+        'NutritionPlan',
+        'NutritionPlans',
+      ],
     }),
-    getNutritionLog: builder.query<any, string>({
-      query: (logId) => `${N}/logs/${logId}`,
-      providesTags: (result, error, logId) => [{ type: 'NutritionLog', id: logId }],
+    getNutritionLog: builder.query<any, TenantScoped<{ logId: string }>>({
+      query: ({ logId }) => `${N}/logs/${logId}`,
+      providesTags: (result, error, { logId }) => [{ type: 'NutritionLog', id: logId }],
     }),
     updateNutritionLog: builder.mutation<
       any,
@@ -80,6 +96,9 @@ export const nutritionEndpoints = baseApi.injectEndpoints({
       }),
       invalidatesTags: (result, error, { logId }) => [
         { type: 'NutritionLog', id: logId },
+        // The Meal outcome — not /complete — is the activity-producing request:
+        // completed/partial adds one activity, skipped removes it.
+        'Activity',
       ],
     }),
     // Library mode: { foodId, amount, mealSlot }.
@@ -92,6 +111,8 @@ export const nutritionEndpoints = baseApi.injectEndpoints({
       }),
       invalidatesTags: (result, error, { logId }) => [
         { type: 'NutritionLog', id: logId },
+        // On a fully flexible day the first Food in a Meal slot creates activity.
+        'Activity',
       ],
     }),
     updateActualFood: builder.mutation<
@@ -105,6 +126,8 @@ export const nutritionEndpoints = baseApi.injectEndpoints({
       }),
       invalidatesTags: (result, error, { logId }) => [
         { type: 'NutritionLog', id: logId },
+        // Moving a Food between Meal slots reconciles activity on both slots.
+        'Activity',
       ],
     }),
     deleteActualFood: builder.mutation<any, { logId: string; foodLogId: string }>({
@@ -114,6 +137,8 @@ export const nutritionEndpoints = baseApi.injectEndpoints({
       }),
       invalidatesTags: (result, error, { logId }) => [
         { type: 'NutritionLog', id: logId },
+        // Deleting the last Food in a Meal slot removes that slot's activity.
+        'Activity',
       ],
     }),
     // 409 if a planned Meal is still pending an outcome.
@@ -122,8 +147,17 @@ export const nutritionEndpoints = baseApi.injectEndpoints({
       invalidatesTags: (result, error, logId) => [
         { type: 'NutritionLog', id: logId },
         'NutritionCalendar',
-        // A finished nutrition day is a new mark on the activity heatmap.
+        // The mutation only knows the log id, so the day is invalidated by type.
+        // Only the day currently on screen is mounted, so this is one refetch.
+        'NutritionDay',
+        // Completion itself adds no activity — the Meal outcomes already did.
+        // Kept as a cheap safety net for activity recorded on another device.
         'Activity',
+        // The plan payload carries each day's logState, and that is what the
+        // overview list marks days completed from — without this the day stays
+        // unmarked until the cache expires.
+        'NutritionPlan',
+        'NutritionPlans',
       ],
     }),
   }),

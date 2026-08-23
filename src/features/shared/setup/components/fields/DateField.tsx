@@ -4,6 +4,7 @@ import { Modal } from "react-native";
 
 import { cn } from "@/lib/utils";
 import { Icon } from "@/shared/ui/Icon";
+import { toLocalIsoDate } from "@/shared/utils/date";
 import { Pressable, SafeAreaView, Text, View, useCSSVariable } from "@/tw";
 import type { Field } from "../../types";
 import { FieldLabel } from "./FieldLabel";
@@ -12,9 +13,7 @@ import { FieldLabel } from "./FieldLabel";
 // Tapping opens a bottom sheet with the native @expo/ui DateTimePicker inline —
 // the app's first @expo/ui Host island (className does not cross the Host).
 
-function toISODate(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
+const toISODate = toLocalIsoDate;
 
 function parseISODate(s: unknown): Date {
   if (typeof s === "string" && s) {

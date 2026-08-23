@@ -10,28 +10,22 @@ export default function Index() {
     return <Redirect href="/(auth)/login" />;
   }
 
-  if (!tenantId) {
-    if (persona === "coach") {
-      if (profileCompleted) {
-        return <Redirect href="/(coach)/(tabs)/home" />;
-      }
+  if (!profileCompleted) {
+    if (persona === "coach" || role === "owner") {
       return <Redirect href="/(setup)/coach-profile" />;
-    }
-    if (profileCompleted) {
-      return <Redirect href="/(client)/(tabs)/today" />;
     }
     return <Redirect href="/(setup)/client-profile" />;
   }
 
-  return (
-    <Redirect
-      href={
-        role === "owner" || persona === "coach"
-          ? "/(coach)/(tabs)/home"
-          : "/(client)/(tabs)/today"
-      }
-    />
-  );
+  if (persona === "coach" || role === "owner") {
+    return <Redirect href="/(coach)/(tabs)/home" />;
+  }
+
+  if (!tenantId) {
+    return <Redirect href="/(setup)/match-coach" />;
+  }
+
+  return <Redirect href="/(client)/(tabs)/today" />;
 }
 
 

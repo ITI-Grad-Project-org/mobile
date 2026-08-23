@@ -166,14 +166,25 @@ export interface ResetPasswordDto {
 // ---------------------------------------------------------------------------
 // Coach
 // ---------------------------------------------------------------------------
-export interface Certification {
+/** Certificate metadata as SENT (no id yet — the server assigns one). */
+export interface CertificationInput {
   name: string;
   issuer?: string;
   issueDate?: string; // YYYY-MM-DD (replaced `year`)
   expiryDate?: string; // YYYY-MM-DD
   credentialUrl?: string; // public verification link
   // No `fileUrl` — the scan rides as a `certificateFiles` part on PATCH
-  // /coaches/me, matched to this entry BY ARRAY INDEX.
+  // /coaches/me (matched BY ARRAY INDEX), or as the `file` part on
+  // POST /coaches/me/certifications.
+}
+
+export interface Certification extends CertificationInput {
+  /**
+   * Present on certifications READ BACK from the profile. Keep it — it is the
+   * only way to remove one individually via
+   * DELETE /coaches/me/certifications/{certificationId}.
+   */
+  id?: string;
 }
 
 /**
@@ -228,6 +239,7 @@ export interface ClientProfileFields {
   gender?: Gender;
   heightCm?: number;
   weightKg?: number;
+  timezone?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -252,11 +264,6 @@ export type UpdateClientIntakeDto = Partial<CreateClientIntakeDto>;
 // ---------------------------------------------------------------------------
 // Measurements
 // ---------------------------------------------------------------------------
-/**
- * FLAT multipart fields on POST/PATCH `/client/me/measurements`. Progress
- * photos are binary `photos` parts, not URLs — `CreateMeasurementDto` /
- * `UpdateMeasurementDto` no longer exist as JSON schemas.
- */
 export interface MeasurementFields {
   measuredAt?: string; // YYYY-MM-DD (default today)
   weightKg?: number;
@@ -274,14 +281,70 @@ export interface Measurement extends MeasurementFields {
   measuredAt: string; // YYYY-MM-DD
   createdAt?: string;
   photos?: string[]; // hosted URLs on the way back out
+  /** Present on coach-side reads; the client's own reads may omit it. */
+  tenantId?: string;
+  /**
+   * The membership the measurement belongs to — NOT the client's user id. It is
+   * what /analytics/* speaks, so it is the id a deep link off a check-in uses.
+   */
+  membershipId?: string;
+  /**
+   * Coach review state, written by PATCH /measurements/{id}/review. Confirmed
+   * on the wire 2026-08-20 — measurements have no response schema in the
+   * OpenAPI doc, so this was read off a live row.
+   *
+   * `reviewedAt` is the whole signal: non-null means reviewed. See
+   * useCheckinReviews.
+   */
+  reviewedAt?: string | null;
+  reviewedBy?: string | null;
+  coachFeedback?: string | null;
 }
 
-/** Paginated envelope for GET /client/me/measurements. */
+/**
+ * A row from GET /measurements/reviews/pending.
+ *
+ * VERIFIED against a live response (2026-08-20), and it is NOT the same
+ * serializer as the per-client reads: this one NESTS the client and omits
+ * `membershipId` and `tenantId` entirely. Resolve whose check-in it is through
+ * `client`, never through `membershipId` — that field is absent here.
+ */
+export interface PendingMeasurement extends Measurement {
+  client?: {
+    /** The client's USER id — matches RosterClient.clientId, not a membership. */
+    id?: string;
+    firstName?: string;
+    lastName?: string;
+    avatarUrl?: string;
+  };
+}
+
+/** Body of PATCH /measurements/{measurementId}/review. */
+export interface ReviewMeasurementDto {
+  /** Optional note back to the client; max 5000 chars server-side. */
+  coachFeedback?: string;
+}
+
 export interface ListMeasurementsResponse {
-  data: Measurement[];
-  page: number;
-  limit: number;
-  total: number;
+  docs: Measurement[];
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+}
+
+/** Same envelope as the measurement lists; `meta.total` is the tenant-wide
+ *  count of unreviewed check-ins, which the page itself can be capped below. */
+export interface ListPendingReviewsResponse {
+  docs: PendingMeasurement[];
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -715,4 +778,350 @@ export interface ActivityGraphResponse {
 
 export interface ActivityGraphQuery {
   year?: number; // omit for the rolling latest 365 days
+}
+
+// ---------------------------------------------------------------------------
+// Analytics (coach-only, read-only)
+
+/** Percentage out of 100 (72.7 = "72.7%", do not multiply). null = no denominator. */
+export type Pct = number | null;
+/** Inclusive ISO calendar date, `YYYY-MM-DD` — a date, not a timestamp. */
+export type ISODate = string;
+
+/**
+ * Send neither bound for the last 30 days, or one for a 30-day window anchored
+ * to it. `to` before `from` is a 400.
+ */
+export interface DateWindow {
+  from?: ISODate;
+  to?: ISODate;
+}
+
+export interface AttentionParams {
+  /** Measure urgency from this date instead of today. */
+  asOf?: ISODate;
+  riskThresholdDays?: number; // >= 1, default 7
+  endingHorizonDays?: number; // >= 1, default 14
+}
+
+export interface AnalyticsActivityParams extends DateWindow {
+  /** 1–200, default 50. Outside that range is rejected, not clamped. */
+  limit?: number;
+}
+
+export interface AdherenceParams extends DateWindow {
+  /** Omit for the whole roster. */
+  membershipId?: string;
+}
+
+/** MRR keyed by ISO 4217 code. There is no FX rate — render one line per
+ *  currency and never sum them. A single-currency practice gets a one-entry
+ *  map; still iterate it. */
+export type CurrencyAmounts = Record<string, number>;
+
+export interface OverviewWeekday {
+  weekday: number; // 1 = Monday … 7 = Sunday
+  /** SESSIONS trained that day — not sets, not tonnage. The endpoint has no
+   *  tonnage figure at all, so nothing here can be labelled "volume". */
+  sessions: number;
+}
+
+/**
+ * VERIFIED against a live response (2026-08-16). Two things the prose got
+ * wrong, both of which rendered as a silent 0: the attention counts are FLAT on
+ * the root (`clientsAtRisk`, `checkinsAwaitingReview`, `programsEndingSoon`) —
+ * there is no `attentionCounts` object — and MRR is nested under
+ * `roster.mrrByCurrency`, not a root-level `mrr`. `roster` carries a count per
+ * status (active / paused / invited / requested / archived) and no total.
+ */
+export interface Overview {
+  /** `total` is derived client-side: the API sends only per-status counts. */
+  roster: { total: number; active: number; paused: number };
+  mrr: CurrencyAmounts;
+  sessionAdherencePct: Pct;
+  /** Derived from the window's END date, not today. Label the card from the
+   *  window whenever the user has changed the range. Weeks run Mon–Sun. */
+  thisWeek: {
+    sessionsLogged: number;
+    previousWeekSessions: number | null; // null = no prior week to compare
+    changePct: Pct;
+    /** Always seven rows including empty days — do not gap-fill. */
+    byDay: OverviewWeekday[];
+  };
+  /** Badges for the /analytics/attention lists, computed at the DEFAULT
+   *  thresholds. Pass custom thresholds to attention and they disagree. */
+  attentionCounts: {
+    atRisk: number;
+    checkinsAwaitingReview: number;
+    programsEndingSoon: number;
+  };
+}
+
+export interface AtRiskClient {
+  membershipId: string;
+  clientName: string;
+  /**
+   * Whole days of silence. `null` means the payload carried no usable count
+   * and no timestamp to derive one from — the row still belongs in the queue,
+   * it just can't be numbered. Never coerce it to 0: a client can only reach
+   * this list by being silent PAST the threshold, so "0 days" is always a
+   * missing field being rendered as a fact.
+   */
+  daysSilent: number | null;
+  /** The instant `daysSilent` was measured from — the last activity, or the
+   *  join date when `neverActive`. Absent when the API sent only a count. */
+  silentSince?: string;
+  /** Counted from the join date, not from a last activity: word these rows
+   *  "hasn't started yet", not "gone quiet for 9 days". */
+  neverActive: boolean;
+}
+export interface CheckinAwaitingReview {
+  checkinId: string;
+  membershipId: string;
+  clientName: string;
+  submittedAt: string; // timestamp
+}
+/** VERIFIED against a live response (2026-08-16): the field is `endsOn`, not
+ *  `endDate`, and the row also carries `programName` and `daysRemaining`. */
+export interface ProgramEndingSoon {
+  programId: string;
+  membershipId: string;
+  clientName: string;
+  programName: string;
+  endsOn: ISODate;
+  daysRemaining: number;
+  /** Covers the whole programme run, not the window. */
+  completionPct: Pct;
+}
+/** Three lists, each already sorted most-urgent-first — never re-sort. Paused
+ *  memberships never appear. The action differs per list: message / review /
+ *  renew, so keep them as three sections. */
+export interface Attention {
+  atRisk: AtRiskClient[];
+  checkinsAwaitingReview: CheckinAwaitingReview[];
+  programsEndingSoon: ProgramEndingSoon[];
+}
+
+/**
+ * VERIFIED against a live response (2026-08-16). Note what is NOT here: there
+ * is no `id` and no `summary` — a row carries only what happened and when, so
+ * the feed's caption has to be built from `activityType` client-side, and its
+ * React key from membershipId + occurredAt.
+ */
+export interface AnalyticsActivityRow {
+  membershipId: string;
+  clientName: string;
+  /** e.g. 'workout_set_reported'. Open union — new kinds appear over time. */
+  activityType: 'workout_set_reported' | (string & {});
+  /** Display only — many rows share one value, so sorting by it scrambles. */
+  activityDate: ISODate;
+  /** Orders the feed (newest first). */
+  occurredAt: string;
+}
+
+export interface RosterClientRow {
+  membershipId: string;
+  clientName: string;
+  /** null = nothing scheduled; these rows sort LAST and are not the worst
+   *  performers. Render a dash. */
+  adherencePct: Pct;
+}
+/** Ordered worst-adherence-first: the risk list is the top, the leaderboard is
+ *  the bottom reversed. One call, two sections. */
+export interface Roster {
+  statusMix: Record<string, number>; // confirm
+  mrr: CurrencyAmounts;
+  clients: RosterClientRow[];
+}
+
+/**
+ * Two independent readings — show both, never average them.
+ * Session completion counts days the client never opened the app against them.
+ * Volume adherence compares actual reps × weight to the prescription, and is
+ * meaningless without `comparableSets`: RPE / %1RM sets have no absolute target
+ * and are excluded from both sides, so an all-RPE programme returns
+ * `comparableSets: 0` with a null ratio meaning "not measurable this way".
+ */
+/**
+ * VERIFIED against a live response (2026-08-16). The session ratio is
+ * `sessionCompletionPct`, not `sessionAdherencePct` — that spelling belongs to
+ * the overview response, and mixing them up yields a silent dash here.
+ *
+ * A session has FIVE outcomes, not two: completed / partial / skipped /
+ * inProgress, and the rest unstarted. `completedSessions` alone under-reports
+ * work in progress — a live response showed `completedSessions: 0` alongside
+ * `setsCompleted: 4`, because the one scheduled session was still in progress.
+ */
+export interface Adherence {
+  scheduledSessions: number;
+  completedSessions: number;
+  partialSessions: number;
+  skippedSessions: number;
+  inProgressSessions: number;
+  sessionCompletionPct: Pct;
+  comparableSets: number;
+  /** Reps × weight, summed over comparable sets only. Both are 0 when
+   *  `comparableSets` is 0 — that is "nothing to compare", not "no work done". */
+  prescribedVolume: number;
+  actualVolume: number;
+  volumeAdherencePct: Pct;
+  setsCompleted: number;
+  setsPartial: number;
+  setsSkipped: number;
+  /** Sets logged beyond the prescription. Not a failure — don't fold it into
+   *  an adherence figure. */
+  setsExtra: number;
+}
+
+/** Returned exactly as recorded, every field nullable, values never carried
+ *  forward. A gap is a gap: no fill, no connectNulls, no last-value-forward.
+ *  VERIFIED (2026-08-16): the date field is `measuredOn`, not `date`. */
+export interface ProgressMeasurement {
+  measuredOn: ISODate;
+  weightKg: number | null;
+  bodyFatPct: number | null;
+  chestCm: number | null;
+  waistCm: number | null;
+  hipsCm: number | null;
+  armCm: number | null;
+  thighCm: number | null;
+}
+/** VERIFIED (2026-08-16): the reading is `bestE1rmKg` — the best set that day,
+ *  not a per-set series — and each point also carries its set count and volume. */
+export interface StrengthPoint {
+  date: ISODate;
+  /** Epley estimate, weight × (1 + reps / 30), best set per exercise per day.
+   *  Label the axis "est. 1RM". */
+  bestE1rmKg: number;
+  sets: number;
+  volumeKg: number;
+}
+export interface StrengthSeries {
+  /** Grouped by the name on the logged row, not the exercise id — two
+   *  similarly-named entries are legitimately two lines. Comes through with the
+   *  logger's own casing ("barbell Bench Press") — title-case it for display. */
+  exerciseName: string;
+  firstE1rmKg: number;
+  latestE1rmKg: number;
+  /** The window's best, which need not be the latest — a client can peak mid-window. */
+  bestE1rmKg: number;
+  /** null when the window holds a single training day: hide the delta chip
+   *  rather than showing "0%". */
+  changePct: Pct;
+  /** Capped at 12 reps; bodyweight and timed work are excluded, so some
+   *  exercises returning nothing is by design, not "no data". */
+  points: StrengthPoint[];
+}
+export interface Progress {
+  /** Echoed back by the endpoint — useful for asserting the response matches
+   *  the row the sheet is showing. */
+  membershipId: string;
+  clientName: string;
+  from: ISODate;
+  to: ISODate;
+  measurements: ProgressMeasurement[];
+  /** Most-trained exercise first — default an exercise picker to [0]. */
+  strength: StrengthSeries[];
+}
+
+/** Whole history per template, never windowed, ordered by how widely used.
+ *  The headline is `avgLastActiveWeek` against `durationWeeks` ("stops at week
+ *  5 of 12") — one paired stat, not two columns. */
+export interface TemplateEffectiveness {
+  templateId: string;
+  templateName: string;
+  timesAssigned: number; // confirm — this is the sort key
+  durationWeeks: number;
+  /** null for a template with no completed session — excluded from the mean. */
+  avgLastActiveWeek: number | null;
+}
+
+/** One row per planned week including dead ones — plots as-is, no gap-filling.
+ *  The curve never rises: an uptick is a sort bug on `week`. */
+export interface SurvivalPoint {
+  week: number;
+  survivingPct: number; // monotonically non-increasing
+}
+
+// ---------------------------------------------------------------------------
+// Billing — the COACH's own CoachHub subscription (/billing/*).
+//
+// This is NOT coach-to-client payments; CoachHub does not collect or manage
+// those in V1. A subscription belongs to ONE tenant, not globally to every
+// tenant a coach owns, so a tenant switch means reloading all of it.
+//
+// The backend owns price, currency, duration, tenant and payment status. The
+// app never sends any of them, and never treats the Paymob browser redirect as
+// proof of payment — only GET /billing/payments/:id and GET /billing/me are
+// trusted.
+// ---------------------------------------------------------------------------
+export type SubscriptionPlan = 'free' | 'solo' | 'studio';
+
+export type PaymentAttemptStatus = 'pending' | 'succeeded' | 'failed';
+
+/** One row of the plan catalogue. Render from these values — never hardcode a
+ *  price or a limit, and key rows by `plan`, never by array position. */
+export interface BillingPlan {
+  plan: SubscriptionPlan;
+  displayName: string;
+  /** In cents. Divide by 100 for display only; never send it back. */
+  priceCents: number;
+  currency: 'EGP';
+  /** null on Free, which has no expiry. */
+  durationDays: number | null;
+  /** null means UNLIMITED — not zero and not unknown. */
+  activeClientLimit: number | null;
+  aiPlanBuilderEnabled: boolean;
+}
+
+export interface BillingSummary {
+  /**
+   * Effective plan after applying the expiry rule. THIS is what gates UI —
+   * badges, features, limits, actions. There is no scheduled job flipping an
+   * expired tenant to Free; the backend derives this on every read.
+   */
+  plan: SubscriptionPlan;
+  /**
+   * The raw plan stored on the tenant, which can still say 'studio' long after
+   * it expired. Only ever used to explain WHY access dropped ("your Studio plan
+   * expired on ..."). Never gate on this.
+   */
+  storedPlan: SubscriptionPlan;
+  /** ISO timestamp for a paid plan, otherwise null. */
+  subscriptionExpiresAt: string | null;
+  isPaidSubscriptionActive: boolean;
+  /** Only memberships whose backend status is `active` are counted. */
+  activeClientCount: number;
+  /** 3 on Free, 20 on Solo, null (unlimited) on Studio. */
+  activeClientLimit: number | null;
+  /** Backend-calculated. Can be false while `activeClientCount` still exceeds
+   *  the limit — an expired tenant keeps its existing clients. */
+  canAddActiveClient: boolean;
+  aiPlanBuilderEnabled: boolean;
+}
+
+/** The ONLY field the checkout accepts. The backend rejects unknown fields, so
+ *  never add amount, currency, tenantId, coachId or status. `free` cannot be
+ *  purchased. */
+export interface CreateCheckoutRequest {
+  plan: Exclude<SubscriptionPlan, 'free'>;
+}
+
+export interface CreateCheckoutResponse {
+  /** CoachHub UUID — the trusted handle for polling this payment. Save it
+   *  BEFORE leaving the app for Paymob. */
+  paymentAttemptId: string;
+  /** A complete Paymob hosted-checkout URL. Opaque: never parse it, rebuild it,
+   *  append to it, or log it. */
+  checkoutUrl: string;
+}
+
+export interface PaymentAttempt {
+  id: string;
+  plan: Exclude<SubscriptionPlan, 'free'>;
+  amountCents: number;
+  currency: 'EGP';
+  status: PaymentAttemptStatus;
+  paidAt: string | null;
+  createdAt: string;
 }

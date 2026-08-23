@@ -3,10 +3,9 @@ import { useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
-  Platform,
 } from "react-native";
 
-import { hasOnboarded, resetOnboarded } from "@/shared/hooks/useOnboarding";
+import { hasOnboarded } from "@/shared/hooks/useOnboarding";
 import {
   hasCompletedProfile,
   markProfileComplete,
@@ -19,8 +18,13 @@ import { GoogleButton } from "../components/GoogleButton";
 import { PasswordField } from "../components/PasswordField";
 import { RoleToggle, type AuthRole } from "../components/RoleToggle";
 import { getAuthErrorMessage } from "../utils/authError";
+import { useGoogleAuth } from "../hooks/useGoogleAuth";
 
 import {
+  useGoogleCoachLoginMutation,
+  useGoogleCustomerLoginMutation,
+  useLazyGetCoachMeQuery,
+  useLazyGetCustomerMembershipsQuery,
   useLoginCoachMutation,
   useLoginCustomerMutation,
   useRegisterCoachMutation,
@@ -31,7 +35,10 @@ import {
   useLazyGetCoachProfileQuery,
 } from "@/api/endpoints/profile.endpoints";
 import { useAppDispatch } from "@/store";
-import { saveTokens, setAuth } from "@/store/authSlice";
+import { setActiveTenant } from "@/store/activeTenantSlice";
+import { saveTokens, setAuth, setEnteringApp } from "@/store/authSlice";
+import { setMemberships } from "@/store/membershipsSlice";
+import * as SecureStore from "expo-secure-store";
 
 export type AuthMode = "signup" | "login";
 
@@ -47,8 +54,14 @@ export function AuthScreen({
   const [registerCustomer] = useRegisterCustomerMutation();
   const [loginCoach] = useLoginCoachMutation();
   const [loginCustomer] = useLoginCustomerMutation();
+  const [googleCoachLogin] = useGoogleCoachLoginMutation();
+  const [googleCustomerLogin] = useGoogleCustomerLoginMutation();
   const [fetchCoachProfile] = useLazyGetCoachProfileQuery();
   const [fetchClientProfile] = useLazyGetClientProfileQuery();
+  const [fetchCoachMe] = useLazyGetCoachMeQuery();
+  const [fetchMemberships] = useLazyGetCustomerMembershipsQuery();
+
+  const { signInWithGoogle } = useGoogleAuth();
 
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [role, setRole] = useState<AuthRole>("client");
@@ -59,6 +72,7 @@ export function AuthScreen({
   const [pw, setPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
   const [busy, setBusy] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const isSignup = mode === "signup";
@@ -69,46 +83,190 @@ export function AuthScreen({
 
   const valid = isSignup
     ? Boolean(
-        fname.trim() &&
-          lname.trim() &&
-          (!isCoach || businessName.trim()) &&
-          emailOk &&
-          pwOk &&
-          pw === confirmPw
-      )
+      fname.trim() &&
+      lname.trim() &&
+      (!isCoach || businessName.trim()) &&
+      emailOk &&
+      pwOk &&
+      pw === confirmPw
+    )
     : Boolean(emailOk && pw.length >= 1);
 
-  const enterApp = () => {
-    setBusy(true);
-    setTimeout(async () => {
-      setBusy(false);
-      const profileDone = await hasCompletedProfile();
+  // Resolve the active tenant BEFORE navigating into the app. Tenant-scoped
+  // requests read `x-tenant-id` from the store, and the destination screens fire
+  // theirs on mount — landing there with no active tenant caches empty/failed
+  // results that never refetch once the tenant arrives.
+  const primeActiveTenant = async (persona: "coach" | "customer") => {
+    try {
+      if (persona === "coach") {
+        const me: any = await fetchCoachMe().unwrap();
+        const tenantId = me?.currentTenant?.id || me?.tenant?.id;
+        if (!tenantId) return;
+        dispatch(
+          setMemberships([
+            {
+              tenantId,
+              tenantName:
+                me?.currentTenant?.name || me?.businessName || "My Gym",
+              role: "owner",
+              status: "active",
+            },
+          ])
+        );
+        dispatch(setActiveTenant(tenantId));
+        await SecureStore.setItemAsync("activeTenantId", tenantId);
+        return;
+      }
 
-      if (role === "coach") {
+      const list: any[] = await fetchMemberships().unwrap();
+      if (!list?.length) return;
+      dispatch(setMemberships(list));
+      const active: any = list.find((m: any) => m.status === "active") || list[0];
+      const tenantId = active?.tenantId || active?.tenant?.id || active?.id;
+      if (tenantId) {
+        dispatch(setActiveTenant(tenantId));
+        await SecureStore.setItemAsync("activeTenantId", tenantId);
+      }
+    } catch (e) {
+      // A client with no coach yet legitimately has no tenant; the root layout
+      // retries this once the app is mounted.
+      console.warn("Could not resolve active tenant after login:", e);
+    }
+  };
+
+  /**
+   * Shared post-login flow: persist tokens → prime tenant → check profile →
+   * dispatch auth state → navigate to the correct screen.
+   *
+   * Used by both email login/signup AND Google sign-in so the logic stays in
+   * one place.
+   */
+  const handlePostLogin = async (
+    loginRes: any,
+    activeRole: AuthRole,
+    fallbackUser?: { email?: string; fname?: string; lname?: string }
+  ) => {
+    const { accessToken, refreshToken, user } = loginRes;
+    if (!accessToken || !refreshToken) {
+      setErr("Invalid authentication response from server.");
+      return;
+    }
+
+    const userEmail = user?.email || fallbackUser?.email || email.trim();
+    const userFname = user?.firstName || fallbackUser?.fname || fname.trim();
+    const userLname = user?.lastName || fallbackUser?.lname || lname.trim();
+
+    const persona = activeRole === "coach" ? "coach" : "customer";
+
+    // Raise the branded splash for the whole entry: the tenant prime, the
+    // profile fetch and the redirect all happen behind it. Cleared in a
+    // `finally` so a throw anywhere below can never leave the overlay stuck up.
+    dispatch(setEnteringApp(true));
+    try {
+      await saveTokens(accessToken, refreshToken, persona, userEmail);
+      await primeActiveTenant(persona);
+
+      let profileDone = false;
+      try {
+        const serverProfile =
+          activeRole === "coach"
+            ? await fetchCoachProfile().unwrap()
+            : await fetchClientProfile().unwrap();
+        profileDone = profileLooksComplete(serverProfile, persona);
+      } catch (e) {
+        console.warn("Could not fetch server profile on login:", e);
+        profileDone = false;
+      }
+
+      if (profileDone) {
+        await markProfileComplete();
+      } else {
+        await resetProfile();
+      }
+
+      dispatch(
+        setAuth({
+          userId: user?.id || "user-id",
+          persona,
+          profileCompleted: profileDone,
+        })
+      );
+
+      if (activeRole === "coach") {
         if (profileDone) {
           router.replace("/(coach)/(tabs)/home");
         } else {
           router.replace({
             pathname: "/(setup)/coach-profile",
             params: {
-              email: email.trim(),
-              fname: fname.trim(),
-              lname: lname.trim(),
+              email: userEmail,
+              fname: userFname,
+              lname: userLname,
             },
           });
         }
+      } else {
+        // Client flow: onboarding -> profile setup -> match-coach.
+        if (profileDone) {
+          router.replace("/(client)/(tabs)/today");
+        } else if (!(await hasOnboarded(userEmail))) {
+          router.replace({
+            pathname: "/(onboarding)/onboarding",
+            params: {
+              email: userEmail,
+              fname: userFname,
+              lname: userLname,
+            },
+          });
+        } else {
+          router.replace({
+            pathname: "/(setup)/client-profile",
+            params: {
+              email: userEmail,
+              fname: userFname,
+              lname: userLname,
+            },
+          });
+        }
+      }
+    } finally {
+      dispatch(setEnteringApp(false));
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setErr(null);
+    setGoogleBusy(true);
+
+    try {
+      const result = await signInWithGoogle();
+      if (!result) {
+        // User cancelled — silently return.
+        setGoogleBusy(false);
         return;
       }
 
-      // Client flow: onboarding -> profile setup -> match-coach.
-      if (profileDone) {
-        router.replace("/(client)/(tabs)/today");
-      } else if (!(await hasOnboarded())) {
-        router.replace("/(onboarding)/onboarding");
-      } else {
-        router.replace("/(setup)/client-profile");
+      const loginRes =
+        role === "coach"
+          ? await googleCoachLogin({ idToken: result.idToken }).unwrap()
+          : await googleCustomerLogin({ idToken: result.idToken }).unwrap();
+
+      await handlePostLogin(loginRes, role, {
+        email: result.user?.email || undefined,
+        fname: result.user?.givenName || undefined,
+        lname: result.user?.familyName || undefined,
+      });
+    } catch (e: any) {
+      if (e?.name === "AbortError") {
+        return;
       }
-    }, 600);
+      console.warn("Google sign-in error:", e);
+      setErr(
+        e?.message || getAuthErrorMessage(e, "login")
+      );
+    } finally {
+      setGoogleBusy(false);
+    }
   };
 
   const submit = async () => {
@@ -160,7 +318,6 @@ export function AuthScreen({
             confirmPassword: confirmPw,
           }).unwrap();
         }
-        await resetOnboarded();
         await resetProfile();
       }
 
@@ -178,60 +335,7 @@ export function AuthScreen({
         }).unwrap();
       }
 
-      const { accessToken, refreshToken, user } = loginRes;
-      if (accessToken && refreshToken) {
-        const persona = role === "coach" ? "coach" : "customer";
-        await saveTokens(accessToken, refreshToken, persona);
-
-        let profileDone: boolean;
-        try {
-          const serverProfile =
-            role === "coach"
-              ? await fetchCoachProfile().unwrap()
-              : await fetchClientProfile().unwrap();
-          profileDone = profileLooksComplete(serverProfile, persona);
-        } catch {
-          profileDone = await hasCompletedProfile();
-        }
-        if (profileDone) {
-          await markProfileComplete();
-        } else {
-          await resetProfile();
-        }
-        dispatch(
-          setAuth({
-            userId: user?.id || "user-id",
-            persona,
-            profileCompleted: profileDone,
-          })
-        );
-
-        if (role === "coach") {
-          if (profileDone) {
-            router.replace("/(coach)/(tabs)/home");
-          } else {
-            router.replace({
-              pathname: "/(setup)/coach-profile",
-              params: {
-                email: email.trim(),
-                fname: fname.trim(),
-                lname: lname.trim(),
-              },
-            });
-          }
-        } else {
-          // Client flow: onboarding -> profile setup -> match-coach.
-          if (profileDone) {
-            router.replace("/(client)/(tabs)/today");
-          } else if (!(await hasOnboarded())) {
-            router.replace("/(onboarding)/onboarding");
-          } else {
-            router.replace("/(setup)/client-profile");
-          }
-        }
-      } else {
-        setErr("Invalid authentication response from server.");
-      }
+      await handlePostLogin(loginRes, role);
     } catch (e: any) {
       if (e?.name === "AbortError") {
         return;
@@ -246,8 +350,9 @@ export function AuthScreen({
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
       <KeyboardAvoidingView
+        behavior="padding"
+        keyboardVerticalOffset={10}
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView
           className="flex-1"
@@ -273,7 +378,11 @@ export function AuthScreen({
           </View>
 
           <View className="mt-6">
-            <GoogleButton onPress={enterApp} disabled={busy} />
+            <GoogleButton
+              onPress={handleGoogleSignIn}
+              disabled={busy}
+              loading={googleBusy}
+            />
           </View>
 
           <View className="my-5 flex-row items-center gap-3">
@@ -371,7 +480,7 @@ export function AuthScreen({
 
             <Pressable
               onPress={submit}
-              disabled={!valid || busy}
+              disabled={!valid || busy || googleBusy}
               className="mt-2 h-14 flex-row items-center justify-center gap-2 rounded-2xl bg-primary shadow-soft active:opacity-90 disabled:opacity-50"
             >
               {busy ? <ActivityIndicator color="white" /> : null}

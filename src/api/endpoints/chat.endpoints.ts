@@ -3,6 +3,7 @@ import type {
   Message,
 } from "@/features/shared/messaging/types";
 import { baseApi } from "../baseApi";
+import { unwrapList } from "../pagination";
 
 /** Cache key for a coach thread. */
 export const messagesCacheKey = (tenantId: string, clientId: string) =>
@@ -51,9 +52,11 @@ export const chatEndpoints = baseApi.injectEndpoints({
       { tenantId: string }
     >({
       query: () => "/chat/conversations",
-      transformResponse: (
-        res: ConversationSummary[] | { conversations?: ConversationSummary[] }
-      ) => (Array.isArray(res) ? res : (res?.conversations ?? [])),
+      // Through `unwrapList` like every other list read: the envelope key
+      // varies by resource in this API (`docs`, `data`, `items`…), and a
+      // hand-rolled guess at one key silently yields [] for all the others —
+      // an empty inbox that looks like "no clients yet" instead of a bug.
+      transformResponse: (res: unknown) => unwrapList<ConversationSummary>(res),
       providesTags: (result, error, { tenantId }) => [
         { type: "Conversations", id: `LIST-${tenantId}` },
       ],
@@ -70,8 +73,7 @@ export const chatEndpoints = baseApi.injectEndpoints({
           ...(limit ? { limit } : {}),
         },
       }),
-      transformResponse: (res: Message[] | { messages?: Message[] }) =>
-        Array.isArray(res) ? res : (res?.messages ?? []),
+      transformResponse: (res: unknown) => unwrapList<Message>(res),
       // One cache entry per thread: `before`/`limit` page into it rather than
       // spawning a new entry, so the socket has a single place to patch.
       serializeQueryArgs: ({ endpointName, queryArgs }) =>
@@ -116,8 +118,7 @@ export const chatEndpoints = baseApi.injectEndpoints({
           ...(limit ? { limit } : {}),
         },
       }),
-      transformResponse: (res: Message[] | { messages?: Message[] }) =>
-        Array.isArray(res) ? res : (res?.messages ?? []),
+      transformResponse: (res: unknown) => unwrapList<Message>(res),
       serializeQueryArgs: ({ endpointName, queryArgs }) =>
         `${endpointName}(${queryArgs.tenantId})`,
       merge: (currentCache, newItems) => mergeMessages(currentCache, newItems),

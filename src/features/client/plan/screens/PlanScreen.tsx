@@ -4,38 +4,60 @@ import {
   useGetMyProgramQuery,
   useGetMyProgramsQuery,
 } from "@/api/endpoints/training.endpoints";
+import { dayLogState, isDayCompleted, isDaySkipped } from "@/lib/logState";
+import { plannedExerciseInfo } from "@/lib/plannedExercise";
 import { useActiveCoach } from "@/lib/role";
-import { cn } from "@/lib/utils";
+import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import { Card } from "@/shared/ui/Card";
 import { Icon } from "@/shared/ui/Icon";
+import { WeekStepper } from "@/shared/ui/WeekStepper";
 import { todayIso } from "@/shared/utils/dayProgress";
-import { Pressable, ScrollView, Text, View } from "@/tw";
+import { isHardError, isPending } from "@/shared/utils/query";
+import { Pressable, ScrollView, Text, View, useCSSVariable } from "@/tw";
 import { router } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
+import { ActivityIndicator, RefreshControl } from "react-native";
+import { formatDateRange } from "@/features/shared/plans/lib/programWeek";
+import { selectActiveProgram } from "@/features/shared/plans/lib/activeProgram";
 import { DayCard } from "../components/DayCard";
 import { DaySheet } from "../components/DaySheet";
-import { NutritionOverview } from "@/features/client/nutrition";
+import { NutritionOverview, useActiveNutritionPlan } from "@/features/client/nutrition";
 import { PlanSegmented, type PlanSub } from "../components/PlanSegmented";
 import type { DayPlan } from "../data";
 
 export function PlanScreen() {
   const coach = useActiveCoach();
+  const primaryColor = (useCSSVariable("--primary") as string) || "#e5673a";
 
-  const { data: myProgramsData } = useGetMyProgramsQuery();
-  const { data: currentProgData } = useGetCurrentProgramQuery();
+  // Cache-keyed by tenant so a coach switch can't serve the old coach's plan.
+  const { tenantId } = useActiveTenant();
 
-  const rawPrograms = (myProgramsData as any)?.data || myProgramsData || [];
-  const programs = Array.isArray(rawPrograms) ? rawPrograms : [];
+  const programsQuery = useGetMyProgramsQuery(
+    { tenantId: tenantId ?? "" },
+    { skip: !tenantId }
+  );
+  const currentQuery = useGetCurrentProgramQuery(
+    { tenantId: tenantId ?? "" },
+    { skip: !tenantId }
+  );
+  const myProgramsData = programsQuery.data;
+  const currentProgData = currentQuery.data;
+
   const currentProgram = (currentProgData as any)?.data || currentProgData;
 
-  const publishedProgram = programs.length > 0 ? programs[0] : currentProgram;
+  // The list arrives unordered and includes finished and not-yet-started
+  // blocks, so the plan has to be picked by its schedule — see lib/activeProgram.
+  const publishedProgram = useMemo(() => {
+    const raw = (myProgramsData as any)?.data || myProgramsData || [];
+    return selectActiveProgram(Array.isArray(raw) ? raw : [], currentProgram);
+  }, [myProgramsData, currentProgram]);
 
-  const { data: fullProgramData } = useGetMyProgramQuery(
-    publishedProgram?.id || "",
-    {
-      skip: !publishedProgram?.id,
-    }
+  const programId = publishedProgram?.id || "";
+  const fullProgramQuery = useGetMyProgramQuery(
+    { tenantId: tenantId ?? "", programId },
+    { skip: !tenantId || !programId }
   );
+  const fullProgramData = fullProgramQuery.data;
 
   const fullProgram =
     (fullProgramData as any)?.data || fullProgramData || publishedProgram;
@@ -43,7 +65,11 @@ export function PlanScreen() {
   // Today's scheduled day, straight from the calendar — the program payload
   // doesn't always carry dates, and this is what Today already keys off.
   const iso = todayIso();
-  const { data: calendarData } = useGetCalendarQuery({ from: iso, to: iso });
+  const calendarQuery = useGetCalendarQuery(
+    { tenantId: tenantId ?? "", from: iso, to: iso },
+    { skip: !tenantId }
+  );
+  const calendarData = calendarQuery.data;
   const todayDayId = useMemo(() => {
     const items = (calendarData as any)?.data || calendarData || [];
     const item = Array.isArray(items) ? items[0] : null;
@@ -91,7 +117,8 @@ export function PlanScreen() {
   const [weekOverride, setWeekOverride] = useState<number | null>(null);
   const selectedWeekIndex = weekOverride ?? todayWeekIndex ?? 0;
 
-  const days: DayPlan[] = useMemo(() => {
+  /** The selected week's days, straight off the payload. */
+  const rawWeekDays: any[] = useMemo(() => {
     let rawDays: any[] = [];
     if (weeksList.length > 0) {
       const selectedWeek = weeksList[selectedWeekIndex] || weeksList[0];
@@ -122,9 +149,20 @@ export function PlanScreen() {
       }
     }
 
-    if (!Array.isArray(rawDays) || rawDays.length === 0) return [];
+    return Array.isArray(rawDays) ? rawDays : [];
+  }, [fullProgram, publishedProgram, weeksList, selectedWeekIndex]);
 
-    return rawDays.map((day: any, i: number) => {
+  /** "10 – 16 Aug" for the stepper — "" when the payload carries no dates. */
+  const weekDateRange = useMemo(
+    () =>
+      formatDateRange(
+        rawWeekDays.map((day: any) => day?.scheduledDate ?? day?.date ?? day?.scheduledAt)
+      ),
+    [rawWeekDays]
+  );
+
+  const days: DayPlan[] = useMemo(() => {
+    return rawWeekDays.map((day: any, i: number) => {
       let shortWeekday = `D${day.dayNumber || day.position || i + 1}`;
       let dayOfMonth: number = Number(day.dayNumber || day.position || i + 1);
 
@@ -143,6 +181,9 @@ export function PlanScreen() {
       return {
         id: day.id,
         isToday: isTodayDay(day),
+        logState: dayLogState(day) || undefined,
+        isCompleted: isDayCompleted(day),
+        isSkipped: isDaySkipped(day),
         d: shortWeekday,
         date: dayOfMonth,
         title: day.name || `Day ${day.dayNumber || day.position || i + 1}`,
@@ -173,56 +214,98 @@ export function PlanScreen() {
             : exItem.weight || exItem.targetWeight || "Bodyweight";
 
           return {
+            // Name, muscle, media, instructions and the coach note all come off
+            // the prescribed exercise — see lib/plannedExercise for the shape.
+            ...plannedExerciseInfo(exItem, idx),
             id: exItem.id || `ex-${idx}`,
-            name: exItem.exercise?.name || exItem.name || `Exercise ${idx + 1}`,
             sets: `${setsCount} sets`,
             reps: String(repsVal),
             weight: weightVal,
-            muscle:
-              exItem.exercise?.primaryMuscle ||
-              exItem.primaryMuscle ||
-              "Full Body",
-            image:
-              exItem.exercise?.thumbnailUrl ||
-              exItem.thumbnailUrl ||
-              exItem.image ||
-              "",
-            instructions: exItem.exercise?.instructionSteps ||
-              exItem.instructions || [
-                "Position yourself with proper stance and core tight.",
-                "Perform movement with controlled tempo.",
-                "Squeeze target muscle at peak contraction.",
-                "Return to starting position smoothly.",
-              ],
-            gifUrl:
-              exItem.exercise?.demoGifUrl ||
-              exItem.demoGifUrl ||
-              exItem.gifUrl ||
-              "",
-            videoUrl:
-              exItem.exercise?.demoVideoUrl ||
-              exItem.demoVideoUrl ||
-              exItem.videoUrl ||
-              "",
           };
         }),
         notes: day.notes,
       };
     });
-  }, [fullProgram, publishedProgram, weeksList, selectedWeekIndex, isTodayDay]);
+  }, [rawWeekDays, isTodayDay]);
 
   const [sub, setSub] = useState<PlanSub>("training");
   const [openDay, setOpenDay] = useState<DayPlan | null>(null);
 
-  const displayTitle = publishedProgram?.name || "Training Plan";
+  // The nutrition segment renders its own list, but the header and its Details
+  // button live up here — so this tab needs to know which plan is showing.
+  const nutrition = useActiveNutritionPlan();
+  const nutritionPlan = nutrition.plan;
+
+  // One gate for the whole tab, the same way coach Home does it. Both segments
+  // are covered, not just the visible one: the header title comes from whichever
+  // plan is showing, so letting the segments settle separately means the title
+  // changes under the toggle a beat after a tap.
+  const isLoading =
+    !tenantId ||
+    programsQuery.isLoading ||
+    currentQuery.isLoading ||
+    calendarQuery.isLoading ||
+    isPending(fullProgramQuery, Boolean(programId)) ||
+    nutrition.isLoading;
+
+  const isFetching =
+    programsQuery.isFetching ||
+    currentQuery.isFetching ||
+    calendarQuery.isFetching ||
+    fullProgramQuery.isFetching ||
+    nutrition.isFetching;
+
+  // Scoped to the training reads, so a training outage doesn't hide a nutrition
+  // plan that loaded fine — the toggle stays usable either way.
+  const trainingError =
+    isHardError(programsQuery) ||
+    isHardError(currentQuery) ||
+    isHardError(calendarQuery) ||
+    isHardError(fullProgramQuery);
+
+  const onRefresh = useCallback(() => {
+    if (!tenantId) return;
+    programsQuery.refetch();
+    currentQuery.refetch();
+    calendarQuery.refetch();
+    // Skipped until a program is named; it refetches itself once one is.
+    if (programId) fullProgramQuery.refetch();
+    nutrition.retry();
+    // Refetch identities are stable per query, so this only re-creates when the
+    // tenant or the program changes — which is when the caches change too.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantId, programId, nutrition.retry]);
+
+  const isNutrition = sub === "nutrition";
+  const displayTitle = isNutrition
+    ? nutritionPlan?.name || "Nutrition Plan"
+    : publishedProgram?.name || "Training Plan";
   const displaySubtitle =
-    publishedProgram?.description || `Coached by ${coach.name.split(" ")[0]}`;
+    (isNutrition ? nutritionPlan?.description : publishedProgram?.description) ||
+    `Coached by ${coach.name.split(" ")[0]}`;
+
+  // Details opens whichever plan the visible segment belongs to.
+  const detailsHref = isNutrition
+    ? nutritionPlan?.id
+      ? `/nutrition/plan/${nutritionPlan.id}`
+      : null
+    : publishedProgram?.id
+      ? `/program/${publishedProgram.id}`
+      : null;
 
   return (
     <ScrollView
       className="flex-1 bg-background"
-      contentContainerClassName="gap-y-5 pt-5 pb-30"
+      contentContainerClassName="gap-y-5 pt-5 pb-tabbar"
       showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          // Never during the first load — the spinner below owns that.
+          refreshing={isFetching && !isLoading}
+          onRefresh={onRefresh}
+          tintColor={primaryColor}
+        />
+      }
     >
       {/* Header */}
       <View className="px-1 flex-row items-center justify-between">
@@ -237,10 +320,12 @@ export function PlanScreen() {
             {displaySubtitle}
           </Text>
         </View>
-        {publishedProgram?.id ? (
+        {detailsHref ? (
           <Pressable
-            onPress={() =>
-              router.push(`/program/${publishedProgram.id}` as any)
+            onPress={() => router.push(detailsHref as any)}
+            accessibilityRole="button"
+            accessibilityLabel={
+              isNutrition ? "Nutrition plan details" : "Training program details"
             }
             className="rounded-xl bg-secondary px-3.5 py-2 active:opacity-80 flex-row items-center gap-1 shrink-0"
           >
@@ -256,72 +341,69 @@ export function PlanScreen() {
       <PlanSegmented value={sub} onChange={setSub} />
 
       {/* Content */}
-      {sub === "training" ? (
-        <View className="gap-y-4">
-          {/* Week Switcher Card */}
-          {totalWeeks > 1 ? (
-            <Card glass className="flex-row items-center justify-between p-3">
-              <Pressable
-                onPress={() => setWeekOverride(Math.max(0, selectedWeekIndex - 1))}
-                disabled={selectedWeekIndex === 0}
-                className={cn(
-                  "h-9 w-9 items-center justify-center rounded-full bg-secondary active:opacity-70",
-                  selectedWeekIndex === 0 && "opacity-40"
-                )}
-                accessibilityLabel="Previous week"
-              >
-                <Icon name="chevron-left" size={16} color="--foreground" />
-              </Pressable>
-
-              <View className="items-center">
-                <Text className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  {publishedProgram?.schedulePhase
-                    ? publishedProgram.schedulePhase.replace("_", " ")
-                    : "BLOCK A"}
-                </Text>
-                <Text className="text-[16px] font-bold text-foreground">
-                  Week {selectedWeekIndex + 1} of {totalWeeks}
-                </Text>
-              </View>
-
-              <Pressable
-                onPress={() =>
-                  setWeekOverride(Math.min(totalWeeks - 1, selectedWeekIndex + 1))
-                }
-                disabled={selectedWeekIndex >= totalWeeks - 1}
-                className={cn(
-                  "h-9 w-9 items-center justify-center rounded-full bg-secondary active:opacity-70",
-                  selectedWeekIndex >= totalWeeks - 1 && "opacity-40"
-                )}
-                accessibilityLabel="Next week"
-              >
-                <Icon name="chevron-right" size={16} color="--foreground" />
-              </Pressable>
-            </Card>
-          ) : null}
-
-          {days.length === 0 ? (
-            <Card glass className="p-8 items-center justify-center">
-              <Icon name="dumbbell" size={36} color="--muted-foreground" />
-              <Text className="mt-3 text-[16px] font-bold text-foreground">
-                No Program Published Yet
-              </Text>
-              <Text className="mt-1 text-[13px] text-muted-foreground text-center leading-relaxed">
-                Your coach has not published a training program for your active
-                tenant yet. Check back soon or contact your coach to get
-                started!
-              </Text>
-            </Card>
-          ) : (
-            days.map((day) => (
-              <DayCard
-                key={day.id || day.d}
-                day={day}
-                onPress={() => setOpenDay(day)}
-              />
-            ))
-          )}
+      {isLoading ? (
+        // One spinner for the tab. Without it the week stepper, the day list and
+        // the nutrition overview each appeared on their own request's clock, and
+        // the "No Program Published Yet" card below flashed in the gap before
+        // the program landed.
+        <View className="items-center py-16">
+          <ActivityIndicator color={primaryColor} />
         </View>
+      ) : sub === "training" ? (
+        trainingError ? (
+          <Card glass className="p-8 items-center justify-center">
+            <Icon name="alert-triangle" size={28} color="--danger" />
+            <Text className="mt-3 text-[16px] font-bold text-foreground">
+              Couldn&apos;t load your plan
+            </Text>
+            <Text className="mt-1 text-[13px] text-muted-foreground text-center leading-relaxed">
+              Check your connection and try again.
+            </Text>
+            <Pressable
+              onPress={onRefresh}
+              className="mt-3 rounded-full bg-primary px-4 py-2 active:opacity-85"
+            >
+              <Text className="text-[12.5px] font-semibold text-primary-foreground">
+                Try again
+              </Text>
+            </Pressable>
+          </Card>
+        ) : (
+          <View className="gap-y-4">
+            {/* Same stepper the program detail screen uses. */}
+            {totalWeeks > 1 ? (
+              <WeekStepper
+                index={selectedWeekIndex}
+                total={totalWeeks}
+                dateRange={weekDateRange}
+                isCurrent={todayWeekIndex === selectedWeekIndex}
+                onChange={setWeekOverride}
+              />
+            ) : null}
+
+            {days.length === 0 ? (
+              <Card glass className="p-8 items-center justify-center">
+                <Icon name="dumbbell" size={36} color="--muted-foreground" />
+                <Text className="mt-3 text-[16px] font-bold text-foreground">
+                  No Program Published Yet
+                </Text>
+                <Text className="mt-1 text-[13px] text-muted-foreground text-center leading-relaxed">
+                  Your coach has not published a training program for your active
+                  tenant yet. Check back soon or contact your coach to get
+                  started!
+                </Text>
+              </Card>
+            ) : (
+              days.map((day) => (
+                <DayCard
+                  key={day.id || day.d}
+                  day={day}
+                  onPress={() => setOpenDay(day)}
+                />
+              ))
+            )}
+          </View>
+        )
       ) : (
         <NutritionOverview />
       )}

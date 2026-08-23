@@ -12,7 +12,13 @@ import { Icon } from "@/shared/ui/Icon";
 import { Segmented } from "@/shared/ui/Segmented";
 import { Pressable, ScrollView, Text, TextInput, View } from "@/tw";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform } from "react-native";
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  useWindowDimensions,
+} from "react-native";
 import { MANUAL_LIMITS, SLOT_LABEL, unwrapList, type LoggedFood } from "../data";
 
 const isIOS = Platform.OS === "ios";
@@ -86,6 +92,10 @@ export function AddFoodSheet({
 }) {
   const { tenantId } = useActiveTenant();
   const isEditing = Boolean(editing);
+  // Editing shows a handful of fields, not a browsable library — so the sheet
+  // hugs its content instead of taking the whole screen.
+  const compact = isEditing;
+  const { height: screenHeight } = useWindowDimensions();
 
   const [mode, setMode] = useState<Mode>(
     editing && !editing.foodId ? "manual" : "library"
@@ -189,12 +199,12 @@ export function AddFoodSheet({
   const shownError = validationError ?? error ?? null;
 
   const content = (
-    <View className="flex-1 overflow-hidden bg-card">
+    <View className={cn("overflow-hidden bg-card", !compact && "flex-1")}>
       {/* Header */}
       <View
         className={cn(
           "flex-row items-center gap-3 border-b border-border/60 px-4 pb-3",
-          isIOS ? "pt-4" : "pt-11"
+          isIOS || compact ? "pt-4" : "pt-11"
         )}
       >
         <View className="min-w-0 flex-1">
@@ -222,7 +232,10 @@ export function AddFoodSheet({
       ) : null}
 
       <ScrollView
-        className="flex-1"
+        className={cn(!compact && "flex-1")}
+        // Compact still scrolls, but only once the content outgrows the sheet.
+        style={compact ? { maxHeight: screenHeight * 0.55 } : undefined}
+        bounces={!compact}
         contentContainerClassName="px-4 pt-3 pb-6 gap-y-3"
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -389,6 +402,21 @@ export function AddFoodSheet({
       </View>
     </View>
   );
+
+  // Compact: a content-sized bottom sheet on both platforms — a native iOS page
+  // sheet can't shrink to its content.
+  if (compact) {
+    return (
+      <Modal visible animationType="slide" transparent statusBarTranslucent onRequestClose={onClose}>
+        <View className="flex-1 justify-end">
+          <Pressable className="absolute inset-0 bg-black/40" onPress={onClose} />
+          <KeyboardAvoidingView behavior={isIOS ? "padding" : undefined}>
+            <View className="overflow-hidden rounded-t-xl shadow-pop">{content}</View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+    );
+  }
 
   const body = isIOS ? (
     <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>

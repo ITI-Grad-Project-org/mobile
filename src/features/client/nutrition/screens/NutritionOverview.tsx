@@ -1,99 +1,29 @@
-import {
-  useGetCurrentNutritionPlanQuery,
-  useGetMyNutritionPlanQuery,
-  useGetMyNutritionPlansQuery,
-} from "@/api/endpoints/nutrition.endpoints";
 import { cn } from "@/lib/utils";
 import { Card } from "@/shared/ui/Card";
 import { Icon } from "@/shared/ui/Icon";
-import { todayIso } from "@/shared/utils/dayProgress";
 import { Pressable, Text, View } from "@/tw";
 import { router } from "expo-router";
 import { useMemo, useState } from "react";
 import { ActivityIndicator } from "react-native";
 import { NutritionDayCard } from "../components/NutritionDayCard";
 import { TargetsCard } from "../components/TargetsCard";
-import {
-  isConflict,
-  normalizeDay,
-  resolveTargets,
-  unwrap,
-  unwrapList,
-  type NutritionDay,
-} from "../data";
+import { resolveTargets, type NutritionDay } from "../data";
+import { useActiveNutritionPlan } from "../hooks/useActiveNutritionPlan";
+import { planDays, weekCountOf } from "../lib/nutritionWeek";
 
 export function NutritionOverview() {
-  const iso = todayIso();
+  const { plan, iso, todayDayId, isLoading, isError, planConflict, retry } =
+    useActiveNutritionPlan();
 
-  const {
-    data: currentData,
-    isLoading: isCurrentLoading,
-    isError: isCurrentError,
-    error: currentError,
-    refetch: refetchCurrent,
-  } = useGetCurrentNutritionPlanQuery();
-
-  // A 409 on `current` means two published plans overlap today, so it is NOT a
-  // fallback trigger — but a 404/no-plan is, and the list is also how a plan that
-  // starts in the future gets found.
-  const {
-    data: plansData,
-    isLoading: isPlansLoading,
-    isError: isPlansError,
-    refetch: refetchPlans,
-  } = useGetMyNutritionPlansQuery();
-
-  const planConflict = isCurrentError && isConflict(currentError);
-
-  const summaryPlan = useMemo(() => {
-    const current = unwrap(currentData);
-    if (current?.id) return current;
-    const plans = unwrapList(plansData);
-    return plans.length > 0 ? plans[0] : null;
-  }, [currentData, plansData]);
-
-  // The summary payload often omits weeks/days, so refetch the plan in full.
-  // A failure here is not fatal — the summary payload is still a usable fallback.
-  const {
-    data: fullPlanData,
-    isLoading: isFullLoading,
-    refetch: refetchFull,
-  } = useGetMyNutritionPlanQuery(summaryPlan?.id ?? "", { skip: !summaryPlan?.id });
-
-  const plan = useMemo(
-    () => unwrap(fullPlanData) ?? summaryPlan,
-    [fullPlanData, summaryPlan]
+  const allDays: NutritionDay[] = useMemo(
+    // `planDays` derives each day's date from the plan's start when the day
+    // carries none, so today stays identifiable even when the calendar row that
+    // named it is gone — which is what keeps today's targets on screen all day.
+    () => planDays(plan, { todayIso: iso, todayDayId }),
+    [plan, iso, todayDayId]
   );
 
-  const weeks: any[] = useMemo(() => {
-    const raw = plan?.weeks;
-    return Array.isArray(raw) ? raw : [];
-  }, [plan]);
-
-  const allDays: NutritionDay[] = useMemo(() => {
-    if (!plan) return [];
-    const raw: any[] = weeks.length
-      ? weeks.flatMap((week: any) =>
-          (week?.days || []).map((day: any) => ({
-            ...day,
-            weekNumber: day?.weekNumber ?? week?.weekNumber ?? week?.position,
-          }))
-        )
-      : plan?.days || plan?.nutritionDays || plan?.planDays || [];
-
-    if (!Array.isArray(raw)) return [];
-    return raw
-      .map((day) => normalizeDay(day, plan, iso))
-      .filter((day): day is NutritionDay => day !== null);
-  }, [plan, weeks, iso]);
-
-  const totalWeeks = useMemo(() => {
-    if (weeks.length > 0) return weeks.length;
-    const fromDays = allDays.reduce((max, day) => Math.max(max, day.weekNumber), 0);
-    if (fromDays > 0) return fromDays;
-    const duration = Number(plan?.durationWeeks);
-    return Number.isFinite(duration) && duration > 0 ? duration : 1;
-  }, [weeks, allDays, plan]);
+  const totalWeeks = useMemo(() => weekCountOf(plan, allDays), [plan, allDays]);
 
   const todayWeek = useMemo(() => {
     const today = allDays.find((day) => day.isToday);
@@ -111,20 +41,9 @@ export function NutritionOverview() {
   }, [allDays, selectedWeek, totalWeeks]);
 
   const todayDay = useMemo(() => allDays.find((day) => day.isToday) ?? null, [allDays]);
-  const planTargets = useMemo(
-    () => resolveTargets(todayDay ? null : plan, plan),
-    [todayDay, plan]
-  );
 
-  const isLoading =
-    isCurrentLoading || isPlansLoading || (Boolean(summaryPlan?.id) && isFullLoading);
-  const isError = !planConflict && isPlansError && isCurrentError;
-
-  const retry = () => {
-    refetchCurrent();
-    refetchPlans();
-    if (summaryPlan?.id) refetchFull();
-  };
+  // The plan's baseline, which every day inherits unless the coach overrode it.
+  const planTargets = useMemo(() => resolveTargets(null, plan), [plan]);
 
   // --- Two published plans cover today. Distinct from "no plan" on purpose.
   if (planConflict) {
@@ -185,17 +104,8 @@ export function NutritionOverview() {
 
   return (
     <View className="gap-y-4">
-      {/* Plan header */}
-      <View className="px-1">
-        <Text className="text-[17px] font-bold text-foreground">
-          {plan?.name || "Nutrition Plan"}
-        </Text>
-        {plan?.description ? (
-          <Text numberOfLines={2} className="mt-0.5 text-[13px] text-muted-foreground">
-            {plan.description}
-          </Text>
-        ) : null}
-      </View>
+      {/* No plan name here — the Plan tab's own header carries it while this
+          segment is showing, so repeating it would just push the day list down. */}
 
       {/* Today's targets, or the plan baseline when today isn't in the plan */}
       <TargetsCard
@@ -257,6 +167,9 @@ export function NutritionOverview() {
           <NutritionDayCard
             key={day.id}
             day={day}
+            // So a day that overrides the plan's calories can say so — every
+            // other day inherits this and stays quiet about it.
+            baseline={planTargets}
             onPress={() => router.push(`/nutrition/${day.id}` as any)}
           />
         ))

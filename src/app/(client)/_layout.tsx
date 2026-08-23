@@ -1,8 +1,11 @@
 import { AppHeader } from "@/shared/components/AppHeader";
+import { useSyncClientTimezone } from "@/shared/hooks/useSyncClientTimezone";
 import { View } from "@/tw";
 import { Stack } from "expo-router";
 
 export default function ClientLayout() {
+  useSyncClientTimezone();
+
   return (
     <View className="flex-1 bg-background">
       <AppHeader />
@@ -15,6 +18,7 @@ export default function ClientLayout() {
         <Stack.Screen name="workout/[programDayId]" />
         <Stack.Screen name="program/[programId]" />
         <Stack.Screen name="nutrition/[dayId]" />
+        <Stack.Screen name="nutrition/plan/[planId]" />
       </Stack>
     </View>
   );

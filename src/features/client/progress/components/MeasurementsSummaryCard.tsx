@@ -6,8 +6,12 @@ import { Card } from "@/shared/ui/Card";
 import { Icon } from "@/shared/ui/Icon";
 import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
 import { Pressable, Text, useCSSVariable, View } from "@/tw";
-import WeightChart from "./WeightChart";
-import { deriveMeasurementStats, formatDelta } from "../lib/measurements";
+import WeightChart from "@/shared/ui/WeightChart";
+import {
+  deriveMeasurementStats,
+  formatDelta,
+  MEASUREMENT_HISTORY_LIMIT,
+} from "../lib/measurements";
 
 const openForm = () => router.push("/(client)/measurement");
 const openProgress = () => router.push("/(client)/(tabs)/progress");
@@ -17,7 +21,7 @@ export function MeasurementsSummaryCard() {
   const primaryColor = (useCSSVariable("--primary") as string) || "#e5673a";
 
   const { data } = useListMeasurementsQuery(
-    { tenantId: tenantId ?? "", limit: 100 },
+    { tenantId: tenantId ?? "", limit: MEASUREMENT_HISTORY_LIMIT },
     { skip: !tenantId }
   );
 

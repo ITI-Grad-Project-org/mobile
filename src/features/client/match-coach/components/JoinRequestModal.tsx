@@ -1,10 +1,10 @@
-import { Icon } from "@/shared/ui/Icon";
 import { cn } from "@/lib/utils";
+import { GlassButton } from "@/shared/ui/GlassButton";
+import { Icon } from "@/shared/ui/Icon";
 import { Pressable, Text, TextInput, View } from "@/tw";
 import { Image } from "@/tw/image";
-import { useState } from "react";
-import { ActivityIndicator, Modal, Platform } from "react-native";
-import { GlassButton } from "@/shared/ui/GlassButton";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, Keyboard, Modal, Platform } from "react-native";
 
 interface JoinRequestModalProps {
   coach: any | null;
@@ -24,6 +24,23 @@ export function JoinRequestModal({
   );
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      () => setIsKeyboardOpen(true)
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => setIsKeyboardOpen(false)
+    );
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   if (!coach) return null;
 
@@ -167,7 +184,7 @@ export function JoinRequestModal({
     >
       <View className="flex-1 justify-end">
         <Pressable className="absolute inset-0 bg-black/40" onPress={handleClose} />
-        <View className="min-h-[55%] w-full overflow-hidden shadow-pop bg-card rounded-t-3xl">
+        <View className={cn("w-full overflow-hidden shadow-pop bg-card rounded-t-3xl", isKeyboardOpen ? "min-h-[90%]" : "min-h-[55%]")}>
           {content}
         </View>
       </View>

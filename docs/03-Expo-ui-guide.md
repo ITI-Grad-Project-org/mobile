@@ -39,7 +39,7 @@ SDK 56 added `useNativeState` and `WorkletCallback`:
 
 **Where CoachHub should use this:** high-frequency native inputs where a JS round-trip causes lag — e.g. a weight/reps logging stepper, an RPE slider, a masked phone field on intake. For ordinary forms, you don't need worklets; plain controlled inputs are fine.
 
-**Requirement:** worklet features need `react-native-reanimated` + `react-native-worklets` installed (SDK 56 ships Reanimated 4, which already brings worklets). `useNativeState` itself works without them, but the *synchronous UI-thread* updates need the worklet runtime. See the version trap in [doc 02](02-tech-stack-decisions.md).
+**Requirement:** worklet features need `react-native-reanimated` + `react-native-worklets` installed (SDK 56 ships Reanimated 4, which already brings worklets). `useNativeState` itself works without them, but the *synchronous UI-thread* updates need the worklet runtime. See the version trap in [doc 02](02-tech-stack.md).
 
 ## Decision guide: `@expo/ui` vs RN + NativeWind
 

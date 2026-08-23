@@ -1,8 +1,9 @@
 import { useGetConversationsQuery } from "@/api/endpoints/chat.endpoints";
-import { formatThreadTime } from "@/features/shared/messaging/format";
+import { clientName, formatThreadTime } from "@/features/shared/messaging/format";
 import type { ConversationSummary } from "@/features/shared/messaging/types";
 import { cn } from "@/lib/utils";
 import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
+import { describeQueryError } from "@/shared/utils/query";
 import { Icon } from "@/shared/ui/Icon";
 import { Pressable, ScrollView, Text, TextInput, View } from "@/tw";
 import { Image } from "@/tw/image";
@@ -13,11 +14,6 @@ import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 
 // Apple Liquid Glass is iOS 26+ only — fall back to a frosted card elsewhere.
 const LIQUID_GLASS = isLiquidGlassAvailable();
-
-function clientName(c: ConversationSummary): string {
-  const full = [c.client?.firstName, c.client?.lastName].filter(Boolean).join(" ").trim();
-  return full || "Client";
-}
 
 /** Last-message line — our own replies read "You: …", as in every chat app. */
 function preview(c: ConversationSummary): string {
@@ -37,6 +33,7 @@ export function InboxScreen() {
     data: conversations,
     isLoading,
     isError,
+    error,
     refetch,
   } = useGetConversationsQuery({ tenantId: tenantId! }, { skip: !tenantId });
 
@@ -59,7 +56,7 @@ export function InboxScreen() {
     <View className="flex-1 bg-background">
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-y-4 pt-5 pb-30"
+        contentContainerClassName="gap-y-4 pt-5 pb-tabbar"
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -125,6 +122,11 @@ export function InboxScreen() {
             <Text className="text-[13.5px] text-muted-foreground">
               Couldn&apos;t load your conversations.
             </Text>
+            {describeQueryError(error) ? (
+              <Text className="px-8 text-center text-[12px] text-muted-foreground/80">
+                {describeQueryError(error)}
+              </Text>
+            ) : null}
             <Pressable
               onPress={() => refetch()}
               className="rounded-full bg-primary px-4 py-2 active:opacity-85"

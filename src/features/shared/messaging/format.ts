@@ -1,5 +1,7 @@
 /** Timestamp formatting shared by the inbox list and both thread screens. */
 
+import type { ConversationSummary } from "./types";
+
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
@@ -24,6 +26,12 @@ export function formatThreadTime(iso: string | null | undefined): string {
   if (days === 1) return "Yesterday";
   if (days < 7) return d.toLocaleDateString(undefined, { weekday: "short" });
   return d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+
+/** Display name for a thread's client — never blank, so rows never collapse. */
+export function clientName(c: ConversationSummary): string {
+  const full = [c.client?.firstName, c.client?.lastName].filter(Boolean).join(" ").trim();
+  return full || "Client";
 }
 
 /** Separator between days in a thread. */

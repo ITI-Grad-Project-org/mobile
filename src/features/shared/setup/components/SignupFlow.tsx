@@ -2,8 +2,7 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Keyboard,
-  KeyboardAvoidingView,
-  Platform,
+  KeyboardAvoidingView
 } from "react-native";
 import Reanimated, {
   useAnimatedStyle,
@@ -20,14 +19,6 @@ import { FieldRenderer } from "./FieldRenderer";
 
 const AnimatedView = Reanimated.createAnimatedComponent(View);
 
-/** Fills the progress track to `pct` (0..1) as the step changes. */
-/**
- * Unwrap an RTK Query error. A transport failure surfaces as
- * `{ status: 'FETCH_ERROR', error }` with nothing under `data`, so the old
- * `e?.data?.message || e?.message` chain fell through to the generic string and
- * hid the real cause — worth keeping distinguishable, since a mangled multipart
- * body fails exactly this way.
- */
 function saveErrorMessage(e: any): string {
   const body = e?.data;
   if (typeof body === "string" && body.trim()) return body;
@@ -61,6 +52,7 @@ export type SignupFlowProps = {
   steps: Step[];
   onClose: () => void;
   onSubmit?: (data: ProfileData) => void | Promise<void>;
+  savingLabel?: string;
   onDone: (data: ProfileData) => void;
   showWelcome?: boolean;
   initialData?: ProfileData;
@@ -68,6 +60,13 @@ export type SignupFlowProps = {
   welcomeBody?: string;
   /** Which upload bucket the flow's image fields write to. */
   uploadPersona?: UploadPersona;
+  /**
+   * Safe-area edges the flow pads for. The default suits a root-level route
+   * that owns the whole window; pass `["bottom"]` when the flow renders under
+   * a header that already claimed the top inset, otherwise it's applied twice
+   * and leaves an empty strip above the flow's own header.
+   */
+  edges?: React.ComponentProps<typeof SafeAreaView>["edges"];
 };
 
 export function SignupFlow({
@@ -75,12 +74,14 @@ export function SignupFlow({
   steps,
   onClose,
   onSubmit,
+  savingLabel,
   onDone,
   showWelcome = true,
   initialData,
   welcomeTitle = "You're in.",
   welcomeBody = "Profile saved. Let's get you matched with the right coach.",
   uploadPersona = "client",
+  edges = ["top", "bottom"],
 }: SignupFlowProps) {
   const [idx, setIdx] = useState(0);
   const [done, setDone] = useState(false);
@@ -113,7 +114,10 @@ export function SignupFlow({
 
   if (done && showWelcome) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-background px-6">
+      <SafeAreaView
+        className="flex-1 items-center justify-center bg-background px-6"
+        edges={edges}
+      >
         <View className="items-center">
           <View className="h-20 w-20 items-center justify-center rounded-full bg-success shadow-soft">
             <Icon name="check" size={40} color="#ffffff" />
@@ -153,10 +157,11 @@ export function SignupFlow({
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
+    <SafeAreaView className="flex-1 bg-background" edges={edges}>
       <KeyboardAvoidingView
+        behavior="padding"
+        keyboardVerticalOffset={10}
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         {/* Header */}
         <View className="gap-3 border-b border-border/60 px-4 pb-3 pt-2">
@@ -189,8 +194,8 @@ export function SignupFlow({
         <ScrollView
           className="flex-1"
           contentContainerClassName="px-5 pb-8 pt-6 grow"
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+          keyboardShouldPersistTaps="always"
+          keyboardDismissMode="none"
           showsVerticalScrollIndicator={false}
         >
           <View key={idx} className="animate-fade-up gap-6">
@@ -221,7 +226,7 @@ export function SignupFlow({
         </ScrollView>
 
         {/* Footer */}
-        <View className="border-t border-border/60 px-4 pb-2 pt-3">
+        <View className="border-t border-border/60 px-4 pb-4 pt-3">
           {saveError ? (
             <Text className="mb-2 text-center text-[12px] font-medium text-destructive">
               {saveError}
@@ -246,7 +251,7 @@ export function SignupFlow({
             >
               {saving ? <ActivityIndicator color="white" /> : null}
               <Text className="text-[14px] font-semibold text-primary-foreground">
-                {isLast ? "Finish" : "Continue"}
+                {saving && savingLabel ? savingLabel : isLast ? "Finish" : "Continue"}
               </Text>
             </Pressable>
           </View>

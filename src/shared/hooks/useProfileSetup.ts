@@ -46,11 +46,11 @@ export function profileLooksComplete(
     );
   }
   return Boolean(
-    profile.dateOfBirth ||
+    profile.phone ||
+      profile.dateOfBirth ||
       profile.gender ||
       profile.heightCm != null ||
-      profile.weightKg != null ||
-      profile.avatarUrl
+      profile.weightKg != null
   );
 }
 

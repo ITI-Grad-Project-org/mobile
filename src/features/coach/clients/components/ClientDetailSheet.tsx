@@ -3,13 +3,24 @@ import {
   useRemoveClientMutation,
 } from "@/api/endpoints/clients.endpoints";
 import { useRevokeInvitationMutation } from "@/api/endpoints/invitations.endpoints";
+import { useListClientMeasurementsQuery } from "@/api/endpoints/measurements.endpoints";
+import { CheckinEntryRow } from "@/features/coach/checkins/components/CheckinEntryRow";
+import { useCheckinReviews } from "@/features/coach/checkins/hooks/useCheckinReviews";
+import { extractMeasurements } from "@/features/shared/measurements/stats";
 import { sfx } from "@/lib/sfx";
+import { router } from "expo-router";
+import { useClientAnalytics } from "../hooks/useClientAnalytics";
+import { ClientStatsCard } from "./ClientStatsCard";
 import { GlassButton } from "@/shared/ui/GlassButton";
 import { Icon } from "@/shared/ui/Icon";
 import { Pressable, ScrollView, Text, View } from "@/tw";
 import { Image } from "@/tw/image";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ActivityIndicator, Modal, Platform } from "react-native";
+
+/** Enough history to read the trend without turning the sheet into a screen. */
+const CHECKIN_PREVIEW = 5;
+
 interface ClientDetailSheetProps {
   client: any | null;
   tenantId: string;
@@ -27,6 +38,37 @@ export function ClientDetailSheet({ client, tenantId, onClose }: ClientDetailShe
     { id: fetchId, tenantId },
     { skip: !fetchId || !tenantId }
   );
+
+  // Invited and requested memberships have no training history, so the card
+  // would be an empty box on every pending row. /analytics/* is keyed by
+  // MEMBERSHIP id — passing clientUserId here 404s.
+  const hasJoined = client?.status !== "invited" && client?.status !== "requested";
+  const stats = useClientAnalytics(hasJoined ? membershipId : undefined, tenantId);
+
+  // Check-in history, newest first. Keyed by the client's USER id like every
+  // other measurements read; a pending membership has none to fetch.
+  const measurements = useListClientMeasurementsQuery(
+    { clientId: clientUserId ?? "", tenantId, limit: CHECKIN_PREVIEW },
+    { skip: !clientUserId || !tenantId || !hasJoined }
+  );
+  const reviews = useCheckinReviews();
+
+  const checkins = useMemo(
+    () =>
+      [...extractMeasurements(measurements.data)]
+        .filter((m) => typeof m?.measuredAt === "string")
+        .sort((a, b) => b.measuredAt.localeCompare(a.measuredAt)),
+    [measurements.data]
+  );
+  const latestCheckin = checkins[0];
+  // Only what this preview actually shows: marking is per measurement now, and
+  // the sheet is capped at CHECKIN_PREVIEW rows — anything older is the
+  // Check-ins screen's job.
+  const unreviewedCheckins = useMemo(
+    () => checkins.filter((entry) => !reviews.isReviewed(entry)),
+    [checkins, reviews]
+  );
+  const checkinUnread = !!latestCheckin && !reviews.isReviewed(latestCheckin);
 
   const [removeClient, { isLoading: isRemoving }] = useRemoveClientMutation();
   const [revokeInvitation, { isLoading: isRevoking }] = useRevokeInvitationMutation();
@@ -215,6 +257,97 @@ export function ClientDetailSheet({ client, tenantId, onClose }: ClientDetailShe
               </View>
             ) : null}
           </View>
+
+          {hasJoined ? (
+            <ClientStatsCard
+              adherence={stats.adherence}
+              progress={stats.progress}
+              isLoading={stats.isLoading}
+              isError={stats.isError}
+            />
+          ) : null}
+
+          {/* Check-in History */}
+          {hasJoined && clientUserId ? (
+            <View className="mt-4 rounded-2xl border border-border bg-secondary/30 overflow-hidden">
+              <View className="flex-row items-center gap-x-2 px-4 pt-4 pb-1">
+                <Text className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Check-ins
+                </Text>
+                {checkinUnread ? (
+                  <View className="rounded-full bg-primary/12 px-2 py-0.5">
+                    <Text className="text-[9.5px] font-bold uppercase tracking-wider text-primary">
+                      New
+                    </Text>
+                  </View>
+                ) : null}
+                <View className="flex-1" />
+                {checkins.length > 0 ? (
+                  <Pressable
+                    onPress={() => {
+                      // The sheet is a Modal — pushing under it would leave the
+                      // route stacked behind an open sheet.
+                      handleClose();
+                      router.push({
+                        pathname: "/(coach)/check-ins/[clientId]",
+                        params: {
+                          clientId: clientUserId,
+                          membershipId,
+                          name: fullName,
+                          avatarUrl: avatarUrl ?? "",
+                        },
+                      });
+                    }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    className="active:opacity-70"
+                  >
+                    <Text className="text-[12px] font-semibold text-primary">View all</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+
+              {measurements.isLoading ? (
+                <View className="py-6 items-center">
+                  <ActivityIndicator size="small" />
+                </View>
+              ) : checkins.length === 0 ? (
+                <Text className="px-4 pb-4 pt-1 text-[12.5px] text-muted-foreground">
+                  No check-ins logged yet.
+                </Text>
+              ) : (
+                <>
+                  {checkins.map((entry, i) => (
+                    <CheckinEntryRow
+                      key={entry.id ?? `${clientUserId}-${entry.measuredAt}`}
+                      entry={entry}
+                      previous={checkins[i + 1]}
+                      latest={i === 0}
+                      divided={i > 0}
+                    />
+                  ))}
+
+                  {checkinUnread && unreviewedCheckins.length > 0 ? (
+                    <Pressable
+                      onPress={async () => {
+                        const result = await reviews.markReviewed(
+                          unreviewedCheckins.map((entry) => entry.id),
+                          { clientId: clientUserId }
+                        );
+                        if (result.reviewed > 0) sfx.success();
+                      }}
+                      disabled={reviews.isMarking}
+                      className="flex-row items-center justify-center gap-x-2 border-t border-border py-3 active:opacity-70 disabled:opacity-50"
+                    >
+                      <Icon name="check" size={14} color="--primary" />
+                      <Text className="text-[13px] font-semibold text-primary">
+                        Mark reviewed
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </>
+              )}
+            </View>
+          ) : null}
 
           {/* Request Message Section */}
           {requestMessage ? (

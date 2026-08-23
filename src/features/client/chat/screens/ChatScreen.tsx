@@ -4,14 +4,15 @@ import { useChatThread } from "@/features/shared/messaging/useChatThread";
 import { sfx } from "@/lib/sfx";
 import { cn } from "@/lib/utils";
 import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
+import { describeQueryError } from "@/shared/utils/query";
 import { Icon } from "@/shared/ui/Icon";
 import { Pressable, Text, TextInput, View } from "@/tw";
 import { Image } from "@/tw/image";
-import { useRouter } from "expo-router";
-import { useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
+import { useRouter } from "expo-router";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const LIQUID_GLASS = isLiquidGlassAvailable();
 
@@ -69,6 +70,7 @@ function ChatThread({
     messages,
     isLoading,
     isError,
+    error,
     refetch,
     loadEarlier,
     hasEarlier,
@@ -83,8 +85,37 @@ function ChatThread({
     mySide,
   } = useChatThread();
 
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      () => setKeyboardOpen(true)
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => setKeyboardOpen(false)
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
   const [input, setInput] = useState("");
+  // When keyboard is open, give comfortable breathing room above keyboard.
+  // When closed, lift above home indicator on iOS or tab bar.
+  const composerBottom = keyboardOpen
+    ? 8
+    : Platform.OS === "ios"
+    ? insets.bottom + 12
+    : 8;
   const canSend = canChat && input.trim().length > 0;
+
+  // Paging backwards writes into the same cache entry as the first page, so a
+  // failed older-page fetch must not replace a thread that already loaded.
+  const blankedByError = isError && messages.length === 0;
+  const errorDetail = isError ? describeQueryError(error) : "";
 
   const onSend = () => {
     if (!canSend) return;
@@ -96,11 +127,14 @@ function ChatThread({
 
   return (
     <KeyboardAvoidingView
-      behavior={"padding"}
-      keyboardVerticalOffset={90}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
       style={{ flex: 1 }}
     >
-      <View className="flex-1" style={{ paddingTop: insets.top + 8 }}>
+      {/* No status-bar inset here: AppHeader already sits above this screen and
+          consumes insets.top, so adding it again double-counts the notch. */}
+      <View className="flex-1 pt-2">
+        {/* Chat header — clean, integrated */}
         {/* Chat header — clean, integrated */}
         <View className="mb-3 flex-row items-center gap-3 rounded-lg border border-border/50 bg-card p-4 shadow-soft">
           {canGoBack ? (
@@ -136,11 +170,16 @@ function ChatThread({
           <View className="flex-1 items-center justify-center">
             <ActivityIndicator />
           </View>
-        ) : isError ? (
+        ) : blankedByError ? (
           <View className="flex-1 items-center justify-center gap-y-3 px-8">
             <Text className="text-center text-[13.5px] text-muted-foreground">
               Couldn&apos;t load your messages.
             </Text>
+            {errorDetail ? (
+              <Text className="text-center text-[12px] text-muted-foreground/80">
+                {errorDetail}
+              </Text>
+            ) : null}
             <Pressable
               onPress={() => refetch()}
               className="rounded-full bg-primary px-4 py-2 active:opacity-85"
@@ -155,23 +194,35 @@ function ChatThread({
             </Text>
           </View>
         ) : (
-          <MessageList
-            messages={messages}
-            mySide={mySide}
-            avatarUrl={coachAvatar}
-            otherTyping={otherTyping}
-            onLoadEarlier={loadEarlier}
-            hasEarlier={hasEarlier}
-            isLoadingEarlier={isLoadingEarlier}
-            onRetry={retry}
-          />
+          <View className="flex-1">
+            {isError ? (
+              <Pressable
+                onPress={() => refetch()}
+                className="rounded-xl border border-border bg-card px-3 py-2 active:opacity-80"
+              >
+                <Text className="text-center text-[12px] text-muted-foreground">
+                  {errorDetail || "Couldn't load older messages."} Tap to retry.
+                </Text>
+              </Pressable>
+            ) : null}
+            <MessageList
+              messages={messages}
+              mySide={mySide}
+              avatarUrl={coachAvatar}
+              otherTyping={otherTyping}
+              onLoadEarlier={loadEarlier}
+              hasEarlier={hasEarlier}
+              isLoadingEarlier={isLoadingEarlier}
+              onRetry={retry}
+            />
+          </View>
         )}
 
         {/* Chat needs a confirmed relationship — the server rejects the rest. */}
         {!canChat ? (
           <View
             className="rounded-2xl border border-border bg-card px-4 py-3"
-            style={{ marginBottom: insets.bottom + 8 }}
+            style={{ marginBottom: composerBottom }}
           >
             <Text className="text-center text-[12.5px] text-muted-foreground">
               Messaging opens once your coach confirms you.
@@ -221,7 +272,7 @@ function ChatThread({
                   gap: 8,
                   padding: 6,
                   borderRadius: 9999,
-                  marginBottom: insets.bottom + 8,
+                  marginBottom: composerBottom,
                 }}
               >
                 {composerControls}
@@ -229,7 +280,7 @@ function ChatThread({
             ) : (
               <View
                 className="flex-row items-center gap-2 rounded-full border border-border/60 bg-card/80 p-1.5 shadow-soft"
-                style={{ marginBottom: insets.bottom + 8 }}
+                style={{ marginBottom: composerBottom }}
               >
                 {composerControls}
               </View>

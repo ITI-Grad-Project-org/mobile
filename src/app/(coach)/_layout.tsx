@@ -9,7 +9,18 @@ export default function CoachLayout() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="chat/[id]" />
-        <Stack.Screen name="profile" options={{ presentation: "modal" }} />
+        <Stack.Screen name="activity" />
+        <Stack.Screen name="renewals" />
+        <Stack.Screen name="at-risk" />
+        <Stack.Screen name="reviews" />
+        <Stack.Screen name="billing/index" />
+        <Stack.Screen name="billing/result" />
+        <Stack.Screen name="check-ins/index" />
+        <Stack.Screen name="check-ins/[clientId]" />
+        <Stack.Screen name="plans/training/[programId]/index" />
+        <Stack.Screen name="plans/training/[programId]/days/[programDayId]" />
+        <Stack.Screen name="plans/nutrition/[planId]/index" />
+        <Stack.Screen name="plans/nutrition/[planId]/days/[dayId]" />
         <Stack.Screen name="notifications" options={{ presentation: "modal" }} />
       </Stack>
     </View>

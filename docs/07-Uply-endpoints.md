@@ -29,11 +29,12 @@
 16. [Training — Client](#13-training--client--clientmetraining-new)
 17. [Measurements](#14-measurements--clientmemeasurements)
 18. [Reviews](#15-reviews)
-19. [Upload](#16-upload--upload)
+19. [Upload](#16-upload--upload) · [Billing](#16b-billing--billing--coach-token)
 20. [Health](#17-health)
-21. [Enum Reference](#enum-reference)
-22. [TypeScript Types](#typescript-types)
-23. [Integration Guide](#integration-guide)
+21. [WebSocket gateways](#18-websocket-gateways--not-rest)
+22. [Enum Reference](#enum-reference)
+23. [TypeScript Types](#typescript-types)
+24. [Integration Guide](#integration-guide)
 
 ---
 
@@ -744,9 +745,94 @@ Feeds: `avatarUrl`, `transformationPhotos[]`, `demoVideoUrl` / `demoGifUrl` / `t
 
 ---
 
+## 16b. Billing — `/billing` 🔒 (coach token)
+
+The **coach's own CoachHub subscription**. Not coach-to-client payments — CoachHub
+does not collect or manage those. A subscription belongs to **one tenant**, resolved
+from the JWT: never send `tenantId` in a path, query or body.
+
+| Plan | Price | Duration | Active clients | AI plan builder |
+| --- | ---: | ---: | ---: | --- |
+| `free` | EGP 0 | no expiry | 3 | no |
+| `solo` | EGP 299 | 30 days per payment | 20 | yes |
+| `studio` | EGP 599 | 30 days per payment | unlimited (`null`) | yes |
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/billing/plans` | the catalogue — `BillingPlan[]` |
+| `GET` | `/billing/me` | `BillingSummary`: effective plan, expiry, usage, entitlements |
+| `POST` | `/billing/checkout` | body **only** `{ plan: 'solo' \| 'studio' }` → `{ paymentAttemptId, checkoutUrl }` |
+| `GET` | `/billing/payments/{id}` | `PaymentAttempt` — `pending` \| `succeeded` \| `failed` |
+| `POST` | `/billing/paymob/webhook?hmac=…` | **Paymob → backend only.** The app must never call it. |
+
+**Amounts are in cents** (`priceCents`, `amountCents`). `activeClientLimit: null`
+means **unlimited**, not zero.
+
+**`plan` vs `storedPlan`.** There is no scheduled job flipping an expired tenant to
+Free — the backend derives `plan` on every read. `storedPlan` can still say
+`studio` for a tenant with Free access. **Gate UI on `plan`;** use `storedPlan` only
+to explain why access dropped.
+
+**Transitions.** Free→Solo/Studio, Solo→Solo (renew), Solo→Studio (upgrade),
+Studio→Studio (renew) all succeed and each adds **30 days to any existing future
+expiry** (renewing early loses nothing). Active **Studio→Solo is `409`**. An expired
+tenant is effectively Free and may buy either plan again.
+
+**The mobile flow.** Paymob's redirect URL is configured server-side as a **web**
+page (`uply-gamma.vercel.app/billing/result`), so nothing returns into the app. The
+app opens `checkoutUrl` in a `WebBrowser`, then **polls `/billing/payments/{id}`**
+on return. The browser proves nothing: not its dismissal, not a Paymob success
+screen, not `success=true` in the redirect query. `pending` is the normal first
+answer — the browser usually beats the webhook. A `404` here can equally mean the
+coach switched tenants mid-checkout. A `401` is handled by the usual refresh ladder
+and must never be read as a failed payment.
+
+**Limit errors.** `403` on `POST /invitation`, join-request approval and
+invitation onboarding when the tenant is at its active-client limit; `403` on
+`POST /ai/plan-suggestions` without an active paid plan. The `message` is already
+coach-facing ("Your Free plan allows 3 active clients. Upgrade your subscription to
+add another client.") — show it verbatim. There is no error code distinguishing a
+limit `403` from an RBAC `403`; re-read `/billing/me` and check `canAddActiveClient`.
+
+**Not in V1:** recurring billing, saved cards, cancellation, scheduled downgrade,
+refunds, invoices, proration, trials, coupons, a payment-history endpoint, or any
+client-side billing surface.
+
+Types are in [`src/api/types.ts`](../src/api/types.ts); the module is
+[`billing.endpoints.ts`](../src/api/endpoints/billing.endpoints.ts).
+
+---
+
 ## 17. Health
 
 `GET /health` → `200` `{ status: "ok", info: { database: { status: "up" } }, error, details }` · `503` when a dependency is down (the example shows Redis).
+
+---
+
+## 18. WebSocket gateways — not REST
+
+Two socket.io **v4** gateways sit outside this REST surface. Neither appears in the
+OpenAPI spec, and neither has a REST equivalent.
+
+| Purpose | Namespace | Client module |
+|---|---|---|
+| AI assistant | `/` (default) | `src/lib/aiSocket.ts` |
+| Coach ⇄ client messaging | `/chat` | `src/lib/chatSocket.ts` |
+
+Both authenticate with the **access** token via the handshake's `auth.token` (a refresh
+token is rejected; a query-string token is ignored). The AI gateway re-verifies on
+**every** message, so a 15-minute token expiry closes a live socket mid-session.
+
+**There is no `/assistant/*` REST route.** Any reference to `POST /assistant/ask` or
+`GET /assistant/jobs/{id}` is against a job-ticket design that was never built.
+
+The AI assistant chat is **not persisted anywhere** — no endpoint returns its history,
+and an answer in flight when the socket drops is permanently lost. Durable AI output is
+a different feature: plan suggestions, stored in `ai_plan_suggestions` and fetched over
+REST.
+
+Full event contract, correlation rules, and failure matrix: **[docs/06-Ai-Integration.md](06-Ai-Integration.md)**.
+Messaging: **[docs/10-chat-messaging.md](10-chat-messaging.md)**.
 
 ---
 

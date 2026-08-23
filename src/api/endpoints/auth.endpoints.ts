@@ -42,6 +42,13 @@ export const authEndpoints = baseApi.injectEndpoints({
         body,
       }),
     }),
+    googleCoachLogin: builder.mutation<any, GoogleAuthDto>({
+      query: (body) => ({
+        url: '/auth/google',
+        method: 'POST',
+        body,
+      }),
+    }),
     googleCustomerLogin: builder.mutation<any, GoogleAuthDto>({
       query: (body) => ({
         url: '/auth/customer/google',
@@ -135,6 +142,7 @@ export const {
   useLoginCoachMutation,
   useRegisterCustomerMutation,
   useLoginCustomerMutation,
+  useGoogleCoachLoginMutation,
   useGoogleCustomerLoginMutation,
   useGetCoachMeQuery,
   useLazyGetCoachMeQuery,

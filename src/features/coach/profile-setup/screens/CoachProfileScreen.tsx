@@ -1,12 +1,13 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ActivityIndicator } from "react-native";
 
-import { useGetCoachProfileQuery, useUpdateCoachProfileMutation } from "@/api/endpoints/profile.endpoints";
+import { useGetCoachProfileQuery } from "@/api/endpoints/profile.endpoints";
 import { SignupFlow, type ProfileData } from "@/features/shared/setup";
 import { View } from "@/tw";
 import { markProfileComplete } from "@/shared/hooks/useProfileSetup";
 import { COACH_STEPS } from "../config";
-import { coachDataToDto, coachProfileToData } from "../mapping";
+import { coachProfileToData } from "../mapping";
+import { MediaPartialFailure, useSaveCoachProfile } from "../useSaveCoachProfile";
 
 export function CoachProfileScreen() {
   const router = useRouter();
@@ -18,7 +19,7 @@ export function CoachProfileScreen() {
   }>();
 
   const isEdit = params.edit === "1";
-  const [updateCoach] = useUpdateCoachProfileMutation();
+  const { save: saveProfile, stageLabel } = useSaveCoachProfile();
 
   // Edit mode prefills from the current profile; the same query is already
   // cached by the profile modal, so this is usually instant.
@@ -28,19 +29,31 @@ export function CoachProfileScreen() {
 
   const enterApp = () => router.replace("/(coach)/(tabs)/home");
 
-  // Runs on Finish. First-time: PATCH the collected data + remember completion.
-  // Edit: PATCH only. Navigation happens afterwards in onDone.
+  // Runs on Finish. `profile` is the server's current state — the save diffs
+  // against it so unchanged photos are never re-uploaded. It's undefined on
+  // first-time setup, which correctly makes every asset "new".
   const save = async (data: ProfileData) => {
     if (isEdit) {
-      await updateCoach(await coachDataToDto(data)).unwrap();
+      await saveProfile(data, profile);
       return;
     }
-    const dto = await coachDataToDto({
-      ...data,
-      fname: params.fname ?? data.fname,
-      lname: params.lname ?? data.lname,
-    });
-    await updateCoach(dto).unwrap();
+    try {
+      await saveProfile(
+        {
+          ...data,
+          fname: params.fname ?? data.fname,
+          lname: params.lname ?? data.lname,
+        },
+        undefined
+      );
+    } catch (e) {
+      // The fields are already saved when only files failed, so mark setup done
+      // and let the coach retry the photos from Edit profile. Anything else
+      // means nothing was saved — leave setup incomplete.
+      if (!(e instanceof MediaPartialFailure)) throw e;
+      await markProfileComplete(data);
+      throw e;
+    }
     await markProfileComplete(data);
   };
 
@@ -69,6 +82,7 @@ export function CoachProfileScreen() {
       showWelcome={!isEdit}
       onClose={isEdit ? () => router.back() : enterApp}
       onSubmit={save}
+      savingLabel={stageLabel}
       onDone={isEdit ? () => router.back() : enterApp}
       welcomeTitle="Profile ready."
       welcomeBody="Your coaching profile is set up. Let's get to work."

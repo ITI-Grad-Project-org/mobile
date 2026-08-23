@@ -1,5 +1,6 @@
 import { ActivityIndicator } from "react-native";
 
+import { DOCUMENT_MAX_EDGE } from "@/api/imagePrep";
 import { Icon } from "@/shared/ui/Icon";
 import { Pressable, Text, TextInput, View, useCSSVariable } from "@/tw";
 import { Image } from "@/tw/image";
@@ -30,7 +31,9 @@ export function CertsField({
 
   const add = async () => {
     if (picking) return;
-    const image = await pickOne();
+    // Certificates get a higher pixel cap than photos — the point is to read
+    // the credential, not to glance at it.
+    const image = await pickOne(DOCUMENT_MAX_EDGE);
     if (!image) return;
     onChange([...arr, { id: makeId(), image, name: "", issued: "", expires: "" }]);
   };

@@ -10,6 +10,7 @@ import type { Measurement, MeasurementFields } from "@/api/types";
 import { SignupFlow } from "@/features/shared/setup";
 import type { ProfileData } from "@/features/shared/setup";
 import { useActiveTenant } from "@/shared/hooks/useActiveTenant";
+import { todayIso } from "@/shared/utils/date";
 import { View } from "@/tw";
 import { MEASUREMENT_STEPS } from "../measurementForm.config";
 
@@ -40,9 +41,7 @@ function toNumber(v: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+const todayISO = todayIso;
 
 function buildFields(data: ProfileData): MeasurementFields {
   const fields: MeasurementFields = {
@@ -119,6 +118,9 @@ export function MeasurementFormScreen() {
       title={isEdit ? "Edit measurement" : "New measurement"}
       steps={MEASUREMENT_STEPS}
       uploadPersona="client"
+      // This route lives inside the `(client)` group, under the AppHeader — the
+      // top inset is already spoken for, so only the bottom edge is padded.
+      edges={["bottom"]}
       showWelcome={false}
       initialData={initialData}
       onClose={() => router.back()}
